@@ -3,6 +3,7 @@ using System.Text;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
+using DiceGame.Core;
 
 namespace DiceGame
 {
@@ -71,7 +72,7 @@ namespace DiceGame
             rollButton.onClick.AddListener(OnRollOnce);
             resetRollButton.onClick.AddListener(ResetForNewHand);
             submitComboButton.onClick.AddListener(OnSubmitCombo);
-            
+
             Debug.Log("[BattleController] Battle scene initialized with 5 dice.");
             UpdateFeedback("Ready. Roll dice and LOCK the ones you want to keep. Submit when ready!");
         }
@@ -113,7 +114,7 @@ namespace DiceGame
                 var d = _dice[i];
                 sb.AppendLine($"  {d.diceName}: {d.lastRollValue} {(d.isLocked ? "[LOCKED]" : "")}");
             }
-            
+
             if (_rollsUsed < maxRollsPerHand)
                 sb.AppendLine("\nLock dice you want to keep, then Roll again or Submit.");
             else
@@ -126,33 +127,46 @@ namespace DiceGame
         {
             Debug.Log("[BattleController] ====== COMBO SUBMITTED ======");
             Debug.Log($"[BattleController] Rolls used: {_rollsUsed}/{maxRollsPerHand}");
-            
-            // Collect dice values and lock states
+
             var sb = new StringBuilder();
             sb.AppendLine("=== SUBMITTED COMBO ===");
             sb.AppendLine($"Rolls used: {_rollsUsed}/{maxRollsPerHand}");
             sb.AppendLine("\nDice values:");
-            
+
             var allValues = new List<int>();
             for (int i = 0; i < _dice.Count; i++)
             {
                 var d = _dice[i];
                 sb.AppendLine($"  {d.diceName}: {d.lastRollValue} {(d.isLocked ? "[LOCKED]" : "[UNLOCKED]")}");
                 Debug.Log($"  {d.diceName}: {d.lastRollValue} (Locked: {d.isLocked})");
-                
+
                 if (d.lastRollValue > 0)
                     allValues.Add(d.lastRollValue);
             }
-            
-            sb.AppendLine($"\nAll values: [{string.Join(", ", allValues)}]");
-            sb.AppendLine("\n(Combo detection & scoring will be implemented next)");
+
+            // 调用新版 DiceHandEvaluator 进行识别和计分
+            if (allValues.Count > 0)
+            {
+                float mult = 1f; // multiplier 可未来由 relic / buff 改变
+                string combo = DiceHandEvaluator.Evaluate(allValues, out int score, mult);
+                string summary = DiceHandEvaluator.BuildSummary(allValues, combo, score, mult);
+
+                sb.AppendLine("\n=== COMBO RESULT ===");
+                sb.AppendLine(summary);
+            }
+            else
+            {
+                sb.AppendLine("\nNo dice rolled!");
+            }
+
             sb.AppendLine("Use Reset to start a new hand.");
-            
+
+            // 更新 UI + Console
+            UpdateFeedback(sb.ToString());
             Debug.Log($"[BattleController] All dice values: [{string.Join(", ", allValues)}]");
             Debug.Log("[BattleController] ============================");
-            
-            UpdateFeedback(sb.ToString());
         }
+
 
         void ResetForNewHand()
         {
