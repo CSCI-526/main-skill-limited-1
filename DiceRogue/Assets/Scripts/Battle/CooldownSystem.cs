@@ -29,7 +29,6 @@ namespace DiceGame
         
         // State tracking
         private bool _isInitialized = false;
-        private bool _needsRefresh = false;
         
         /// <summary>
         /// Event triggered when dice pool needs refresh (all hands used)
@@ -261,8 +260,8 @@ namespace DiceGame
                 Debug.Log($"[CooldownSystem] Applying cooldown to {submittedDice.Count} submitted dice:");
                 foreach (var dice in submittedDice)
                 {
-                    dice.cooldownRemain = dice.cooldownAfterUse; // Set to 1 turn
-                    Debug.Log($"  - {dice.diceName} on cooldown for {dice.cooldownRemain} turns");
+                    dice.cooldownRemain = dice.cooldownAfterUse + 1; // Set to 2 turns (1 + 1)
+                    Debug.Log($"  - {dice.diceName} cooldown: 0 → {dice.cooldownRemain} (will be unavailable for 1 hand)");
                 }
             }
             else
@@ -271,7 +270,7 @@ namespace DiceGame
                 // Fallback: apply cooldown to all selected dice if no submitted dice provided
                 foreach (var dice in _selectedDice)
                 {
-                    dice.cooldownRemain = dice.cooldownAfterUse; // Set to 1 turn
+                    dice.cooldownRemain = dice.cooldownAfterUse + 1; // Set to 2 turns (1 + 1)
                     Debug.Log($"  - {dice.diceName} on cooldown for {dice.cooldownRemain} turns");
                 }
             }
@@ -295,16 +294,15 @@ namespace DiceGame
             }
             else
             {
-                // Advance cooldowns by 1 turn (cooldown decreases)
-                AdvanceCooldowns();
+                // Don't advance cooldowns here - wait until next hand starts
                 UpdateAvailableDice();
             }
         }
 
         /// <summary>
-        /// Advance cooldowns by one turn
+        /// Advance cooldowns by one turn (called before starting new hand)
         /// </summary>
-        private void AdvanceCooldowns()
+        public void AdvanceCooldowns()
         {
             Debug.Log("[CooldownSystem] Advancing cooldowns...");
             
@@ -313,12 +311,19 @@ namespace DiceGame
                 if (dice.cooldownRemain > 0)
                 {
                     dice.cooldownRemain--;
+                    Debug.Log($"  - {dice.diceName} cooldown: {dice.cooldownRemain + 1} → {dice.cooldownRemain}");
                     if (dice.cooldownRemain == 0)
                     {
-                        Debug.Log($"  - {dice.diceName} cooldown complete, now available");
+                        Debug.Log($"    {dice.diceName} cooldown complete, now available");
                     }
                 }
+                else
+                {
+                    Debug.Log($"  - {dice.diceName} already available (cooldown: {dice.cooldownRemain})");
+                }
             }
+            
+            UpdateAvailableDice();
         }
 
         /// <summary>
@@ -355,15 +360,21 @@ namespace DiceGame
         {
             _availableDice.Clear();
             
+            Debug.Log("[CooldownSystem] Updating available dice list:");
             foreach (var dice in _dicePool)
             {
                 if (dice.cooldownRemain == 0)
                 {
                     _availableDice.Add(dice);
+                    Debug.Log($"  AVAILABLE: {dice.diceName} (cooldown: {dice.cooldownRemain})");
+                }
+                else
+                {
+                    Debug.Log($"  ON COOLDOWN: {dice.diceName} (cooldown: {dice.cooldownRemain})");
                 }
             }
             
-            Debug.Log($"[CooldownSystem] {_availableDice.Count}/{_dicePool.Count} dice available");
+            Debug.Log($"[CooldownSystem] Result: {_availableDice.Count}/{_dicePool.Count} dice available");
             OnAvailableDiceChanged?.Invoke(new List<BaseDice>(_availableDice));
         }
 
@@ -443,7 +454,6 @@ namespace DiceGame
             currentHandCount = 0;
             handsRemaining = maxHands;
             _selectedDice.Clear();
-            _needsRefresh = false;
             
             // Reset all dice cooldowns
             foreach (var dice in _dicePool)
