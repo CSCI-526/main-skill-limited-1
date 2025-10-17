@@ -37,6 +37,6 @@
 | Name        | Faces         | Description                                     |
 | ----------- | ------------- | ----------------------------------------------- |
 | D8          | 1-8           | Only roll once in one hand, if 7, x5, if 8, x10 |
-| Zombie      | [1,2,3,4,5,6] | 20%                                             |
+| Zombie      | [1,2,3,4,5,6] | 20% to change the value of neighbor dice to the same value as itself                                            |
 | Golden Dice | [1,2,3,4,5,6] | All dice num +1                                 |
 
