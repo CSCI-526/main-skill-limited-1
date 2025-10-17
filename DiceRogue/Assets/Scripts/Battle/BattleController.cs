@@ -26,6 +26,7 @@ namespace DiceGame
         public Button submitComboButton;  // NEW: Submit current locked combo
         public TMP_Text rollFeedbackText; // Shows dice status only
         public TMP_Text handCounterText;  // NEW: Display hand counter
+        public TMP_Text deckStatusText;   // NEW: Display dice pool/deck status
 
         [Header("Score Display")]
         public ScoreAnimator scoreAnimator; // Animated score display system
@@ -208,6 +209,7 @@ namespace DiceGame
         
         UpdateFeedback(feedbackMsg);
         UpdateHandCounter(currentHand, remainingHands);
+        UpdateDeckStatus(); // Update deck display
         
         Debug.Log($"[BattleController] Started hand with {diceCount} dice total");
     }
@@ -249,6 +251,9 @@ namespace DiceGame
 
             // Refresh all views using factory
             _viewFactory.RefreshViews(_views);
+            
+            // Update deck status after roll
+            UpdateDeckStatus();
 
             // Build feedback - ONLY show dice status, no score calculation
             var sb = new StringBuilder();
@@ -349,6 +354,9 @@ namespace DiceGame
             }
             _handManager.EndHand();
             
+            // Update deck status after submitting
+            UpdateDeckStatus();
+            
             // Check if we can start a new hand
             var (current, remaining) = cooldownSystem.GetHandCounter();
             if (remaining > 0)
@@ -428,6 +436,82 @@ namespace DiceGame
             }
         }
 
+        /// <summary>
+        /// Update deck status display showing all dice and their states
+        /// </summary>
+        private void UpdateDeckStatus()
+        {
+            if (deckStatusText == null) return;
+
+            var sb = new StringBuilder();
+            sb.AppendLine("<b>DICE DECK</b>\n");
+
+            var allDice = cooldownSystem.GetAllDice();
+            var selectedDiceNames = _dice.Where(d => !(d is NormalDice)).Select(d => d.diceName).ToHashSet();
+
+            // Display all dice in simple list with colored names by rarity
+            foreach (var dice in allDice)
+            {
+                AppendDiceStatus(sb, dice, selectedDiceNames);
+            }
+
+            // Compact summary
+            int available = allDice.Count(d => d.cooldownRemain == 0 && !selectedDiceNames.Contains(d.diceName));
+            int selected = selectedDiceNames.Count;
+            int onCooldown = allDice.Count(d => d.cooldownRemain > 0);
+
+            sb.AppendLine($"\n<size=90%>Ready: {available} | Active: {selected} | CD: {onCooldown}</size>");
+
+            deckStatusText.text = sb.ToString();
+        }
+
+        /// <summary>
+        /// Helper method to append dice status line
+        /// </summary>
+        private void AppendDiceStatus(StringBuilder sb, BaseDice dice, HashSet<string> selectedDiceNames)
+        {
+            // Determine rarity color for dice name
+            string rarityColor;
+            switch (dice.tier)
+            {
+                case DiceTier.Legendary:
+                    rarityColor = "#FFD700"; // Gold
+                    break;
+                case DiceTier.Rare:
+                    rarityColor = "#9370DB"; // Purple
+                    break;
+                case DiceTier.Common:
+                    rarityColor = "#90EE90"; // Light Green
+                    break;
+                default:
+                    rarityColor = "#FFFFFF"; // White
+                    break;
+            }
+
+            // Determine status
+            string statusText;
+            string statusColor;
+
+            if (selectedDiceNames.Contains(dice.diceName))
+            {
+                statusText = "ACTIVE";
+                statusColor = "#FFD700"; // Gold
+            }
+            else if (dice.cooldownRemain > 0)
+            {
+                statusText = $"CD({dice.cooldownRemain})";
+                statusColor = "#FF6666"; // Red
+            }
+            else
+            {
+                statusText = "READY";
+                statusColor = "#88FF88"; // Green
+            }
+
+            // Compact format: [Status] Dice Name
+            sb.AppendLine($"<color={statusColor}>[{statusText}]</color> <color={rarityColor}>{dice.diceName}</color>");
+        }
+
         #region CooldownSystem Event Handlers
 
         /// <summary>
@@ -437,6 +521,7 @@ namespace DiceGame
         {
             Debug.Log("[BattleController] Dice pool refreshed - all hands completed!");
             UpdateFeedback("Dice pool refreshed! All dice are now available again.");
+            UpdateDeckStatus(); // Update deck display
             
             // Start a new hand with refreshed dice
             StartNewHand();
@@ -458,7 +543,10 @@ namespace DiceGame
         {
             Debug.Log($"[BattleController] Available dice changed: {availableDice.Count} dice available");
             
-            // Update UI to show available dice count
+            // Update deck status display
+            UpdateDeckStatus();
+            
+            // Log details
             var sb = new StringBuilder();
             sb.AppendLine($"Available dice: {availableDice.Count}/8");
             sb.AppendLine("Dice pool:");
