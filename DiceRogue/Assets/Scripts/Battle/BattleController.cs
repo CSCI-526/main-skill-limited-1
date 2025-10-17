@@ -36,7 +36,7 @@ namespace DiceGame
         [Header("Config")]
         public int diceCount = 5;         // Fixed 5 dice per hand
         public int maxRollsPerHand = 3;   // Max 3 rolls per hand
-        public int baseTargetScore = 1000; // Starting target score
+        public int baseTargetScore = 300; // Starting target score
 
         [Header("Cooldown System")]
         public CooldownSystem cooldownSystem; // Reference to cooldown system

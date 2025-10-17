@@ -7,7 +7,7 @@ namespace DiceGame
     /// <summary>
     /// Manages 8-dice pool rotation with cooldown system
     /// - Tracks 8-dice pool with 1-turn cooldown after use
-    /// - Hand counter (5 hands max)
+    /// - Hand counter (3 hands max)
     /// - Auto refresh when all hands used
     /// - Provides available dice for selection
     /// </summary>
@@ -15,12 +15,12 @@ namespace DiceGame
     {
         [Header("Configuration")]
         [SerializeField] private int maxDicePool = 8;
-        [SerializeField] private int maxHands = 5;
+        [SerializeField] private int maxHands = 3;
         [SerializeField] private int cooldownTurns = 1;
         
         [Header("Debug Info")]
         [SerializeField] private int currentHandCount = 0;
-        [SerializeField] private int handsRemaining = 5;
+        [SerializeField] private int handsRemaining = 3;
         
         // Core data
         private readonly List<BaseDice> _dicePool = new();
