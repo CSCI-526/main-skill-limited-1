@@ -24,8 +24,11 @@ namespace DiceGame
         public Button rollButton;
         public Button resetRollButton;
         public Button submitComboButton;  // NEW: Submit current locked combo
-        public TMP_Text rollFeedbackText;
+        public TMP_Text rollFeedbackText; // Shows dice status only
         public TMP_Text handCounterText;  // NEW: Display hand counter
+
+        [Header("Score Display")]
+        public ScoreAnimator scoreAnimator; // Animated score display system
 
         [Header("Config")]
         public int diceCount = 5;         // Fixed 5 dice per hand
@@ -39,6 +42,9 @@ namespace DiceGame
         private DiceEffectHandler _effectHandler;
         private DiceMultiplierCalculator _multiplierCalculator;
         private DiceViewFactory _viewFactory;
+        
+        // Score tracking
+        private int _totalScore = 0;
 
         // Current hand state
         private readonly List<BaseDice> _dice = new();
@@ -54,6 +60,20 @@ namespace DiceGame
                 {
                     Debug.LogError("[BattleController] CooldownSystem not found! Please assign it in the inspector.");
                     return;
+                }
+            }
+
+            // Initialize score animator if not assigned
+            if (scoreAnimator == null)
+            {
+                scoreAnimator = FindObjectOfType<ScoreAnimator>();
+                if (scoreAnimator == null)
+                {
+                    Debug.LogWarning("[BattleController] ScoreAnimator not found! Score animations will be disabled.");
+                }
+                else
+                {
+                    scoreAnimator.ResetTotalScore();
                 }
             }
 
@@ -127,7 +147,7 @@ namespace DiceGame
                 selectedDice.Add(shuffledDice[i]);
             }
 
-            Debug.Log($"[BattleController] Selected {selectedDice.Count} dice for new hand:");
+            Debug.Log($"[BattleController] Selected {selectedDice.Count} special dice from pool:");
             foreach (var dice in selectedDice)
             {
                 Debug.Log($"  Selected: {dice.diceName}");
@@ -142,11 +162,27 @@ namespace DiceGame
         }
         else
         {
-            Debug.LogWarning("[BattleController] No dice available from cooldown system!");
+            Debug.LogWarning("[BattleController] No special dice available from cooldown system!");
         }
 
-        // Set up dice for this hand (even if fewer than 5)
+        // Add selected special dice to hand
         _dice.AddRange(selectedDice);
+        
+        // Fill remaining slots with normal dice to reach 5 total
+        int normalDiceNeeded = diceCount - _dice.Count;
+        if (normalDiceNeeded > 0)
+        {
+            Debug.Log($"[BattleController] Filling {normalDiceNeeded} remaining slots with Normal Dice");
+            for (int i = 0; i < normalDiceNeeded; i++)
+            {
+                var normalDice = new NormalDice();
+                normalDice.diceName = $"Normal Dice #{i + 1}";
+                _dice.Add(normalDice);
+                Debug.Log($"  Added: {normalDice.diceName}");
+            }
+        }
+        
+        Debug.Log($"[BattleController] Final hand composition: {_dice.Count} dice total ({selectedDice.Count} special + {normalDiceNeeded} normal)");
         
         // Reset dice state for new hand
         foreach (var dice in _dice)
@@ -161,10 +197,19 @@ namespace DiceGame
         // Start new hand in hand manager
         _handManager.StartHand();
         
-        UpdateFeedback($"Hand {currentHand + 1}: Ready! {_dice.Count} dice selected. Roll and lock the ones you want to keep!");
+        // Build feedback message
+        string feedbackMsg = $"<size=110%><b>Hand {currentHand + 1}</b></size>\n\n";
+        feedbackMsg += $"<color=#88FF88>Ready! {diceCount} dice prepared.</color>\n";
+        if (selectedDice.Count < diceCount)
+        {
+            feedbackMsg += $"<color=#AAAAAA>({selectedDice.Count} special + {normalDiceNeeded} normal dice)</color>\n";
+        }
+        feedbackMsg += "\n<b>Instructions:</b>\n  • Roll the dice\n  • Click to lock dice you want to keep\n  • Submit when ready";
+        
+        UpdateFeedback(feedbackMsg);
         UpdateHandCounter(currentHand, remainingHands);
         
-        Debug.Log($"[BattleController] Started hand with {_dice.Count} available dice, {diceCount - _dice.Count} empty slots");
+        Debug.Log($"[BattleController] Started hand with {diceCount} dice total");
     }
 
         void OnRollOnce()
@@ -205,22 +250,25 @@ namespace DiceGame
             // Refresh all views using factory
             _viewFactory.RefreshViews(_views);
 
-            // Build feedback
+            // Build feedback - ONLY show dice status, no score calculation
             var sb = new StringBuilder();
-            sb.AppendLine($"Roll {rollNumber}/{maxRollsPerHand}:");
+            sb.AppendLine($"<size=110%><b>Roll {rollNumber}/{maxRollsPerHand}</b></size>\n");
+            sb.AppendLine("<b>Dice Status:</b>");
             for (int i = 0; i < _dice.Count; i++)
             {
                 var d = _dice[i];
                 if (d.tier != DiceTier.Filler) // Only show real dice
                 {
-                    sb.AppendLine($"  {d.diceName}: {d.lastRollValue} {(d.isLocked ? "[LOCKED]" : "")}");
+                    string status = d.isLocked ? "<color=#FFD700>[LOCKED]</color>" : "";
+                    sb.AppendLine($"  • <b>{d.diceName}:</b> {d.lastRollValue} {status}");
                 }
             }
 
+            sb.AppendLine(); // Empty line
             if (rollNumber < maxRollsPerHand)
-                sb.AppendLine("\nLock dice you want to keep, then Roll again or Submit.");
+                sb.AppendLine("<color=#88FF88>Click dice to lock/unlock, then Roll again or Submit.</color>");
             else
-                sb.AppendLine("\nMax rolls reached! Submit your combo now.");
+                sb.AppendLine("<color=#FF8888>Max rolls reached! Submit your combo now.</color>");
 
             UpdateFeedback(sb.ToString());
         }
@@ -230,7 +278,7 @@ namespace DiceGame
             // Validate using HandManager
             if (!_handManager.CanSubmit(_dice))
             {
-                UpdateFeedback("No dice are locked! Lock some dice before submitting.");
+                UpdateFeedback("<color=#FF8888><b>No dice are locked!</b></color>\n\nLock some dice before submitting.");
                 return;
             }
 
@@ -242,59 +290,75 @@ namespace DiceGame
             Debug.Log($"[BattleController] Rolls used: {_handManager.RollsUsed}/{maxRollsPerHand}");
             Debug.Log($"[BattleController] Submitted {submittedDice.Count} locked dice");
             
-            // Display only the submitted (locked) dice values
+            // Update feedback to show submitted dice (DICE STATUS ONLY)
             var sb = new StringBuilder();
-            sb.AppendLine("=== SUBMITTED COMBO ===");
-            sb.AppendLine($"Rolls used: {_handManager.RollsUsed}/{maxRollsPerHand}");
-            sb.AppendLine($"Submitted {submittedDice.Count} dice:");
+            sb.AppendLine("<size=110%><b>COMBO SUBMITTED</b></size>\n");
+            sb.AppendLine($"<color=#AAAAAA>Rolls used: {_handManager.RollsUsed}/{maxRollsPerHand}</color>");
+            sb.AppendLine($"<color=#AAAAAA>Submitted {submittedDice.Count} dice:</color>\n");
             
             foreach (var dice in submittedDice)
             {
-                sb.AppendLine($"  {dice.diceName}: {dice.lastRollValue} [SUBMITTED]");
+                sb.AppendLine($"  • <b>{dice.diceName}:</b> {dice.lastRollValue} <color=#FFD700>[SUBMITTED]</color>");
                 Debug.Log($"  {dice.diceName}: {dice.lastRollValue} [SUBMITTED]");
             }
             
-            sb.AppendLine($"\nSubmitted values: [{string.Join(", ", submittedValues)}]");
+            UpdateFeedback(sb.ToString());
 
             // Calculate multiplier using multiplier calculator
             float mult = _multiplierCalculator.Calculate(submittedDice, submittedValues);
 
-            // 调用新版 DiceHandEvaluator 进行识别和计分 (only on submitted dice)
+            // Evaluate combo and trigger animated score display
             if (submittedValues.Count > 0)
             {
-                string combo = DiceHandEvaluator.Evaluate(submittedValues, out int score, out float comboMult, mult);
-                string summary = DiceHandEvaluator.BuildSummary(submittedValues, combo, score, comboMult, mult);
-
-                sb.AppendLine("\n=== COMBO RESULT ===");
-                sb.AppendLine(summary);
+                string combo = DiceHandEvaluator.Evaluate(submittedValues, out int finalScore, out float comboMult, mult);
+                
+                // Calculate breakdown for animation
+                int diceSum = submittedValues.Sum();
+                int baseScore = CalculateBaseScore(combo);
+                
+                Debug.Log($"[BattleController] Combo: {combo}, Base: {baseScore}, Sum: {diceSum}, ComboMult: {comboMult}, DiceMult: {mult}, Final: {finalScore}");
+                
+                // Trigger Balatro-style animated score display
+                if (scoreAnimator != null)
+                {
+                    scoreAnimator.AnimateScore(submittedValues, combo, baseScore, diceSum, comboMult, mult, finalScore);
+                }
+                
+                _totalScore += finalScore;
             }
             else
             {
-                sb.AppendLine("\nNo dice submitted!");
+                UpdateFeedback(sb.ToString() + "\n<color=#FF8888>No dice submitted!</color>");
             }
             
             Debug.Log($"[BattleController] Submitted dice values: [{string.Join(", ", submittedValues)}]");
             Debug.Log("[BattleController] ============================");
             
             // Complete the hand in cooldown system with submitted dice
-            cooldownSystem.CompleteHand(submittedDice);
+            // Filter out NormalDice (temporary fillers) - only submit special dice from the pool
+            var specialDiceOnly = submittedDice.Where(d => !(d is NormalDice)).ToList();
+            if (specialDiceOnly.Count > 0)
+            {
+                Debug.Log($"[BattleController] Passing {specialDiceOnly.Count} special dice to cooldown system");
+                cooldownSystem.CompleteHand(specialDiceOnly);
+            }
+            else
+            {
+                Debug.Log("[BattleController] No special dice submitted, only normal dice used");
+                cooldownSystem.CompleteHand(new List<BaseDice>()); // Complete hand without cooldown
+            }
             _handManager.EndHand();
             
             // Check if we can start a new hand
             var (current, remaining) = cooldownSystem.GetHandCounter();
             if (remaining > 0)
             {
-                sb.AppendLine($"\nHand completed! {remaining} hands remaining.");
-                sb.AppendLine("Starting next hand...");
-                UpdateFeedback(sb.ToString());
-                
-                // Start next hand after a brief delay
+                // Start next hand after animation completes (brief delay)
                 StartCoroutine(DelayedStartNewHand());
             }
             else
             {
-                sb.AppendLine("\nAll hands completed! Dice pool refreshing...");
-                UpdateFeedback(sb.ToString());
+                Debug.Log("[BattleController] All hands completed! Dice pool will refresh.");
             }
         }
 
@@ -303,8 +367,28 @@ namespace DiceGame
         /// </summary>
         private System.Collections.IEnumerator DelayedStartNewHand()
         {
-            yield return new UnityEngine.WaitForSeconds(1f);
+            yield return new UnityEngine.WaitForSeconds(2.5f); // Wait for animation to complete
             StartNewHand();
+        }
+
+        /// <summary>
+        /// Helper method to extract base score from combo name
+        /// This matches the values in DiceHandEvaluator
+        /// </summary>
+        private int CalculateBaseScore(string comboName)
+        {
+            if (comboName.Contains("Five of a Kind") || comboName.Contains("Yahtzee")) return 180;
+            if (comboName.Contains("Four of a Kind")) return 120;
+            if (comboName.Contains("Full House")) return 100;
+            if (comboName.Contains("Large Straight")) return 90;
+            if (comboName.Contains("Small Straight")) return 75;
+            if (comboName.Contains("Sum Jackpot")) return 70;
+            if (comboName.Contains("Three of a Kind")) return 60;
+            if (comboName.Contains("Two Pair")) return 45;
+            if (comboName.Contains("All Even") || comboName.Contains("All Odd")) return 35;
+            if (comboName.Contains("One Pair")) return 30;
+            if (comboName.Contains("Low Roll") || comboName.Contains("High Roll")) return 25;
+            return 10; // No Combo (Bust)
         }
 
 

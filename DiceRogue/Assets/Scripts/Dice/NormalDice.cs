@@ -14,9 +14,9 @@ namespace DiceGame
         public NormalDice()
         {
             diceName = "Normal Dice";
-            tier = DiceTier.Filler;
-            cost = 0;
-            cooldownAfterUse = 1;
+            tier = DiceTier.Common; // Changed from Filler to Common so it's treated as a real dice
+            cost = 0; // Free dice used to fill empty slots
+            cooldownAfterUse = 0; // No cooldown for filler dice
         }
 
         public override int Roll()
