@@ -175,34 +175,50 @@ namespace DiceGame
                 return;
             }
 
+            // Get the dice that were actually submitted (locked dice)
+            var submittedDice = new List<BaseDice>();
+            var submittedValues = new List<int>();
+            
+            foreach (var dice in _dice)
+            {
+                if (dice.isLocked && dice.lastRollValue > 0)
+                {
+                    submittedDice.Add(dice);
+                    submittedValues.Add(dice.lastRollValue);
+                }
+            }
+            
+            if (submittedDice.Count == 0)
+            {
+                Debug.LogWarning("[BattleController] No locked dice to submit!");
+                UpdateFeedback("No dice are locked! Lock some dice before submitting.");
+                return;
+            }
+
             Debug.Log("[BattleController] ====== COMBO SUBMITTED ======");
             Debug.Log($"[BattleController] Rolls used: {_rollsUsed}/{maxRollsPerHand}");
+            Debug.Log($"[BattleController] Submitted {submittedDice.Count} locked dice");
             
-            // Collect dice values and lock states
+            // Display only the submitted (locked) dice values
             var sb = new StringBuilder();
             sb.AppendLine("=== SUBMITTED COMBO ===");
             sb.AppendLine($"Rolls used: {_rollsUsed}/{maxRollsPerHand}");
-            sb.AppendLine("\nDice values:");
+            sb.AppendLine($"Submitted {submittedDice.Count} dice:");
             
-            var allValues = new List<int>();
-            for (int i = 0; i < _dice.Count; i++)
+            foreach (var dice in submittedDice)
             {
-                var d = _dice[i];
-                sb.AppendLine($"  {d.diceName}: {d.lastRollValue} {(d.isLocked ? "[LOCKED]" : "[UNLOCKED]")}");
-                Debug.Log($"  {d.diceName}: {d.lastRollValue} (Locked: {d.isLocked})");
-                
-                if (d.lastRollValue > 0)
-                    allValues.Add(d.lastRollValue);
+                sb.AppendLine($"  {dice.diceName}: {dice.lastRollValue} [SUBMITTED]");
+                Debug.Log($"  {dice.diceName}: {dice.lastRollValue} [SUBMITTED]");
             }
             
-            sb.AppendLine($"\nAll values: [{string.Join(", ", allValues)}]");
+            sb.AppendLine($"\nSubmitted values: [{string.Join(", ", submittedValues)}]");
             sb.AppendLine("\n(Combo detection & scoring will be implemented next)");
             
-            Debug.Log($"[BattleController] All dice values: [{string.Join(", ", allValues)}]");
+            Debug.Log($"[BattleController] Submitted dice values: [{string.Join(", ", submittedValues)}]");
             Debug.Log("[BattleController] ============================");
             
-            // Complete the hand in cooldown system
-            cooldownSystem.CompleteHand();
+            // Complete the hand in cooldown system with submitted dice
+            cooldownSystem.CompleteHand(submittedDice);
             _isHandActive = false;
             
             // Check if we can start a new hand

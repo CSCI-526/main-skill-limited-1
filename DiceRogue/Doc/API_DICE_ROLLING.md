@@ -79,7 +79,7 @@ Manages 8-dice pool rotation with cooldown mechanics and hand counter.
 **Key Features:**
 - 8-dice pool sourced from player's backpack/inventory
 - Fills remaining slots with normal dice if backpack has < 8 dice
-- 1-turn cooldown after dice usage (properly applied)
+- 1-turn cooldown only on submitted dice (locked dice that were submitted)
 - 5-hand counter with auto-refresh
 - Event-driven architecture for UI updates
 
@@ -91,8 +91,8 @@ List<BaseDice> GetAvailableDice()
 // Select dice for current hand (up to 5)
 bool SelectDiceForHand(List<BaseDice> selectedDice)
 
-// Complete hand and apply cooldowns
-void CompleteHand()
+// Complete hand and apply cooldowns to submitted dice only
+void CompleteHand(List<BaseDice> submittedDice = null)
 
 // Get hand counter info
 (int current, int remaining) GetHandCounter()
@@ -134,8 +134,9 @@ var available = cooldownSystem.GetAvailableDice();
 var selected = available.Take(5).ToList();
 cooldownSystem.SelectDiceForHand(selected);
 
-// After hand completion (applies 1-turn cooldown)
-cooldownSystem.CompleteHand();
+// After hand completion (applies 1-turn cooldown to submitted dice only)
+var submittedDice = GetLockedAndSubmittedDice(); // Your logic to get submitted dice
+cooldownSystem.CompleteHand(submittedDice);
 ```
 
 ---
