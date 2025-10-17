@@ -3,19 +3,19 @@ using UnityEngine;
 namespace DiceGame
 {
     /// <summary>
-    /// 常规均匀分布 D6（faces 可扩展为特殊面）
+    /// Even Dice - Only rolls even numbers (2,4,6)
     /// </summary>
     [System.Serializable]
-    public class NormalDice : BaseDice
+    public class EvenDice : BaseDice
     {
         [Header("Faces (size=6)")]
-        public int[] faces = new int[6] { 1, 2, 3, 4, 5, 6 };
+        public int[] faces = new int[6] { 2, 2, 4, 4, 6, 6 };
 
-        public NormalDice()
+        public EvenDice()
         {
-            diceName = "Normal Dice";
-            tier = DiceTier.Filler;
-            cost = 0;
+            diceName = "Even Dice";
+            tier = DiceTier.Common;
+            cost = 1;
             cooldownAfterUse = 1;
         }
 
@@ -23,9 +23,10 @@ namespace DiceGame
         {
             if (isLocked) return lastRollValue;
 
-            int idx = Random.Range(0, faces.Length); // 上界不含
+            int idx = Random.Range(0, faces.Length);
             lastRollValue = faces[idx];
             return lastRollValue;
         }
     }
 }
+

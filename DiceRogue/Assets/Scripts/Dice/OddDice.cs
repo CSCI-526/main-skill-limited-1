@@ -3,19 +3,19 @@ using UnityEngine;
 namespace DiceGame
 {
     /// <summary>
-    /// 常规均匀分布 D6（faces 可扩展为特殊面）
+    /// Odd Dice - Only rolls odd numbers (1,3,5)
     /// </summary>
     [System.Serializable]
-    public class NormalDice : BaseDice
+    public class OddDice : BaseDice
     {
         [Header("Faces (size=6)")]
-        public int[] faces = new int[6] { 1, 2, 3, 4, 5, 6 };
+        public int[] faces = new int[6] { 1, 1, 3, 3, 5, 5 };
 
-        public NormalDice()
+        public OddDice()
         {
-            diceName = "Normal Dice";
-            tier = DiceTier.Filler;
-            cost = 0;
+            diceName = "Odd Dice";
+            tier = DiceTier.Common;
+            cost = 1;
             cooldownAfterUse = 1;
         }
 
@@ -23,9 +23,10 @@ namespace DiceGame
         {
             if (isLocked) return lastRollValue;
 
-            int idx = Random.Range(0, faces.Length); // 上界不含
+            int idx = Random.Range(0, faces.Length);
             lastRollValue = faces[idx];
             return lastRollValue;
         }
     }
 }
+
