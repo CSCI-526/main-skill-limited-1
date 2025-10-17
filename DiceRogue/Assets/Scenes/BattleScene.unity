@@ -623,10 +623,10 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   maxDicePool: 8
-  maxHands: 5
+  maxHands: 3
   cooldownTurns: 1
   currentHandCount: 0
-  handsRemaining: 5
+  handsRemaining: 3
 --- !u!4 &564646213
 Transform:
   m_ObjectHideFlags: 0
@@ -1419,7 +1419,7 @@ MonoBehaviour:
   targetScoreText: {fileID: 986318006}
   diceCount: 5
   maxRollsPerHand: 3
-  baseTargetScore: 500
+  baseTargetScore: 300
   cooldownSystem: {fileID: 564646212}
 --- !u!1 &986318005
 GameObject:
