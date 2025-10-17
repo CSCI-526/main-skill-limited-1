@@ -24,6 +24,7 @@ namespace DiceGame
         public Button rollButton;
         public Button resetRollButton;
         public Button submitComboButton;  // NEW: Submit current locked combo
+        public Button continueButton;     // NEW: Continue to next level after evaluation
         public TMP_Text rollFeedbackText; // Shows dice status only
         public TMP_Text handCounterText;  // NEW: Display hand counter
         public TMP_Text deckStatusText;   // NEW: Display dice pool/deck status
@@ -35,7 +36,7 @@ namespace DiceGame
         [Header("Config")]
         public int diceCount = 5;         // Fixed 5 dice per hand
         public int maxRollsPerHand = 3;   // Max 3 rolls per hand
-        public int targetScore = 1000;    // Target score to beat
+        public int baseTargetScore = 1000; // Starting target score
 
         [Header("Cooldown System")]
         public CooldownSystem cooldownSystem; // Reference to cooldown system
@@ -48,6 +49,8 @@ namespace DiceGame
         
         // Score tracking
         private int _totalScore = 0;
+        private int _currentLevel = 1;
+        private int _currentTargetScore;
 
         // Current hand state
         private readonly List<BaseDice> _dice = new();
@@ -80,8 +83,17 @@ namespace DiceGame
                 }
             }
 
-            // Initialize target score display
+            // Initialize target score and level
+            _currentLevel = 1;
+            _currentTargetScore = baseTargetScore;
             UpdateTargetScoreDisplay();
+
+            // Initialize and hide continue button
+            if (continueButton != null)
+            {
+                continueButton.gameObject.SetActive(false);
+                continueButton.onClick.AddListener(OnContinue);
+            }
 
             // Initialize core components
             _handManager = new HandManager();
@@ -579,8 +591,60 @@ namespace DiceGame
         {
             if (targetScoreText != null)
             {
-                targetScoreText.text = $"<size=80%>Target Score</size>\n<size=150%><b>{targetScore}</b></size>";
+                targetScoreText.text = $"<size=70%>Target Score</size>\n<size=150%><b>{_currentTargetScore}</b></size>\n<size=80%><color=#AAAAAA>Level {_currentLevel}</color></size>";
             }
+        }
+
+        /// <summary>
+        /// Continue to next level - reset game state and increase target score
+        /// </summary>
+        private void OnContinue()
+        {
+            Debug.Log($"[BattleController] Continuing to next level from Level {_currentLevel}...");
+
+            // Hide continue button
+            if (continueButton != null)
+            {
+                continueButton.gameObject.SetActive(false);
+            }
+
+            // Increase level
+            _currentLevel++;
+
+            // Calculate new target score based on level
+            // Progressive increase: +300, +400, +500, +600, +700, ...
+            // Formula: increase = 200 + n*100 where n = level number
+            // Level 1: 1000 (base)
+            // Level 2: 1000 + 300 = 1300
+            // Level 3: 1300 + 400 = 1700
+            // Level 4: 1700 + 500 = 2200
+            // Level 5: 2200 + 600 = 2800
+            // Level n: previous + (200 + n*100)
+            _currentTargetScore = baseTargetScore;
+            for (int i = 0; i < _currentLevel - 1; i++)
+            {
+                int increase = 300 + i * 100; // 300, 400, 500, 600, 700, ...
+                _currentTargetScore += increase;
+            }
+
+            Debug.Log($"[BattleController] Level {_currentLevel} - New target score: {_currentTargetScore}");
+
+            // Reset total score
+            _totalScore = 0;
+            if (scoreAnimator != null)
+            {
+                scoreAnimator.ResetTotalScore();
+            }
+
+            // Reset dice pool and hand counter
+            cooldownSystem.RefreshDicePool();
+
+            // Update displays
+            UpdateTargetScoreDisplay();
+            UpdateFeedback($"<size=120%><b>Level {_currentLevel} Start!</b></size>\n\n<color=#88FF88>New target: {_currentTargetScore}</color>\n\n<color=#AAAAAA>All dice and hands have been reset.\nGood luck!</color>");
+
+            // Start first hand of new level
+            StartNewHand();
         }
 
         /// <summary>
@@ -592,14 +656,14 @@ namespace DiceGame
             yield return new UnityEngine.WaitForSeconds(3f);
 
             int finalScore = scoreAnimator != null ? scoreAnimator.GetTotalScore() : _totalScore;
-            bool passed = finalScore >= targetScore;
+            bool passed = finalScore >= _currentTargetScore;
 
-            Debug.Log($"[BattleController] Target Evaluation - Target: {targetScore}, Final: {finalScore}, Passed: {passed}");
+            Debug.Log($"[BattleController] Target Evaluation - Target: {_currentTargetScore}, Final: {finalScore}, Passed: {passed}");
 
             // Trigger pass/fail animation in ScoreAnimator
             if (scoreAnimator != null)
             {
-                scoreAnimator.AnimateTargetEvaluation(finalScore, targetScore, passed);
+                scoreAnimator.AnimateTargetEvaluation(finalScore, _currentTargetScore, passed);
             }
             else
             {
@@ -607,9 +671,17 @@ namespace DiceGame
                 string resultMsg = passed 
                     ? "<color=#FFD700><b>TARGET PASSED!</b></color>\n\n" 
                     : "<color=#FF6666><b>TARGET FAILED</b></color>\n\n";
-                resultMsg += $"Final Score: {finalScore}\nTarget: {targetScore}\n\n";
+                resultMsg += $"Final Score: {finalScore}\nTarget: {_currentTargetScore}\n\n";
                 resultMsg += "<color=#AAAAAA>Press Reset to start new battle cycle.</color>";
                 UpdateFeedback(resultMsg);
+            }
+
+            // Wait for evaluation animation to complete, then show Continue button
+            yield return new UnityEngine.WaitForSeconds(4.5f);
+            
+            if (continueButton != null)
+            {
+                continueButton.gameObject.SetActive(true);
             }
         }
 
