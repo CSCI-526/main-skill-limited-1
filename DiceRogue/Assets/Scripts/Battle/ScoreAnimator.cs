@@ -65,8 +65,8 @@ namespace DiceGame
             }
 
             // Step 1: Show combo name and dice (SMALLER SIZE)
-            string display = $"<size=120%><b>{comboName}</b></size>\n\n";
-            display += $"<color=#AAAAAA>Dice: [{string.Join(", ", diceValues)}]</color>\n\n";
+            string display = $"<size=120%><b>{comboName}</b></size>\n";
+            display += $"<color=#000000>Dice: [{string.Join(", ", diceValues)}]</color>\n";
             UpdateComboDisplay(display);
             yield return new WaitForSeconds(stepDelay);
 
@@ -78,7 +78,7 @@ namespace DiceGame
             // Step 3: Add dice sum
             int currentScore = baseScore;
             display += $"<color=#88FF88>+ Dice Sum:</color> <b>{diceSum}</b>\n";
-            display += $"<color=#FFAA44>= {baseScore + diceSum}</color>\n\n";
+            display += $"<color=#FFAA44>= {baseScore + diceSum}</color>\n";
             UpdateComboDisplay(display);
             yield return new WaitForSeconds(stepDelay);
 
@@ -94,7 +94,7 @@ namespace DiceGame
             }
             
             int afterComboMult = Mathf.RoundToInt(currentScore * comboMultiplier);
-            display += $"<color=#FFAA44>= {afterComboMult}</color>\n\n";
+            display += $"<color=#FFAA44>= {afterComboMult}</color>\n";
             UpdateComboDisplay(display);
             yield return new WaitForSeconds(stepDelay);
 
@@ -110,13 +110,13 @@ namespace DiceGame
                     yield return StartCoroutine(PulseText(comboScoreText));
                 }
                 
-                display += $"<color=#FFAA44>= {finalScore}</color>\n\n";
+                display += $"<color=#FFAA44>= {finalScore}</color>\n";
                 UpdateComboDisplay(display);
                 yield return new WaitForSeconds(stepDelay);
             }
 
             // Step 6: Show final score with emphasis (SMALLER SIZE)
-            display += $"\n<size=150%><color=#FFD700><b>FINAL SCORE: {finalScore}</b></color></size>";
+            display += $"<size=150%><color=#FFD700><b>FINAL SCORE: {finalScore}</b></color></size>";
             UpdateComboDisplay(display);
             
             // Animate counting up the total score
