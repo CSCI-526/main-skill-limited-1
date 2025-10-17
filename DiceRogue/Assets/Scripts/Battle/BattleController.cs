@@ -262,8 +262,8 @@ namespace DiceGame
             // 调用新版 DiceHandEvaluator 进行识别和计分 (only on submitted dice)
             if (submittedValues.Count > 0)
             {
-                string combo = DiceHandEvaluator.Evaluate(submittedValues, out int score, mult);
-                string summary = DiceHandEvaluator.BuildSummary(submittedValues, combo, score, mult);
+                string combo = DiceHandEvaluator.Evaluate(submittedValues, out int score, out float comboMult, mult);
+                string summary = DiceHandEvaluator.BuildSummary(submittedValues, combo, score, comboMult, mult);
 
                 sb.AppendLine("\n=== COMBO RESULT ===");
                 sb.AppendLine(summary);

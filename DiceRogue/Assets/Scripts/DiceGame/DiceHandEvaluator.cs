@@ -13,9 +13,10 @@ namespace DiceGame.Core
         /// <summary>
         /// 主入口：识别组合并计算分数
         /// </summary>
-        public static string Evaluate(List<int> values, out int totalScore, float multiplier = 1f)
+        public static string Evaluate(List<int> values, out int totalScore, out float comboMultiplierOut, float diceMultiplier = 1f)
         {
             totalScore = 0;
+            comboMultiplierOut = 1f;
             if (values == null || values.Count == 0)
                 return "Invalid";
 
@@ -38,84 +39,100 @@ namespace DiceGame.Core
 
             string combo;
             int baseScore;
+            float comboMultiplier;
 
             // ===== 核心组合判断（从高到低） =====
             if (freq.Count == 1 && freq[0] == 5)
             {
                 combo = "Five of a Kind (Yahtzee)";
                 baseScore = 180;
+                comboMultiplier = 4.0f;
             }
             else if (freq[0] == 4)
             {
                 combo = "Four of a Kind";
                 baseScore = 120;
+                comboMultiplier = 2.5f;
             }
             else if (freq[0] == 3 && freq.Contains(2))
             {
                 combo = "Full House (3+2)";
                 baseScore = 100;
+                comboMultiplier = 2.0f;
             }
             else if (isLargeStraight)
             {
                 combo = "Large Straight (1–5 or 2–6)";
                 baseScore = 90;
+                comboMultiplier = 1.8f;
             }
             else if (isSmallStraight)
             {
                 combo = "Small Straight (any 4 in sequence)";
                 baseScore = 75;
+                comboMultiplier = 1.5f;
+            }
+            else if (sum == 21)  // Check Sum Jackpot before Three of a Kind for priority
+            {
+                combo = "Sum Jackpot (Total = 21)";
+                baseScore = 70;
+                comboMultiplier = 1.8f;
             }
             else if (freq[0] == 3)
             {
                 combo = "Three of a Kind";
                 baseScore = 60;
+                comboMultiplier = 1.5f;
             }
             else if (freq.Count == 3 && freq[0] == 2 && freq[1] == 2)
             {
                 combo = "Two Pair";
                 baseScore = 45;
+                comboMultiplier = 1.2f;
             }
             else if (freq[0] == 2)
             {
                 combo = "One Pair";
                 baseScore = 30;
+                comboMultiplier = 1.0f;
             }
             else if (allEven)
             {
                 combo = "All Even Numbers";
                 baseScore = 35;
+                comboMultiplier = 1.2f;
             }
             else if (allOdd)
             {
                 combo = "All Odd Numbers";
                 baseScore = 35;
+                comboMultiplier = 1.2f;
             }
             else if (allLow)
             {
                 combo = "Low Roll (All ≤3)";
                 baseScore = 25;
+                comboMultiplier = 1.0f;
             }
             else if (allHigh)
             {
                 combo = "High Roll (All ≥4)";
                 baseScore = 25;
-            }
-            else if (sum == 21)
-            {
-                combo = "Sum Jackpot (Total = 21)";
-                baseScore = 70;
+                comboMultiplier = 1.0f;
             }
             else
             {
                 combo = "No Combo (Bust)";
                 baseScore = 10;
+                comboMultiplier = 0.8f;
             }
 
-            // 计算总分
-            totalScore = Mathf.RoundToInt((baseScore + sum) * multiplier);
+            // 计算总分: (Base + Sum) × Combo Multiplier × Dice Multipliers
+            comboMultiplierOut = comboMultiplier;
+            totalScore = Mathf.RoundToInt((baseScore + sum) * comboMultiplier * diceMultiplier);
 
             // 输出调试信息
-            Debug.Log($"[DiceHandEvaluator] Combo={combo}, Base={baseScore}, Sum={sum}, Mult={multiplier}, Total={totalScore}");
+            Debug.Log($"[DiceHandEvaluator] Combo={combo}, Base={baseScore}, Sum={sum}, ComboMult=x{comboMultiplier}, DiceMult=x{diceMultiplier}, Total={totalScore}");
 
             return combo;
         }
@@ -143,13 +160,18 @@ namespace DiceGame.Core
         }
 
         // ====== 输出UI总结 ======
-        public static string BuildSummary(List<int> values, string combo, int totalScore, float multiplier = 1f)
+        public static string BuildSummary(List<int> values, string combo, int totalScore, float comboMultiplier, float diceMultiplier = 1f)
         {
             var sb = new StringBuilder();
             sb.AppendLine(" === RESULT SUMMARY ===");
             sb.AppendLine($"Dice: [{string.Join(", ", values)}]");
             sb.AppendLine($"Combo: {combo}");
-            sb.AppendLine($"Multiplier: x{multiplier:F1}");
+            sb.AppendLine($"Combo Multiplier: x{comboMultiplier:F1}");
+            if (diceMultiplier > 1f)
+            {
+                sb.AppendLine($"Dice Multiplier: x{diceMultiplier:F1}");
+                sb.AppendLine($"Total Multiplier: x{(comboMultiplier * diceMultiplier):F2}");
+            }
             sb.AppendLine($"Final Score: {totalScore}");
             sb.AppendLine("=========================");
             return sb.ToString();
