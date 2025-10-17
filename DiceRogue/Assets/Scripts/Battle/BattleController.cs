@@ -9,46 +9,78 @@ using DiceGame.Core;
 namespace DiceGame
 {
     /// <summary>
+<<<<<<< Updated upstream
     /// Battle scene controller: 5 dice, max 3 rolls per hand, text feedback, lock logic
     /// Player can lock dice to form their combo and submit early
     /// Now integrated with CooldownSystem for 8-dice pool management
+=======
+    /// Orchestrates battle hand flow with cooldown system.
+    /// Keeps your decoupled components, adds:
+    /// - Top-right total score UI
+    /// - Result modal (panel) after Submit; player clicks Close to proceed
+>>>>>>> Stashed changes
     /// </summary>
     public class BattleController : MonoBehaviour
     {
-        [Header("UI")]
-        public Transform diceRowParent;   // Container for DiceView
-        public GameObject diceViewPrefab; // Prefab (with DiceView component)
+        [Header("UI - Main")]
+        public Transform diceRowParent;         // DiceView parent
+        public GameObject diceViewPrefab;       // DiceView prefab
         public Button rollButton;
         public Button resetRollButton;
-        public Button submitComboButton;  // NEW: Submit current locked combo
-        public TMP_Text rollFeedbackText;
-        public TMP_Text handCounterText;  // NEW: Display hand counter
+        public Button submitComboButton;
+        public TMP_Text rollFeedbackText;       // big text area
+        public TMP_Text handCounterText;        // hand counter (existing)
+
+        [Header("UI - Score (Top-Right)")]
+        public TMP_Text totalScoreText;         // "Score: 0" (常驻总分)
+
+        [Header("UI - Result Modal")]
+        public GameObject resultPanel;          // 弹窗根节点（默认Inactive）
+        public TMP_Text resultText;             // 弹窗里的文本
+        public Button resultCloseButton;        // 关闭按钮
 
         [Header("Config")]
-        public int diceCount = 5;         // Fixed 5 dice per hand
-        public int maxRollsPerHand = 3;   // Max 3 rolls per hand
+        public int diceCount = 5;
+        public int maxRollsPerHand = 3;
 
         [Header("Cooldown System")]
-        public CooldownSystem cooldownSystem; // Reference to cooldown system
+        public CooldownSystem cooldownSystem;
 
+<<<<<<< Updated upstream
+=======
+        // Core components (existing design)
+        private HandManager _handManager;
+        private DiceEffectHandler _effectHandler;
+        private DiceMultiplierCalculator _multiplierCalculator;
+        private DiceViewFactory _viewFactory;
+
+        // Current hand state
+>>>>>>> Stashed changes
         private readonly List<BaseDice> _dice = new();
         private readonly List<DiceView> _views = new();
         private int _rollsUsed = 0;
         private bool _isHandActive = false;
 
+        // Score state
+        private int _totalScore = 0;
+
+        // Last submit cache (用于 Close 时推进回合)
+        private List<BaseDice> _lastSubmittedDice = null;
+
         void Start()
         {
-            // Initialize cooldown system if not assigned
+            // Ensure cooldown system
             if (cooldownSystem == null)
             {
                 cooldownSystem = FindObjectOfType<CooldownSystem>();
                 if (cooldownSystem == null)
                 {
-                    Debug.LogError("[BattleController] CooldownSystem not found! Please assign it in the inspector.");
+                    Debug.LogError("[BattleController] CooldownSystem not found! Assign it in inspector.");
                     return;
                 }
             }
 
+<<<<<<< Updated upstream
         // Subscribe to cooldown system events
         cooldownSystem.OnDicePoolRefresh += OnDicePoolRefresh;
         cooldownSystem.OnHandCounterUpdate += OnHandCounterUpdate;
@@ -64,16 +96,45 @@ namespace DiceGame
         
         Debug.Log("[BattleController] Battle scene initialized with CooldownSystem integration.");
     }
+=======
+            // Init core components
+            _handManager = new HandManager();
+            _handManager.SetMaxRolls(maxRollsPerHand);
 
-    /// <summary>
-    /// Start a new hand by selecting available dice from the pool
-    /// </summary>
-    private void StartNewHand()
-    {
-        // Advance cooldowns before starting new hand (except for the very first hand)
-        var (handCount, handRemaining) = cooldownSystem.GetHandCounter();
-        if (handCount > 0) // Only advance cooldowns if this is not the first hand
+            _effectHandler = new DiceEffectHandler();
+            _multiplierCalculator = new DiceMultiplierCalculator();
+            _viewFactory = new DiceViewFactory(diceViewPrefab, diceRowParent);
+
+            // Subscribe events
+            cooldownSystem.OnDicePoolRefresh += OnDicePoolRefresh;
+            cooldownSystem.OnHandCounterUpdate += OnHandCounterUpdate;
+            cooldownSystem.OnAvailableDiceChanged += OnAvailableDiceChanged;
+
+            // Wire main buttons
+            rollButton.onClick.AddListener(OnRollOnce);
+            resetRollButton.onClick.AddListener(ResetForNewHand);
+            submitComboButton.onClick.AddListener(OnSubmitCombo);
+
+            // Wire modal close
+            if (resultCloseButton != null)
+                resultCloseButton.onClick.AddListener(OnResultCloseClicked);
+
+            // Init UI states
+            _totalScore = 0;
+            UpdateScoreUI();
+            if (resultPanel != null) resultPanel.SetActive(false);
+            SetMainButtonsInteractable(true);
+
+            // Start first hand
+            StartNewHand();
+            Debug.Log("[BattleController] Initialized.");
+        }
+>>>>>>> Stashed changes
+
+        /// <summary> Start a new hand by selecting available dice from cooldown pool. </summary>
+        private void StartNewHand()
         {
+<<<<<<< Updated upstream
             cooldownSystem.AdvanceCooldowns();
         }
         
@@ -85,55 +146,50 @@ namespace DiceGame
                 Destroy(view.gameObject);
         }
         _views.Clear();
+=======
+            var (handCount, handRemaining) = cooldownSystem.GetHandCounter();
+            if (handCount > 0) cooldownSystem.AdvanceCooldowns();
+>>>>>>> Stashed changes
 
-        // Display full dice pool with cooldown status
-        var allDice = cooldownSystem.GetAllDice();
-        var (currentHand, remainingHands) = cooldownSystem.GetHandCounter();
-        Debug.Log($"=== HAND {currentHand + 1} - DICE POOL STATUS ===");
-        Debug.Log($"Hand {currentHand + 1}/{currentHand + remainingHands} ({remainingHands} remaining)");
-        Debug.Log("Full Dice Pool:");
-        foreach (var dice in allDice)
-        {
-            string status = dice.cooldownRemain > 0 ? $"COOLDOWN({dice.cooldownRemain})" : "AVAILABLE";
-            Debug.Log($"  {dice.diceName}: {dice.tier}, cost={dice.cost}, {status}");
-        }
-        Debug.Log("========================================");
+            _dice.Clear();
+            _viewFactory.DestroyViews(_views);
 
-        // Get available dice from cooldown system (after advancing cooldowns)
-        var availableDice = cooldownSystem.GetAvailableDice();
-        var selectedDice = new List<BaseDice>();
-        
-        if (availableDice.Count > 0)
-        {
-            // Select up to 5 dice (or all available if less than 5)
-            int diceToSelect = Mathf.Min(diceCount, availableDice.Count);
-            
-            // Randomly shuffle available dice for variety
-            var shuffledDice = availableDice.OrderBy(x => UnityEngine.Random.value).ToList();
-            
-            for (int i = 0; i < diceToSelect; i++)
+            var allDice = cooldownSystem.GetAllDice();
+            var (currentHand, remainingHands) = cooldownSystem.GetHandCounter();
+            Debug.Log($"=== HAND {currentHand + 1} ===  Remaining: {remainingHands}");
+
+            var availableDice = cooldownSystem.GetAvailableDice();
+            var selectedDice = new List<BaseDice>();
+
+            if (availableDice.Count > 0)
             {
-                selectedDice.Add(shuffledDice[i]);
+                int toSelect = Mathf.Min(diceCount, availableDice.Count);
+                var shuffled = availableDice.OrderBy(_ => UnityEngine.Random.value).ToList();
+                for (int i = 0; i < toSelect; i++) selectedDice.Add(shuffled[i]);
+
+                if (!cooldownSystem.SelectDiceForHand(selectedDice))
+                {
+                    Debug.LogError("[BattleController] SelectDiceForHand failed.");
+                    return;
+                }
+            }
+            else
+            {
+                Debug.LogWarning("[BattleController] No dice available from cooldown system.");
             }
 
-            Debug.Log($"[BattleController] Selected {selectedDice.Count} dice for new hand:");
-            foreach (var dice in selectedDice)
-            {
-                Debug.Log($"  Selected: {dice.diceName}");
-            }
+            _dice.AddRange(selectedDice);
+            foreach (var d in _dice) d.ResetLockAndValue();
 
-            // Register selection with cooldown system
-            if (!cooldownSystem.SelectDiceForHand(selectedDice))
-            {
-                Debug.LogError("[BattleController] Failed to select dice for hand!");
-                return;
-            }
-        }
-        else
-        {
-            Debug.LogWarning("[BattleController] No dice available from cooldown system!");
+            var newViews = _viewFactory.CreateViews(_dice, diceCount);
+            _views.AddRange(newViews);
+
+            _handManager.StartHand();
+            UpdateFeedback($"Hand {currentHand + 1}: {_dice.Count} dice ready. Roll & Lock, then Submit.");
+            UpdateHandCounter(currentHand, remainingHands);
         }
 
+<<<<<<< Updated upstream
         // Set up dice for this hand (even if fewer than 5)
         _dice.AddRange(selectedDice);
         
@@ -188,45 +244,72 @@ namespace DiceGame
 
             _rollsUsed++;
             Debug.Log($"[BattleController] Rolling dice (Roll {_rollsUsed}/{maxRollsPerHand})");
+=======
+        private void OnRollOnce()
+        {
+            if (!_handManager.CanRoll)
+            {
+                UpdateFeedback($"Already reached maximum rolls per hand ({maxRollsPerHand}). Submit or Reset.");
+                return;
+            }
 
-            // Roll only unlocked dice (skip placeholder dice)
+            int rollNumber = _handManager.IncrementRoll();
+>>>>>>> Stashed changes
+
             for (int i = 0; i < _dice.Count; i++)
             {
                 var d = _dice[i];
-                if (!d.isLocked && d.tier != DiceTier.Filler) // Don't roll placeholder dice
+                if (!d.isLocked && d.tier != DiceTier.Filler)
                 {
+<<<<<<< Updated upstream
                     int result = d.Roll();
                     Debug.Log($"  - {d.diceName} rolled: {result}");
                 }
                 else if (d.isLocked)
                 {
                     Debug.Log($"  - {d.diceName} locked at: {d.lastRollValue}");
+=======
+                    _effectHandler.SetupPlusOneDice(d, i, _dice);
+                    d.Roll();
+>>>>>>> Stashed changes
                 }
 
                 _views[i].Refresh();
             }
 
+<<<<<<< Updated upstream
             // Build feedback
             var sb = new StringBuilder();
             sb.AppendLine($"Roll {_rollsUsed}/{maxRollsPerHand}:");
             for (int i = 0; i < _dice.Count; i++)
+=======
+            _effectHandler.ApplyRollEffects(_dice);
+            _viewFactory.RefreshViews(_views);
+
+            var sb = new StringBuilder();
+            sb.AppendLine($"Roll {rollNumber}/{maxRollsPerHand}:");
+            foreach (var d in _dice)
+>>>>>>> Stashed changes
             {
-                var d = _dice[i];
-                if (d.tier != DiceTier.Filler) // Only show real dice
-                {
+                if (d.tier != DiceTier.Filler)
                     sb.AppendLine($"  {d.diceName}: {d.lastRollValue} {(d.isLocked ? "[LOCKED]" : "")}");
-                }
             }
+<<<<<<< Updated upstream
 
             if (_rollsUsed < maxRollsPerHand)
                 sb.AppendLine("\nLock dice you want to keep, then Roll again or Submit.");
             else
                 sb.AppendLine("\nMax rolls reached! Submit your combo now.");
 
+=======
+            sb.AppendLine(rollNumber < maxRollsPerHand
+                ? "\nLock dice you want to keep, then Roll again or Submit."
+                : "\nMax rolls reached! Submit your combo now.");
+>>>>>>> Stashed changes
             UpdateFeedback(sb.ToString());
         }
 
-        void OnSubmitCombo()
+        private void OnSubmitCombo()
         {
             if (!_isHandActive)
             {
@@ -254,6 +337,7 @@ namespace DiceGame
                 return;
             }
 
+<<<<<<< Updated upstream
             Debug.Log("[BattleController] ====== COMBO SUBMITTED ======");
             Debug.Log($"[BattleController] Rolls used: {_rollsUsed}/{maxRollsPerHand}");
             Debug.Log($"[BattleController] Submitted {submittedDice.Count} locked dice");
@@ -281,11 +365,32 @@ namespace DiceGame
 
                 sb.AppendLine("\n=== COMBO RESULT ===");
                 sb.AppendLine(summary);
+=======
+            // Get submitted dice using HandManager
+            var submittedDice = _handManager.GetSubmittedDice(_dice);
+            var submittedValues = _handManager.GetSubmittedValues(submittedDice);
+
+            // cache for Close (推进回合时要用)
+            _lastSubmittedDice = new List<BaseDice>(submittedDice);
+
+            // --- scoring using your existing systems ---
+            float mult = _multiplierCalculator.Calculate(submittedDice, submittedValues);
+
+            int handScore = 0;
+            string summary;
+            if (submittedValues.Count > 0)
+            {
+                // Evaluate + BuildSummary already formats something like:
+                // "Combo: XXX\nSum: Y, Base: Z, Mult: xN"
+                string combo = DiceHandEvaluator.Evaluate(submittedValues, out handScore, mult);
+                summary = DiceHandEvaluator.BuildSummary(submittedValues, combo, handScore, mult);
+>>>>>>> Stashed changes
             }
             else
             {
-                sb.AppendLine("\nNo dice submitted!");
+                summary = "No dice submitted!";
             }
+<<<<<<< Updated upstream
             
             Debug.Log($"[BattleController] Submitted dice values: [{string.Join(", ", submittedValues)}]");
             Debug.Log("[BattleController] ============================");
@@ -295,28 +400,62 @@ namespace DiceGame
             _isHandActive = false;
             
             // Check if we can start a new hand
+=======
+
+            // Update total score now (右上角立即生效)
+            _totalScore += handScore;
+            UpdateScoreUI();
+
+            // (Optional) Background feedback area：只给一句提示，避免把“提交明细”塞进去
+            // 你也可以注释掉这一行，让背景区域保持之前的文本
+            var feedbackSb = new StringBuilder();
+            feedbackSb.AppendLine("Result ready — see panel.");
+            UpdateFeedback(feedbackSb.ToString());
+
+            // --- ONLY result goes to the modal panel ---
+            var resultSb = new StringBuilder();
+            resultSb.AppendLine("=== RESULT ===");
+            resultSb.AppendLine(summary);
+            resultSb.AppendLine($"\nHand Score: {handScore}");
+            resultSb.AppendLine($"Total Score: {_totalScore}");
+
+            // Show modal & disable main buttons
+            ShowResultPanel(resultSb.ToString());
+            SetMainButtonsInteractable(false);
+        }
+
+
+        private void OnResultCloseClicked()
+        {
+            // 关闭弹窗
+            if (resultPanel != null) resultPanel.SetActive(false);
+
+            // 推进回合（真正应用冷却、结束本手、开下一手/等事件驱动）
+            if (_lastSubmittedDice == null) _lastSubmittedDice = new List<BaseDice>();
+            cooldownSystem.CompleteHand(_lastSubmittedDice);
+            _handManager.EndHand();
+
+>>>>>>> Stashed changes
             var (current, remaining) = cooldownSystem.GetHandCounter();
             if (remaining > 0)
             {
-                sb.AppendLine($"\nHand completed! {remaining} hands remaining.");
-                sb.AppendLine("Starting next hand...");
-                UpdateFeedback(sb.ToString());
-                
-                // Start next hand after a brief delay
-                StartCoroutine(DelayedStartNewHand());
+                UpdateFeedback($"Hand completed! {remaining} hands remaining.\nStarting next hand...");
+                StartNewHand();
             }
             else
             {
-                sb.AppendLine("\nAll hands completed! Dice pool refreshing...");
-                UpdateFeedback(sb.ToString());
+                UpdateFeedback("All hands completed! Dice pool refreshing...");
+                // 你的 CooldownSystem 完成后会触发 OnDicePoolRefresh → StartNewHand()
             }
+
+            // 重新允许按钮
+            SetMainButtonsInteractable(true);
+            _lastSubmittedDice = null;
         }
 
-        /// <summary>
-        /// Start a new hand after a brief delay
-        /// </summary>
-        private System.Collections.IEnumerator DelayedStartNewHand()
+        private void ResetForNewHand()
         {
+<<<<<<< Updated upstream
             yield return new UnityEngine.WaitForSeconds(1f);
             StartNewHand();
         }
@@ -333,81 +472,65 @@ namespace DiceGame
             foreach (var v in _views) v.Refresh();
             
             // Start a new hand
+=======
+            _handManager.Reset();
+            foreach (var d in _dice) d.ResetLockAndValue();
+            _viewFactory.RefreshViews(_views);
+>>>>>>> Stashed changes
             StartNewHand();
-            
-            Debug.Log("[BattleController] Hand reset complete.");
         }
 
-        void UpdateFeedback(string msg)
+        private void ShowResultPanel(string text)
+        {
+            if (resultText != null) resultText.text = text;
+            if (resultPanel != null) resultPanel.SetActive(true);
+            else UpdateFeedback(text); // 兜底：如果没连面板，就直接用旧区域显示
+        }
+
+        private void SetMainButtonsInteractable(bool interactable)
+        {
+            if (rollButton) rollButton.interactable = interactable;
+            if (resetRollButton) resetRollButton.interactable = interactable;
+            if (submitComboButton) submitComboButton.interactable = interactable;
+        }
+
+        private void UpdateScoreUI()
+        {
+            if (totalScoreText != null)
+                totalScoreText.text = $"Score: {_totalScore}";
+        }
+
+        private void UpdateFeedback(string msg)
         {
             if (rollFeedbackText != null) rollFeedbackText.text = msg;
             else Debug.Log(msg);
         }
 
-        /// <summary>
-        /// Update hand counter display
-        /// </summary>
         private void UpdateHandCounter(int current, int remaining)
         {
             if (handCounterText != null)
-            {
                 handCounterText.text = $"Hand {current + 1}/{current + remaining} ({remaining} remaining)";
-            }
         }
 
         #region CooldownSystem Event Handlers
-
-        /// <summary>
-        /// Called when dice pool refreshes (all hands used)
-        /// </summary>
         private void OnDicePoolRefresh()
         {
-            Debug.Log("[BattleController] Dice pool refreshed - all hands completed!");
             UpdateFeedback("Dice pool refreshed! All dice are now available again.");
-            
-            // Start a new hand with refreshed dice
             StartNewHand();
         }
 
-        /// <summary>
-        /// Called when hand counter updates
-        /// </summary>
         private void OnHandCounterUpdate(int current, int remaining)
         {
-            Debug.Log($"[BattleController] Hand counter updated: {current}/{current + remaining}");
             UpdateHandCounter(current, remaining);
         }
 
-        /// <summary>
-        /// Called when available dice list changes
-        /// </summary>
         private void OnAvailableDiceChanged(List<BaseDice> availableDice)
         {
-            Debug.Log($"[BattleController] Available dice changed: {availableDice.Count} dice available");
-            
-            // Update UI to show available dice count
-            var sb = new StringBuilder();
-            sb.AppendLine($"Available dice: {availableDice.Count}/8");
-            sb.AppendLine("Dice pool:");
-            foreach (var dice in availableDice)
-            {
-                sb.AppendLine($"  - {dice.diceName} ({dice.tier}, cost: {dice.cost})");
-            }
-            
-            if (handCounterText != null)
-            {
-                var (current, remaining) = cooldownSystem.GetHandCounter();
-                sb.AppendLine($"\nHands: {current + 1}/{current + remaining} ({remaining} remaining)");
-            }
-            
-            Debug.Log(sb.ToString());
+            // 可选：这里保留日志或轻量提示
+            // Debug.Log($"[BattleController] Available changed: {availableDice.Count}");
         }
-
         #endregion
 
-        /// <summary>
-        /// Clean up event subscriptions
-        /// </summary>
         void OnDestroy()
         {
             if (cooldownSystem != null)
