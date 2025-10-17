@@ -107,8 +107,17 @@ namespace DiceGame
     /// </summary>
     private void StartNewHand()
     {
-        // Advance cooldowns before starting new hand (except for the very first hand)
+        // Check if hands remain (safety check before pool refresh)
         var (handCount, handRemaining) = cooldownSystem.GetHandCounter();
+        if (handRemaining <= 0 && handCount > 0) // Don't block the very first hand
+        {
+            Debug.LogWarning("[BattleController] Cannot start new hand - no hands remaining. Battle complete!");
+            UpdateFeedback("<color=#FF8888><b>No Hands Remaining!</b></color>\n\nAll hands have been used.\n<color=#AAAAAA>Battle complete! Press Reset to start new battle cycle (for testing).</color>");
+            UpdateHandCounter(handCount, handRemaining);
+            return;
+        }
+
+        // Advance cooldowns before starting new hand (except for the very first hand)
         if (handCount > 0) // Only advance cooldowns if this is not the first hand
         {
             cooldownSystem.AdvanceCooldowns();
@@ -216,6 +225,15 @@ namespace DiceGame
 
         void OnRollOnce()
         {
+            // Check if hands remain
+            var (current, remaining) = cooldownSystem.GetHandCounter();
+            if (remaining <= 0)
+            {
+                UpdateFeedback("<color=#FF8888><b>No Hands Remaining!</b></color>\n\nAll hands have been used.\n<color=#AAAAAA>Battle complete! Press Reset to start new battle cycle (for testing).</color>");
+                Debug.LogWarning("[BattleController] Cannot roll - no hands remaining.");
+                return;
+            }
+
             // Check if we can roll using HandManager
             if (!_handManager.CanRoll)
             {
@@ -280,6 +298,15 @@ namespace DiceGame
 
         void OnSubmitCombo()
         {
+            // Check if hands remain
+            var (current, remaining) = cooldownSystem.GetHandCounter();
+            if (remaining <= 0)
+            {
+                UpdateFeedback("<color=#FF8888><b>No Hands Remaining!</b></color>\n\nAll hands have been used.\n<color=#AAAAAA>Battle complete! Press Reset to start new battle cycle (for testing).</color>");
+                Debug.LogWarning("[BattleController] Cannot submit - no hands remaining.");
+                return;
+            }
+
             // Validate using HandManager
             if (!_handManager.CanSubmit(_dice))
             {
@@ -358,15 +385,18 @@ namespace DiceGame
             UpdateDeckStatus();
             
             // Check if we can start a new hand
-            var (current, remaining) = cooldownSystem.GetHandCounter();
-            if (remaining > 0)
+            var (currentHand, handsRemaining) = cooldownSystem.GetHandCounter();
+            if (handsRemaining > 0)
             {
                 // Start next hand after animation completes (brief delay)
                 StartCoroutine(DelayedStartNewHand());
             }
             else
             {
-                Debug.Log("[BattleController] All hands completed! Dice pool will refresh.");
+                Debug.Log("[BattleController] All hands completed! Battle should now enter summary phase.");
+                // Update UI to show battle is complete
+                UpdateHandCounter(currentHand, handsRemaining);
+                UpdateFeedback("<color=#FFD700><b>BATTLE COMPLETE!</b></color>\n\nAll hands have been used.\n<color=#AAAAAA>Press Reset to start new battle cycle (for testing).</color>");
             }
         }
 
@@ -404,6 +434,22 @@ namespace DiceGame
         {
             Debug.Log("[BattleController] Resetting for new hand...");
             
+            // Check if hands remain
+            var (current, remaining) = cooldownSystem.GetHandCounter();
+            if (remaining <= 0)
+            {
+                // Allow reset when no hands remain - this refreshes the dice pool for testing
+                Debug.Log("[BattleController] No hands remaining - refreshing dice pool for testing...");
+                cooldownSystem.RefreshDicePool();
+                
+                UpdateFeedback("<color=#88FF88><b>Dice Pool Refreshed!</b></color>\n\nAll dice are now available again.\nStarting new battle cycle...");
+                
+                // Start a new hand after refresh
+                StartNewHand();
+                return;
+            }
+            
+            // Normal reset behavior during active hands
             // Reset hand state using HandManager
             _handManager.Reset();
             
@@ -432,7 +478,14 @@ namespace DiceGame
         {
             if (handCounterText != null)
             {
-                handCounterText.text = $"Hand {current + 1}/{current + remaining} ({remaining} remaining)";
+                if (remaining <= 0)
+                {
+                    handCounterText.text = $"<color=#FF8888><b>No Hands Remaining!</b></color>\nHands: {current}/{current}\n<size=90%>(Battle complete - Press Reset to test again)</size>";
+                }
+                else
+                {
+                    handCounterText.text = $"Hand {current + 1}/{current + remaining} ({remaining} remaining)";
+                }
             }
         }
 
@@ -515,12 +568,12 @@ namespace DiceGame
         #region CooldownSystem Event Handlers
 
         /// <summary>
-        /// Called when dice pool refreshes (all hands used)
+        /// Called when dice pool refreshes (manual refresh via Reset button)
         /// </summary>
         private void OnDicePoolRefresh()
         {
-            Debug.Log("[BattleController] Dice pool refreshed - all hands completed!");
-            UpdateFeedback("Dice pool refreshed! All dice are now available again.");
+            Debug.Log("[BattleController] Dice pool refreshed - starting new battle cycle!");
+            UpdateFeedback("<color=#88FF88><b>Dice Pool Refreshed!</b></color>\n\nAll dice are now available again.\nStarting new battle cycle...");
             UpdateDeckStatus(); // Update deck display
             
             // Start a new hand with refreshed dice

@@ -90,18 +90,26 @@ namespace DiceGame
                     {
                         Debug.Log($"  - {zombie.diceName} is infecting neighbors with value {zombie.GetInfectionValue()}!");
                         
-                        // Infect left neighbor
-                        if (i > 0 && dice[i - 1].tier != DiceTier.Filler)
+                        // Infect left neighbor (only if not locked)
+                        if (i > 0 && dice[i - 1].tier != DiceTier.Filler && !dice[i - 1].isLocked)
                         {
                             zombie.InfectDice(dice[i - 1]);
                             Debug.Log($"    - Infected {dice[i - 1].diceName} (left)");
                         }
+                        else if (i > 0 && dice[i - 1].isLocked)
+                        {
+                            Debug.Log($"    - Cannot infect {dice[i - 1].diceName} (left) - dice is locked");
+                        }
 
-                        // Infect right neighbor
-                        if (i < dice.Count - 1 && dice[i + 1].tier != DiceTier.Filler)
+                        // Infect right neighbor (only if not locked)
+                        if (i < dice.Count - 1 && dice[i + 1].tier != DiceTier.Filler && !dice[i + 1].isLocked)
                         {
                             zombie.InfectDice(dice[i + 1]);
                             Debug.Log($"    - Infected {dice[i + 1].diceName} (right)");
+                        }
+                        else if (i < dice.Count - 1 && dice[i + 1].isLocked)
+                        {
+                            Debug.Log($"    - Cannot infect {dice[i + 1].diceName} (right) - dice is locked");
                         }
                     }
                 }
@@ -125,7 +133,7 @@ namespace DiceGame
                 }
             }
 
-            // If GoldenDice is present, apply +1 to all dice (except itself)
+            // If GoldenDice is present, apply +1 to all dice (except itself and locked dice)
             if (goldenDice != null)
             {
                 Debug.Log($"  - {goldenDice.diceName} is adding +1 to all other dice!");
@@ -134,9 +142,16 @@ namespace DiceGame
                 {
                     if (d != goldenDice && d.tier != DiceTier.Filler && d.lastRollValue > 0)
                     {
-                        int oldValue = d.lastRollValue;
-                        d.lastRollValue = goldenDice.ApplyBonus(d.lastRollValue);
-                        Debug.Log($"    - {d.diceName}: {oldValue} -> {d.lastRollValue}");
+                        if (!d.isLocked)
+                        {
+                            int oldValue = d.lastRollValue;
+                            d.lastRollValue = goldenDice.ApplyBonus(d.lastRollValue);
+                            Debug.Log($"    - {d.diceName}: {oldValue} -> {d.lastRollValue}");
+                        }
+                        else
+                        {
+                            Debug.Log($"    - {d.diceName}: skipped (locked at {d.lastRollValue})");
+                        }
                     }
                 }
             }

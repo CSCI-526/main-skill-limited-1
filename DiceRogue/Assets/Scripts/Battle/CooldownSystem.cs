@@ -260,15 +260,13 @@ namespace DiceGame
             // Trigger events
             OnHandCounterUpdate?.Invoke(currentHandCount, handsRemaining);
             
-            // Check if we need to refresh (all hands used)
+            // Don't auto-refresh anymore - game should enter battle summary
+            // Just update available dice for display purposes
+            UpdateAvailableDice();
+            
             if (handsRemaining <= 0)
             {
-                RefreshDicePool();
-            }
-            else
-            {
-                // Don't advance cooldowns here - wait until next hand starts
-                UpdateAvailableDice();
+                Debug.Log("[CooldownSystem] All hands used! Battle should now enter summary phase.");
             }
         }
 
@@ -300,9 +298,9 @@ namespace DiceGame
         }
 
         /// <summary>
-        /// Refresh the entire dice pool (when all hands are used)
+        /// Refresh the entire dice pool (manual trigger for testing)
         /// </summary>
-        private void RefreshDicePool()
+        public void RefreshDicePool()
         {
             Debug.Log("[CooldownSystem] Refreshing dice pool - all hands used!");
             
