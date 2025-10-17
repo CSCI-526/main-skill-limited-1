@@ -176,45 +176,64 @@ namespace DiceGame
                 return;
             }
 
+            // Get the dice that were actually submitted (locked dice)
+            var submittedDice = new List<BaseDice>();
+            var submittedValues = new List<int>();
+            
+            foreach (var dice in _dice)
+            {
+                if (dice.isLocked && dice.lastRollValue > 0)
+                {
+                    submittedDice.Add(dice);
+                    submittedValues.Add(dice.lastRollValue);
+                }
+            }
+            
+            if (submittedDice.Count == 0)
+            {
+                Debug.LogWarning("[BattleController] No locked dice to submit!");
+                UpdateFeedback("No dice are locked! Lock some dice before submitting.");
+                return;
+            }
+
             Debug.Log("[BattleController] ====== COMBO SUBMITTED ======");
             Debug.Log($"[BattleController] Rolls used: {_rollsUsed}/{maxRollsPerHand}");
-
+            Debug.Log($"[BattleController] Submitted {submittedDice.Count} locked dice");
+            
+            // Display only the submitted (locked) dice values
             var sb = new StringBuilder();
             sb.AppendLine("=== SUBMITTED COMBO ===");
             sb.AppendLine($"Rolls used: {_rollsUsed}/{maxRollsPerHand}");
-            sb.AppendLine("\nDice values:");
-
-            var allValues = new List<int>();
-            for (int i = 0; i < _dice.Count; i++)
+            sb.AppendLine($"Submitted {submittedDice.Count} dice:");
+            
+            foreach (var dice in submittedDice)
             {
-                var d = _dice[i];
-                sb.AppendLine($"  {d.diceName}: {d.lastRollValue} {(d.isLocked ? "[LOCKED]" : "[UNLOCKED]")}");
-                Debug.Log($"  {d.diceName}: {d.lastRollValue} (Locked: {d.isLocked})");
-
-                if (d.lastRollValue > 0)
-                    allValues.Add(d.lastRollValue);
+                sb.AppendLine($"  {dice.diceName}: {dice.lastRollValue} [SUBMITTED]");
+                Debug.Log($"  {dice.diceName}: {dice.lastRollValue} [SUBMITTED]");
             }
+            
+            sb.AppendLine($"\nSubmitted values: [{string.Join(", ", submittedValues)}]");
 
-            // 调用新版 DiceHandEvaluator 进行识别和计分
-            if (allValues.Count > 0)
+            // 调用新版 DiceHandEvaluator 进行识别和计分 (only on submitted dice)
+            if (submittedValues.Count > 0)
             {
                 float mult = 1f; // multiplier 可未来由 relic / buff 改变
-                string combo = DiceHandEvaluator.Evaluate(allValues, out int score, mult);
-                string summary = DiceHandEvaluator.BuildSummary(allValues, combo, score, mult);
+                string combo = DiceHandEvaluator.Evaluate(submittedValues, out int score, mult);
+                string summary = DiceHandEvaluator.BuildSummary(submittedValues, combo, score, mult);
 
                 sb.AppendLine("\n=== COMBO RESULT ===");
                 sb.AppendLine(summary);
             }
             else
             {
-                sb.AppendLine("\nNo dice rolled!");
+                sb.AppendLine("\nNo dice submitted!");
             }
-
-            Debug.Log($"[BattleController] All dice values: [{string.Join(", ", allValues)}]");
+            
+            Debug.Log($"[BattleController] Submitted dice values: [{string.Join(", ", submittedValues)}]");
             Debug.Log("[BattleController] ============================");
             
-            // Complete the hand in cooldown system
-            cooldownSystem.CompleteHand();
+            // Complete the hand in cooldown system with submitted dice
+            cooldownSystem.CompleteHand(submittedDice);
             _isHandActive = false;
             
             // Check if we can start a new hand

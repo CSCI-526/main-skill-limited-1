@@ -242,9 +242,10 @@ namespace DiceGame
         }
 
         /// <summary>
-        /// Complete current hand and apply cooldowns
+        /// Complete current hand and apply cooldowns to submitted dice only
         /// </summary>
-        public void CompleteHand()
+        /// <param name="submittedDice">List of dice that were locked and submitted</param>
+        public void CompleteHand(List<BaseDice> submittedDice = null)
         {
             if (_selectedDice.Count == 0)
             {
@@ -254,11 +255,25 @@ namespace DiceGame
 
             Debug.Log($"[CooldownSystem] Completing hand with {_selectedDice.Count} dice");
             
-            // Apply cooldown to used dice (1-turn cooldown)
-            foreach (var dice in _selectedDice)
+            // Apply cooldown only to submitted dice (locked and submitted)
+            if (submittedDice != null && submittedDice.Count > 0)
             {
-                dice.cooldownRemain = dice.cooldownAfterUse; // Set to 1 turn
-                Debug.Log($"  - {dice.diceName} on cooldown for {dice.cooldownRemain} turns");
+                Debug.Log($"[CooldownSystem] Applying cooldown to {submittedDice.Count} submitted dice:");
+                foreach (var dice in submittedDice)
+                {
+                    dice.cooldownRemain = dice.cooldownAfterUse; // Set to 1 turn
+                    Debug.Log($"  - {dice.diceName} on cooldown for {dice.cooldownRemain} turns");
+                }
+            }
+            else
+            {
+                Debug.Log("[CooldownSystem] No submitted dice provided, applying cooldown to all selected dice");
+                // Fallback: apply cooldown to all selected dice if no submitted dice provided
+                foreach (var dice in _selectedDice)
+                {
+                    dice.cooldownRemain = dice.cooldownAfterUse; // Set to 1 turn
+                    Debug.Log($"  - {dice.diceName} on cooldown for {dice.cooldownRemain} turns");
+                }
             }
             
             // Clear selection
