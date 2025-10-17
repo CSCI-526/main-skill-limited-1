@@ -91,40 +91,13 @@ namespace DiceGame
 
         /// <summary>
         /// Get dice from player's backpack/inventory
-        /// TODO: Replace with actual inventory system integration
+        /// Uses DicePoolFactory to create a random pool of 8 dice from all available types
         /// </summary>
         private List<BaseDice> GetPlayerBackpackDice()
         {
-            var backpackDice = new List<BaseDice>();
-            
-            // Simulate a player backpack with some dice
-            // In real implementation, this would query the inventory system
-            
-            // Add Lucky Six dice
-            var luckyDice = new WeightedDice
-            {
-                diceName = "Lucky Six",
-                tier = DiceTier.Rare,
-                cost = 2,
-                cooldownAfterUse = cooldownTurns,
-                cooldownRemain = 0,
-                weights = new float[] { 1, 1, 1, 1, 1, 2 } // 30% chance for 6
-            };
-            backpackDice.Add(luckyDice);
-            
-            // Add a few normal dice from backpack
-            for (int i = 0; i < 3; i++)
-            {
-                var normalDice = new NormalDice
-                {
-                    diceName = $"Backpack D6_{i + 1}",
-                    tier = DiceTier.Common,
-                    cost = 1,
-                    cooldownAfterUse = cooldownTurns,
-                    cooldownRemain = 0
-                };
-                backpackDice.Add(normalDice);
-            }
+            // Use DicePoolFactory to create random pool of 8 dice
+            Debug.Log("[CooldownSystem] Generating random dice pool from all available dice types...");
+            var backpackDice = DicePoolFactory.CreateRandomPool(maxDicePool, cooldownTurns);
             
             return backpackDice;
         }

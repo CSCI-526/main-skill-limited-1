@@ -9,9 +9,12 @@ using DiceGame.Core;
 namespace DiceGame
 {
     /// <summary>
-    /// Battle scene controller: 5 dice, max 3 rolls per hand, text feedback, lock logic
-    /// Player can lock dice to form their combo and submit early
-    /// Now integrated with CooldownSystem for 8-dice pool management
+    /// Battle scene controller: Orchestrates hand gameplay with cooldown system
+    /// Delegates responsibilities to specialized components:
+    /// - HandManager: hand state and roll counting
+    /// - DiceEffectHandler: special dice effects
+    /// - DiceMultiplierCalculator: damage multipliers
+    /// - DiceViewFactory: UI view management
     /// </summary>
     public class BattleController : MonoBehaviour
     {
@@ -31,10 +34,15 @@ namespace DiceGame
         [Header("Cooldown System")]
         public CooldownSystem cooldownSystem; // Reference to cooldown system
 
+        // Core components
+        private HandManager _handManager;
+        private DiceEffectHandler _effectHandler;
+        private DiceMultiplierCalculator _multiplierCalculator;
+        private DiceViewFactory _viewFactory;
+
+        // Current hand state
         private readonly List<BaseDice> _dice = new();
         private readonly List<DiceView> _views = new();
-        private int _rollsUsed = 0;
-        private bool _isHandActive = false;
 
         void Start()
         {
@@ -49,21 +57,29 @@ namespace DiceGame
                 }
             }
 
-        // Subscribe to cooldown system events
-        cooldownSystem.OnDicePoolRefresh += OnDicePoolRefresh;
-        cooldownSystem.OnHandCounterUpdate += OnHandCounterUpdate;
-        cooldownSystem.OnAvailableDiceChanged += OnAvailableDiceChanged;
+            // Initialize core components
+            _handManager = new HandManager();
+            _handManager.SetMaxRolls(maxRollsPerHand);
+            
+            _effectHandler = new DiceEffectHandler();
+            _multiplierCalculator = new DiceMultiplierCalculator();
+            _viewFactory = new DiceViewFactory(diceViewPrefab, diceRowParent);
 
-        // Set up UI
-        rollButton.onClick.AddListener(OnRollOnce);
-        resetRollButton.onClick.AddListener(ResetForNewHand);
-        submitComboButton.onClick.AddListener(OnSubmitCombo);
-        
-        // Start first hand
-        StartNewHand();
-        
-        Debug.Log("[BattleController] Battle scene initialized with CooldownSystem integration.");
-    }
+            // Subscribe to cooldown system events
+            cooldownSystem.OnDicePoolRefresh += OnDicePoolRefresh;
+            cooldownSystem.OnHandCounterUpdate += OnHandCounterUpdate;
+            cooldownSystem.OnAvailableDiceChanged += OnAvailableDiceChanged;
+
+            // Set up UI
+            rollButton.onClick.AddListener(OnRollOnce);
+            resetRollButton.onClick.AddListener(ResetForNewHand);
+            submitComboButton.onClick.AddListener(OnSubmitCombo);
+            
+            // Start first hand
+            StartNewHand();
+            
+            Debug.Log("[BattleController] Battle scene initialized with decoupled components.");
+        }
 
     /// <summary>
     /// Start a new hand by selecting available dice from the pool
@@ -77,14 +93,9 @@ namespace DiceGame
             cooldownSystem.AdvanceCooldowns();
         }
         
-        // Clear previous dice and views
+        // Clear previous dice and views using factory
         _dice.Clear();
-        foreach (var view in _views)
-        {
-            if (view != null && view.gameObject != null)
-                Destroy(view.gameObject);
-        }
-        _views.Clear();
+        _viewFactory.DestroyViews(_views);
 
         // Display full dice pool with cooldown status
         var allDice = cooldownSystem.GetAllDice();
@@ -137,39 +148,18 @@ namespace DiceGame
         // Set up dice for this hand (even if fewer than 5)
         _dice.AddRange(selectedDice);
         
-        // Create UI views for selected dice and reset their values to "-"
+        // Reset dice state for new hand
         foreach (var dice in _dice)
         {
-            // Reset dice state for new hand
             dice.ResetLockAndValue(); // This sets lastRollValue = 0 and isLocked = false
-            
-            var go = Instantiate(diceViewPrefab, diceRowParent);
-            var view = go.GetComponent<DiceView>();
-            view.Bind(dice);
-            _views.Add(view);
         }
 
-        // If we have fewer than 5 dice, create placeholder views with "-"
-        while (_views.Count < diceCount)
-        {
-            var go = Instantiate(diceViewPrefab, diceRowParent);
-            var view = go.GetComponent<DiceView>();
-            // Create a placeholder dice for display
-            var placeholderDice = new NormalDice
-            {
-                diceName = $"Empty_{_views.Count + 1}",
-                tier = DiceTier.Filler,
-                cost = 0,
-                lastRollValue = 0,
-                isLocked = false
-            };
-            view.Bind(placeholderDice);
-            view.SetDisplayValue("-"); // Show "-" instead of 0
-            _views.Add(view);
-        }
+        // Create views using factory (includes placeholders for empty slots)
+        var newViews = _viewFactory.CreateViews(_dice, diceCount);
+        _views.AddRange(newViews);
 
-        _rollsUsed = 0;
-        _isHandActive = true;
+        // Start new hand in hand manager
+        _handManager.StartHand();
         
         UpdateFeedback($"Hand {currentHand + 1}: Ready! {_dice.Count} dice selected. Roll and lock the ones you want to keep!");
         UpdateHandCounter(currentHand, remainingHands);
@@ -179,15 +169,17 @@ namespace DiceGame
 
         void OnRollOnce()
         {
-            if (_rollsUsed >= maxRollsPerHand)
+            // Check if we can roll using HandManager
+            if (!_handManager.CanRoll)
             {
-                UpdateFeedback("Already reached maximum rolls per hand (3). Submit your combo or Reset.");
+                UpdateFeedback($"Already reached maximum rolls per hand ({maxRollsPerHand}). Submit your combo or Reset.");
                 Debug.LogWarning("[BattleController] Max rolls reached.");
                 return;
             }
 
-            _rollsUsed++;
-            Debug.Log($"[BattleController] Rolling dice (Roll {_rollsUsed}/{maxRollsPerHand})");
+            // Increment roll counter
+            int rollNumber = _handManager.IncrementRoll();
+            Debug.Log($"[BattleController] Rolling dice (Roll {rollNumber}/{maxRollsPerHand})");
 
             // Roll only unlocked dice (skip placeholder dice)
             for (int i = 0; i < _dice.Count; i++)
@@ -195,6 +187,9 @@ namespace DiceGame
                 var d = _dice[i];
                 if (!d.isLocked && d.tier != DiceTier.Filler) // Don't roll placeholder dice
                 {
+                    // Setup PlusOne dice context before rolling
+                    _effectHandler.SetupPlusOneDice(d, i, _dice);
+
                     int result = d.Roll();
                     Debug.Log($"  - {d.diceName} rolled: {result}");
                 }
@@ -202,13 +197,17 @@ namespace DiceGame
                 {
                     Debug.Log($"  - {d.diceName} locked at: {d.lastRollValue}");
                 }
-
-                _views[i].Refresh();
             }
+
+            // Apply all special dice effects using effect handler
+            _effectHandler.ApplyRollEffects(_dice);
+
+            // Refresh all views using factory
+            _viewFactory.RefreshViews(_views);
 
             // Build feedback
             var sb = new StringBuilder();
-            sb.AppendLine($"Roll {_rollsUsed}/{maxRollsPerHand}:");
+            sb.AppendLine($"Roll {rollNumber}/{maxRollsPerHand}:");
             for (int i = 0; i < _dice.Count; i++)
             {
                 var d = _dice[i];
@@ -218,7 +217,7 @@ namespace DiceGame
                 }
             }
 
-            if (_rollsUsed < maxRollsPerHand)
+            if (rollNumber < maxRollsPerHand)
                 sb.AppendLine("\nLock dice you want to keep, then Roll again or Submit.");
             else
                 sb.AppendLine("\nMax rolls reached! Submit your combo now.");
@@ -228,40 +227,25 @@ namespace DiceGame
 
         void OnSubmitCombo()
         {
-            if (!_isHandActive)
+            // Validate using HandManager
+            if (!_handManager.CanSubmit(_dice))
             {
-                Debug.LogWarning("[BattleController] No active hand to submit");
-                return;
-            }
-
-            // Get the dice that were actually submitted (locked dice, excluding placeholder dice)
-            var submittedDice = new List<BaseDice>();
-            var submittedValues = new List<int>();
-            
-            foreach (var dice in _dice)
-            {
-                if (dice.isLocked && dice.lastRollValue > 0 && dice.tier != DiceTier.Filler)
-                {
-                    submittedDice.Add(dice);
-                    submittedValues.Add(dice.lastRollValue);
-                }
-            }
-            
-            if (submittedDice.Count == 0)
-            {
-                Debug.LogWarning("[BattleController] No locked dice to submit!");
                 UpdateFeedback("No dice are locked! Lock some dice before submitting.");
                 return;
             }
 
+            // Get submitted dice using HandManager
+            var submittedDice = _handManager.GetSubmittedDice(_dice);
+            var submittedValues = _handManager.GetSubmittedValues(submittedDice);
+
             Debug.Log("[BattleController] ====== COMBO SUBMITTED ======");
-            Debug.Log($"[BattleController] Rolls used: {_rollsUsed}/{maxRollsPerHand}");
+            Debug.Log($"[BattleController] Rolls used: {_handManager.RollsUsed}/{maxRollsPerHand}");
             Debug.Log($"[BattleController] Submitted {submittedDice.Count} locked dice");
             
             // Display only the submitted (locked) dice values
             var sb = new StringBuilder();
             sb.AppendLine("=== SUBMITTED COMBO ===");
-            sb.AppendLine($"Rolls used: {_rollsUsed}/{maxRollsPerHand}");
+            sb.AppendLine($"Rolls used: {_handManager.RollsUsed}/{maxRollsPerHand}");
             sb.AppendLine($"Submitted {submittedDice.Count} dice:");
             
             foreach (var dice in submittedDice)
@@ -272,10 +256,12 @@ namespace DiceGame
             
             sb.AppendLine($"\nSubmitted values: [{string.Join(", ", submittedValues)}]");
 
+            // Calculate multiplier using multiplier calculator
+            float mult = _multiplierCalculator.Calculate(submittedDice, submittedValues);
+
             // 调用新版 DiceHandEvaluator 进行识别和计分 (only on submitted dice)
             if (submittedValues.Count > 0)
             {
-                float mult = 1f; // multiplier 可未来由 relic / buff 改变
                 string combo = DiceHandEvaluator.Evaluate(submittedValues, out int score, mult);
                 string summary = DiceHandEvaluator.BuildSummary(submittedValues, combo, score, mult);
 
@@ -292,7 +278,7 @@ namespace DiceGame
             
             // Complete the hand in cooldown system with submitted dice
             cooldownSystem.CompleteHand(submittedDice);
-            _isHandActive = false;
+            _handManager.EndHand();
             
             // Check if we can start a new hand
             var (current, remaining) = cooldownSystem.GetHandCounter();
@@ -325,12 +311,15 @@ namespace DiceGame
         void ResetForNewHand()
         {
             Debug.Log("[BattleController] Resetting for new hand...");
-            _rollsUsed = 0;
-            _isHandActive = false;
+            
+            // Reset hand state using HandManager
+            _handManager.Reset();
             
             // Reset dice states
             foreach (var d in _dice) d.ResetLockAndValue();
-            foreach (var v in _views) v.Refresh();
+            
+            // Refresh views using factory
+            _viewFactory.RefreshViews(_views);
             
             // Start a new hand
             StartNewHand();
