@@ -37,6 +37,15 @@ namespace DiceGame
                 lockIndicator.enabled = model.isLocked;
         }
 
+        /// <summary>
+        /// Set a custom display value (for placeholder dice)
+        /// </summary>
+        public void SetDisplayValue(string value)
+        {
+            if (valueText != null)
+                valueText.text = value;
+        }
+
         void OnToggleLock()
         {
             if (model == null) return;

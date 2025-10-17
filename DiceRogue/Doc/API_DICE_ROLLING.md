@@ -72,9 +72,78 @@ var rareDice = new WeightedDice {
 
 ---
 
+## 🕒 CooldownSystem
+
+Manages 8-dice pool rotation with cooldown mechanics and hand counter.
+
+**Key Features:**
+- 8-dice pool sourced from player's backpack/inventory
+- Fills remaining slots with normal dice if backpack has < 8 dice
+- 1-turn cooldown only on submitted dice (locked dice that were submitted)
+- 5-hand counter with auto-refresh
+- Event-driven architecture for UI updates
+
+**Core Methods:**
+```csharp
+// Get available dice (not on cooldown)
+List<BaseDice> GetAvailableDice()
+
+// Select dice for current hand (up to 5)
+bool SelectDiceForHand(List<BaseDice> selectedDice)
+
+// Complete hand and apply cooldowns to submitted dice only
+void CompleteHand(List<BaseDice> submittedDice = null)
+
+// Get hand counter info
+(int current, int remaining) GetHandCounter()
+
+// Check if dice are available
+bool HasAvailableDice()
+
+// Get selected dice cost
+int GetSelectedDiceCost()
+
+// Set dice from player's backpack/inventory
+void SetPlayerBackpackDice(List<BaseDice> backpackDice)
+```
+
+**Events:**
+```csharp
+// Triggered when dice pool refreshes (all hands used)
+System.Action OnDicePoolRefresh
+
+// Triggered when hand counter updates
+System.Action<int, int> OnHandCounterUpdate
+
+// Triggered when available dice changes
+System.Action<List<BaseDice>> OnAvailableDiceChanged
+```
+
+**Usage Example:**
+```csharp
+// Subscribe to events
+cooldownSystem.OnDicePoolRefresh += OnPoolRefresh;
+cooldownSystem.OnHandCounterUpdate += OnCounterUpdate;
+
+// Set dice from player's backpack (from inventory system)
+var playerDice = GetPlayerInventoryDice(); // Your inventory system
+cooldownSystem.SetPlayerBackpackDice(playerDice);
+
+// Get available dice and select for hand
+var available = cooldownSystem.GetAvailableDice();
+var selected = available.Take(5).ToList();
+cooldownSystem.SelectDiceForHand(selected);
+
+// After hand completion (applies 1-turn cooldown to submitted dice only)
+var submittedDice = GetLockedAndSubmittedDice(); // Your logic to get submitted dice
+cooldownSystem.CompleteHand(submittedDice);
+```
+
+---
+
 ## 🎮 BattleController
 
-Manages the rolling phase UI and flow.
+Manages the rolling phase UI and flow. Now integrated with CooldownSystem.
 
 **Public References:**
 ```csharp
@@ -82,18 +151,27 @@ Manages the rolling phase UI and flow.
 Button rollButton;
 Button resetRollButton;
 Button submitComboButton;
+TMP_Text rollFeedbackText;
+TMP_Text handCounterText;  // NEW: Hand counter display
 
 // Config
 int maxRollsPerHand = 3;
 int diceCount = 5;
+
+// Cooldown System Integration
+CooldownSystem cooldownSystem;  // Reference to cooldown system
 ```
 
-**For Integration:**
+**New Integration Features:**
 ```csharp
-// Access current dice data
-List<BaseDice> _dice  // All dice in current hand
+// BattleController now automatically:
+// 1. Gets available dice from CooldownSystem
+// 2. Selects up to 5 dice for each hand
+// 3. Completes hands and applies cooldowns
+// 4. Handles auto-refresh when all hands used
+// 5. Updates hand counter display
 
-// To integrate combo detection/scoring:
+// For combo detection/scoring (unchanged):
 void OnSubmitCombo()
 {
     var values = new List<int>();
@@ -103,6 +181,8 @@ void OnSubmitCombo()
     
     // TODO: Call ComboDetector.Detect(values)
     // TODO: Call ScoringSystem.Calculate(combo, values)
+    
+    // Hand completion is now automatic via CooldownSystem
 }
 ```
 
@@ -126,16 +206,25 @@ List<int> GetDiceValues()
 // ComboType combo = ComboDetector.Detect(GetDiceValues());
 ```
 
-### For **Cooldown System** (Programmer 3):
+### For **Cooldown System** (Programmer 3) - ✅ IMPLEMENTED:
 ```csharp
-// After hand completes:
-foreach (var dice in _dice)
-{
-    dice.cooldownRemain = dice.cooldownAfterUse;  // Set to 1
-}
+// CooldownSystem manages 8-dice pool with 1-turn cooldown
+// BattleController now integrates with CooldownSystem automatically
 
-// Before next hand (check availability):
-bool IsAvailable(BaseDice dice) => dice.cooldownRemain == 0;
+// Access cooldown system:
+CooldownSystem cooldownSystem = FindObjectOfType<CooldownSystem>();
+
+// Get available dice:
+List<BaseDice> available = cooldownSystem.GetAvailableDice();
+
+// Select dice for hand:
+bool success = cooldownSystem.SelectDiceForHand(selectedDice);
+
+// Complete hand (applies cooldowns):
+cooldownSystem.CompleteHand();
+
+// Check hand counter:
+var (current, remaining) = cooldownSystem.GetHandCounter();
 ```
 
 ### For **Budget/Selection** (needs implementation):
@@ -173,11 +262,10 @@ All actions log to Unity Console with `[BattleController]` or `[DiceView]` prefi
 
 ## 📋 Current Limitations
 
-- **No budget validation** (5 dice hardcoded)
-- **No dice pool selection** (need 8-dice pool → select 5)
-- **No cooldown enforcement** (fields exist, logic needed)
+- **No budget validation** (cost calculation exists, validation needed)
 - **No combo detection** (placeholder in submit)
 - **No scoring** (placeholder in submit)
+- **Limited dice selection UI** (auto-selects first 5 available dice)
 
 ---
 
@@ -190,6 +278,11 @@ All actions log to Unity Console with `[BattleController]` or `[DiceView]` prefi
 - ✅ Early submission (player choice)
 - ✅ Debug logging for all actions
 - ✅ UI components (DiceView with lock indicator)
+- ✅ **8-dice pool management** (CooldownSystem)
+- ✅ **1-turn cooldown system** (automatic after hand completion)
+- ✅ **5-hand counter** (tracks hands used/remaining)
+- ✅ **Auto-refresh** (when all hands used)
+- ✅ **Event-driven UI updates** (hand counter, available dice)
 
 ---
 
@@ -197,9 +290,9 @@ All actions log to Unity Console with `[BattleController]` or `[DiceView]` prefi
 
 1. **Combo Detection** → Hook into `OnSubmitCombo()`, read `_dice` values
 2. **Scoring** → Use combo result + dice values + tier modifiers
-3. **Cooldown** → Set `cooldownRemain` after hand, filter available dice
-4. **Budget** → Validate selection cost before allowing roll
-5. **Dice Pool** → Expand to 8 dice, add selection UI
+3. **Budget Validation** → Use `GetSelectedDiceCost()` to validate before allowing roll
+4. **Dice Selection UI** → Allow player to choose from available dice pool
+5. **Advanced Pool Management** → Add dice purchasing/upgrading system
 
 ---
 
@@ -207,4 +300,5 @@ All actions log to Unity Console with `[BattleController]` or `[DiceView]` prefi
 - `DiceRogue/Assets/Scripts/Dice/BaseDice.cs`
 - `DiceRogue/Assets/Scripts/Battle/BattleController.cs`
 - `DiceRogue/Assets/Scripts/Battle/DiceView.cs`
+- `DiceRogue/Assets/Scripts/Battle/CooldownSystem.cs` (NEW)
 
