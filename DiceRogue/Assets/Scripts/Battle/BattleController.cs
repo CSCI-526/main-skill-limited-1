@@ -129,7 +129,7 @@ namespace DiceGame
         if (handRemaining <= 0 && handCount > 0) // Don't block the very first hand
         {
             Debug.LogWarning("[BattleController] Cannot start new hand - no hands remaining. Battle complete!");
-            UpdateFeedback("<color=#FF8888><b>No Hands Remaining!</b></color>\n\nAll hands have been used.\n<color=#AAAAAA>Battle complete! Press Continue to next level.</color>");
+            UpdateFeedback("<color=#FF8888><b>No Hands Remaining!</b></color>\n\nAll hands have been used.\n<color=#AAAAAA>Battle complete! Press Reset to start new battle cycle (for testing).</color>");
             UpdateHandCounter(handCount, handRemaining);
             return;
         }
@@ -457,32 +457,11 @@ namespace DiceGame
             var (current, remaining) = cooldownSystem.GetHandCounter();
             if (remaining <= 0)
             {
-                // No hands remain - reset everything to level 1 (game over / try again)
-                Debug.Log("[BattleController] No hands remaining - resetting to Level 1...");
-                
-                // Hide continue button if visible
-                if (continueButton != null)
-                {
-                    continueButton.gameObject.SetActive(false);
-                }
-                
-                // Reset to level 1
-                _currentLevel = 1;
-                _currentTargetScore = baseTargetScore;
-                
-                // Reset total score
-                _totalScore = 0;
-                if (scoreAnimator != null)
-                {
-                    scoreAnimator.ResetTotalScore();
-                }
-                
-                // Refresh dice pool and hand counter
+                // Allow reset when no hands remain - this refreshes the dice pool for testing
+                Debug.Log("[BattleController] No hands remaining - refreshing dice pool for testing...");
                 cooldownSystem.RefreshDicePool();
                 
-                // Update displays
-                UpdateTargetScoreDisplay();
-                UpdateFeedback("<color=#88FF88><b>Starting Fresh!</b></color>\n\nReturning to Level 1.\nTarget: " + _currentTargetScore + "\n\n<color=#AAAAAA>Good luck!</color>");
+                UpdateFeedback("<color=#88FF88><b>Dice Pool Refreshed!</b></color>\n\nAll dice are now available again.\nStarting new battle cycle...");
                 
                 // Start a new hand after refresh
                 StartNewHand();
@@ -697,17 +676,12 @@ namespace DiceGame
                 UpdateFeedback(resultMsg);
             }
 
-            // Wait for evaluation animation to complete, then show Continue button ONLY if passed
+            // Wait for evaluation animation to complete, then show Continue button
             yield return new UnityEngine.WaitForSeconds(4.5f);
             
-            if (passed && continueButton != null)
+            if (continueButton != null)
             {
                 continueButton.gameObject.SetActive(true);
-            }
-            else if (!passed)
-            {
-                // Player failed - show game over message
-                UpdateFeedback("<color=#FF3333><b>GAME OVER</b></color>\n\nYou didn't reach the target score.\n\n<color=#AAAAAA>Press Reset to try again.</color>");
             }
         }
 
