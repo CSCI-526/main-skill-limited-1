@@ -1418,7 +1418,7 @@ MonoBehaviour:
   scoreAnimator: {fileID: 915512911}
   targetScoreText: {fileID: 986318006}
   diceCount: 5
-  maxRollsPerHand: 3
+  maxRollsPerHand: 2
   baseTargetScore: 300
   cooldownSystem: {fileID: 564646212}
 --- !u!1 &986318005
