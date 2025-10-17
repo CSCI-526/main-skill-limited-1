@@ -30,10 +30,12 @@ namespace DiceGame
 
         [Header("Score Display")]
         public ScoreAnimator scoreAnimator; // Animated score display system
+        public TMP_Text targetScoreText;    // Target score display
 
         [Header("Config")]
         public int diceCount = 5;         // Fixed 5 dice per hand
         public int maxRollsPerHand = 3;   // Max 3 rolls per hand
+        public int targetScore = 1000;    // Target score to beat
 
         [Header("Cooldown System")]
         public CooldownSystem cooldownSystem; // Reference to cooldown system
@@ -77,6 +79,9 @@ namespace DiceGame
                     scoreAnimator.ResetTotalScore();
                 }
             }
+
+            // Initialize target score display
+            UpdateTargetScoreDisplay();
 
             // Initialize core components
             _handManager = new HandManager();
@@ -393,10 +398,12 @@ namespace DiceGame
             }
             else
             {
-                Debug.Log("[BattleController] All hands completed! Battle should now enter summary phase.");
+                Debug.Log("[BattleController] All hands completed! Evaluating target score...");
                 // Update UI to show battle is complete
                 UpdateHandCounter(currentHand, handsRemaining);
-                UpdateFeedback("<color=#FFD700><b>BATTLE COMPLETE!</b></color>\n\nAll hands have been used.\n<color=#AAAAAA>Press Reset to start new battle cycle (for testing).</color>");
+                
+                // Trigger target score evaluation animation
+                StartCoroutine(EvaluateTargetScore());
             }
         }
 
@@ -563,6 +570,47 @@ namespace DiceGame
 
             // Compact format: [Status] Dice Name
             sb.AppendLine($"<color={statusColor}>[{statusText}]</color> <color={rarityColor}>{dice.diceName}</color>");
+        }
+
+        /// <summary>
+        /// Update target score display
+        /// </summary>
+        private void UpdateTargetScoreDisplay()
+        {
+            if (targetScoreText != null)
+            {
+                targetScoreText.text = $"<size=80%>Target Score</size>\n<size=150%><b>{targetScore}</b></size>";
+            }
+        }
+
+        /// <summary>
+        /// Evaluate if player passed target score with dramatic animation
+        /// </summary>
+        private System.Collections.IEnumerator EvaluateTargetScore()
+        {
+            // Wait for score animation to finish
+            yield return new UnityEngine.WaitForSeconds(3f);
+
+            int finalScore = scoreAnimator != null ? scoreAnimator.GetTotalScore() : _totalScore;
+            bool passed = finalScore >= targetScore;
+
+            Debug.Log($"[BattleController] Target Evaluation - Target: {targetScore}, Final: {finalScore}, Passed: {passed}");
+
+            // Trigger pass/fail animation in ScoreAnimator
+            if (scoreAnimator != null)
+            {
+                scoreAnimator.AnimateTargetEvaluation(finalScore, targetScore, passed);
+            }
+            else
+            {
+                // Fallback if no animator
+                string resultMsg = passed 
+                    ? "<color=#FFD700><b>TARGET PASSED!</b></color>\n\n" 
+                    : "<color=#FF6666><b>TARGET FAILED</b></color>\n\n";
+                resultMsg += $"Final Score: {finalScore}\nTarget: {targetScore}\n\n";
+                resultMsg += "<color=#AAAAAA>Press Reset to start new battle cycle.</color>";
+                UpdateFeedback(resultMsg);
+            }
         }
 
         #region CooldownSystem Event Handlers
