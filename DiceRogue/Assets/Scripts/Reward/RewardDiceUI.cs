@@ -2,6 +2,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using UnityEngine.EventSystems; // ← 記得加這個！
+using DiceGame;
 
 public class RewardDiceUI : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
 {
@@ -17,17 +18,19 @@ public class RewardDiceUI : MonoBehaviour, IPointerEnterHandler, IPointerExitHan
 
     private bool isSelected = false;  // 玩家點選狀態
 
-    public void Bind(RewardOption opt, System.Action onClick)
+    public void Bind(BaseDice dice, System.Action onClick)
     {
-        titleText.text = opt.displayName;
-        effectText.text = opt.effectText;
-        costText.text = $"Cost {opt.cost}";
+        titleText.text = dice.diceName;
 
-        switch (opt.type)
+        effectText.text = "";
+        costText.text = $"Cost: {dice.cost}";
+
+        switch (dice.tier)
         {
-            case DiceType.Common: background.color = new Color32(230, 230, 230, 255); break;
-            case DiceType.Rare: background.color = new Color32(179, 217, 255, 255); break;
-            case DiceType.Legendary: background.color = new Color32(255, 229, 153, 255); break;
+            case DiceTier.Common: background.color = new Color32(230, 230, 230, 255); break;
+            case DiceTier.Rare: background.color = new Color32(179, 217, 255, 255); break;
+            case DiceTier.Legendary: background.color = new Color32(255, 229, 153, 255); break;
+            default: background.color = Color.white; break;
         }
 
         button.onClick.RemoveAllListeners();
