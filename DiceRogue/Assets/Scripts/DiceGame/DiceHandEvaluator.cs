@@ -84,7 +84,7 @@ namespace DiceGame.Core
                 baseScore = 60;
                 comboMultiplier = 1.5f;
             }
-            else if (freq.Count == 3 && freq[0] == 2 && freq[1] == 2)
+            else if (freq.Count >= 2 && freq[0] == 2 && freq[1] == 2)
             {
                 combo = "Two Pair";
                 baseScore = 45;
