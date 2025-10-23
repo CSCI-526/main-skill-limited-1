@@ -7,7 +7,7 @@ namespace DiceGame
     /// <summary>
     /// Manages 8-dice pool rotation with cooldown system
     /// - Tracks 8-dice pool with 1-turn cooldown after use
-    /// - Hand counter (5 hands max)
+    /// - Hand counter (3 hands max)
     /// - Auto refresh when all hands used
     /// - Provides available dice for selection
     /// </summary>
@@ -15,12 +15,12 @@ namespace DiceGame
     {
         [Header("Configuration")]
         [SerializeField] private int maxDicePool = 8;
-        [SerializeField] private int maxHands = 5;
+        [SerializeField] private int maxHands = 3;
         [SerializeField] private int cooldownTurns = 1;
         
         [Header("Debug Info")]
         [SerializeField] private int currentHandCount = 0;
-        [SerializeField] private int handsRemaining = 5;
+        [SerializeField] private int handsRemaining = 3;
         
         // Core data
         private readonly List<BaseDice> _dicePool = new();
@@ -91,40 +91,13 @@ namespace DiceGame
 
         /// <summary>
         /// Get dice from player's backpack/inventory
-        /// TODO: Replace with actual inventory system integration
+        /// Uses DicePoolFactory to create a random pool of 8 dice from all available types
         /// </summary>
         private List<BaseDice> GetPlayerBackpackDice()
         {
-            var backpackDice = new List<BaseDice>();
-            
-            // Simulate a player backpack with some dice
-            // In real implementation, this would query the inventory system
-            
-            // Add Lucky Six dice
-            var luckyDice = new WeightedDice
-            {
-                diceName = "Lucky Six",
-                tier = DiceTier.Rare,
-                cost = 2,
-                cooldownAfterUse = cooldownTurns,
-                cooldownRemain = 0,
-                weights = new float[] { 1, 1, 1, 1, 1, 2 } // 30% chance for 6
-            };
-            backpackDice.Add(luckyDice);
-            
-            // Add a few normal dice from backpack
-            for (int i = 0; i < 3; i++)
-            {
-                var normalDice = new NormalDice
-                {
-                    diceName = $"Backpack D6_{i + 1}",
-                    tier = DiceTier.Common,
-                    cost = 1,
-                    cooldownAfterUse = cooldownTurns,
-                    cooldownRemain = 0
-                };
-                backpackDice.Add(normalDice);
-            }
+            // Use DicePoolFactory to create random pool of 8 dice
+            Debug.Log("[CooldownSystem] Generating random dice pool from all available dice types...");
+            var backpackDice = DicePoolFactory.CreateRandomPool(maxDicePool, cooldownTurns);
             
             return backpackDice;
         }
@@ -287,15 +260,13 @@ namespace DiceGame
             // Trigger events
             OnHandCounterUpdate?.Invoke(currentHandCount, handsRemaining);
             
-            // Check if we need to refresh (all hands used)
+            // Don't auto-refresh anymore - game should enter battle summary
+            // Just update available dice for display purposes
+            UpdateAvailableDice();
+            
             if (handsRemaining <= 0)
             {
-                RefreshDicePool();
-            }
-            else
-            {
-                // Don't advance cooldowns here - wait until next hand starts
-                UpdateAvailableDice();
+                Debug.Log("[CooldownSystem] All hands used! Battle should now enter summary phase.");
             }
         }
 
@@ -327,9 +298,9 @@ namespace DiceGame
         }
 
         /// <summary>
-        /// Refresh the entire dice pool (when all hands are used)
+        /// Refresh the entire dice pool (manual trigger for testing)
         /// </summary>
-        private void RefreshDicePool()
+        public void RefreshDicePool()
         {
             Debug.Log("[CooldownSystem] Refreshing dice pool - all hands used!");
             
