@@ -11,6 +11,7 @@ namespace DiceGame
         public LightDice()
         {
             diceName = "Light Dice";
+            description = "70% chance to roll 1-3, otherwise rolls between 4–6.";
             tier = DiceTier.Common;
             cost = 1;
             cooldownAfterUse = 1;

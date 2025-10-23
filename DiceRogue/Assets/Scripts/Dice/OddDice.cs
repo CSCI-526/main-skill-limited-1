@@ -14,6 +14,7 @@ namespace DiceGame
         public OddDice()
         {
             diceName = "Odd Dice";
+            description = "Only rolls odd numbers (1, 3, 5).";
             tier = DiceTier.Common;
             cost = 1;
             cooldownAfterUse = 1;

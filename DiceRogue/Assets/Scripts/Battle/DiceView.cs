@@ -1,13 +1,15 @@
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
+using UnityEngine.EventSystems; 
+using DiceGame.Core;
 
 namespace DiceGame
 {
     /// <summary>
     /// 单个骰子的 UI 视图：显示点数、锁定按钮、锁定高亮
     /// </summary>
-    public class DiceView : MonoBehaviour
+    public class DiceView : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
     {
         [Header("Wiring")]
         public TMP_Text valueText;
@@ -55,6 +57,21 @@ namespace DiceGame
             Debug.Log($"[DiceView] {model.diceName} is now {status} (value: {model.lastRollValue})");
             
             Refresh();
+        }
+        public void OnPointerEnter(PointerEventData eventData)
+        {
+            if (model != null && DiceTooltipManager.Instance != null)
+            {
+                DiceTooltipManager.Instance.ShowTooltip(model);
+            }
+        }
+
+        public void OnPointerExit(PointerEventData eventData)
+        {
+            if (DiceTooltipManager.Instance != null)
+            {
+                DiceTooltipManager.Instance.HideTooltip();
+            }
         }
     }
 }

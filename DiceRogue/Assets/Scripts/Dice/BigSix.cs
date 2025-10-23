@@ -11,6 +11,7 @@ namespace DiceGame
         public BigSix()
         {
             diceName = "Big Six";
+            description = "25% chance to roll a 6, otherwise rolls between 1–5.";
             tier = DiceTier.Common;
             cost = 1;
             cooldownAfterUse = 1;

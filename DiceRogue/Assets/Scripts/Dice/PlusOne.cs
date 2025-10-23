@@ -14,6 +14,7 @@ namespace DiceGame
         public PlusOne()
         {
             diceName = "Plus One";
+            description = "70% chance to get a +1 to the last number you rolled, otherwise rolls like a normal dice.";
             tier = DiceTier.Rare;
             cost = 2;
             cooldownAfterUse = 1;

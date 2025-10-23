@@ -12,6 +12,7 @@ namespace DiceGame
         public SevenSevenSeven()
         {
             diceName = "777";
+            description = "If selected to be submitted and is part of three-of-a-kind, get a 2x multiplier";
             tier = DiceTier.Rare;
             cost = 2;
             cooldownAfterUse = 1;

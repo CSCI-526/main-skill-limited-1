@@ -14,6 +14,7 @@ namespace DiceGame
         public WeightedEdge()
         {
             diceName = "Weighted Edge";
+            description = "A dice with face value 3, 3, 3, 6, 6, 6";
             tier = DiceTier.Rare;
             cost = 2;
             cooldownAfterUse = 1;

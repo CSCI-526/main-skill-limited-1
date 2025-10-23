@@ -13,6 +13,7 @@ namespace DiceGame
         public TwinBond()
         {
             diceName = "Twin Bond";
+            description = "Copy a dice!";
             tier = DiceTier.Rare;
             cost = 2;
             cooldownAfterUse = 1;
