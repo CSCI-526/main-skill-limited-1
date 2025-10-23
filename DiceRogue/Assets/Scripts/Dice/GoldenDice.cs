@@ -13,6 +13,7 @@ namespace DiceGame
         public GoldenDice()
         {
             diceName = "Golden Dice";
+            description = "All dice number +1!";
             tier = DiceTier.Legendary;
             cost = 3;
             cooldownAfterUse = 1;

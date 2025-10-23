@@ -15,6 +15,7 @@ namespace DiceGame
         public D8()
         {
             diceName = "D8";
+            description = "Only rolls once per hand(1-8). If rolls 7, get a 5x multiplier. If rolls 8, get a 10x multiplier";
             tier = DiceTier.Legendary;
             cost = 3;
             cooldownAfterUse = 1;

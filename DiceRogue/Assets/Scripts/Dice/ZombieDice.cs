@@ -15,6 +15,7 @@ namespace DiceGame
         public ZombieDice()
         {
             diceName = "Zombie";
+            description = "20% to change the value of neighbor dice to the same value as itself";
             tier = DiceTier.Legendary;
             cost = 3;
             cooldownAfterUse = 1;

@@ -11,6 +11,7 @@ namespace DiceGame
         public HeavyDice()
         {
             diceName = "Heavy Dice";
+            description = "70% chance to roll 4-6, otherwise rolls between 1-3.";
             tier = DiceTier.Common;
             cost = 1;
             cooldownAfterUse = 1;

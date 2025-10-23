@@ -11,6 +11,7 @@ namespace DiceGame
         public BigOne()
         {
             diceName = "Big One";
+            description = "25% chance to roll a 1, otherwise rolls between 2–6.";
             tier = DiceTier.Common;
             cost = 1;
             cooldownAfterUse = 1;
