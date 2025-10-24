@@ -94,9 +94,8 @@ namespace DiceGame
             _sessionStartTime = Time.time;
             UpdateTargetScoreDisplay();
             
-            // Track session start
-            UnityGameAnalytics.TrackSessionStarted();
-            UnityGameAnalytics.TrackLevelStarted(_currentLevel, _currentTargetScore);
+            // Track initial player progression
+            UnityGameAnalytics.TrackPlayerProgression(_totalScore, 0, _currentLevel);
 
             // Initialize and hide continue button
             if (continueButton != null)
@@ -228,7 +227,7 @@ namespace DiceGame
         // Track dice usage for analytics
         foreach (var dice in selectedDice)
         {
-            UnityGameAnalytics.TrackDiceUsed(dice.diceName, dice.tier.ToString(), dice.cost, currentHand + 1);
+            UnityGameAnalytics.TrackDiceUsage(dice.diceName);
         }
         
         // Fill remaining slots with normal dice to reach 5 total
@@ -412,8 +411,11 @@ namespace DiceGame
                 _totalScore += finalScore;
                 
                 // Track analytics for hand completion and score combination
-                UnityGameAnalytics.TrackHandCompleted(current + 1, finalScore, _totalScore, combo, submittedDice.Count);
-                UnityGameAnalytics.TrackScoreCombination(combo, baseScore, diceSum, comboMult, mult, finalScore, current + 1);
+                // Track player progression
+                UnityGameAnalytics.TrackPlayerProgression(_totalScore, current + 1, _currentLevel);
+                
+                // Track score combination
+                UnityGameAnalytics.TrackScoreCombination(combo);
             }
             else
             {

@@ -22,27 +22,20 @@ namespace DiceGame.Testing
         [ContextMenu("Test Analytics")]
         public void TestAnalytics()
         {
-            Debug.Log("[AnalyticsTester] Testing Unity Analytics...");
+            Debug.Log("[AnalyticsTester] Testing simplified Unity Analytics...");
             
-            // Test session start
-            UnityGameAnalytics.TrackSessionStarted();
-            
-            // Test level start
-            UnityGameAnalytics.TrackLevelStarted(1, 300);
+            // Test player progression
+            UnityGameAnalytics.TrackPlayerProgression(450, 3, 1);
             
             // Test dice usage
-            UnityGameAnalytics.TrackDiceUsed("Test Dice", "Common", 1, 1);
+            UnityGameAnalytics.TrackDiceUsage("Test Dice");
+            UnityGameAnalytics.TrackDiceUsage("Heavy Dice");
             
-            // Test hand completion
-            UnityGameAnalytics.TrackHandCompleted(1, 150, 150, "Three of a Kind", 3);
+            // Test score combinations
+            UnityGameAnalytics.TrackScoreCombination("Three of a Kind");
+            UnityGameAnalytics.TrackScoreCombination("Full House");
             
-            // Test score combination
-            UnityGameAnalytics.TrackScoreCombination("Three of a Kind", 60, 15, 1.5f, 1.0f, 150, 1);
-            
-            // Test battle completion
-            UnityGameAnalytics.TrackBattleCompleted(1, 450, 300, true, 3, 120.5f);
-            
-            Debug.Log("[AnalyticsTester] All analytics tests completed!");
+            Debug.Log("[AnalyticsTester] All simplified analytics tests completed!");
         }
         
         void Update()

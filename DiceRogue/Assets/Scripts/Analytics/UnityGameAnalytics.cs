@@ -6,9 +6,9 @@ using Unity.Services.Core;
 namespace DiceGame.Analytics
 {
     /// <summary>
-    /// Unity Analytics system for tracking core game metrics:
+    /// Simplified Unity Analytics system for tracking 3 core metrics:
     /// 1. Player rounds/score progression
-    /// 2. Dice usage frequency
+    /// 2. Dice usage frequency  
     /// 3. Score combination frequency
     /// </summary>
     public class UnityGameAnalytics : MonoBehaviour
@@ -27,8 +27,12 @@ namespace DiceGame.Analytics
                 try
                 {
                     await UnityServices.InitializeAsync();
+                    
+                    // Start data collection (required for analytics to work)
+                    AnalyticsService.Instance.StartDataCollection();
+                    
                     isInitialized = true;
-                    Debug.Log("[UnityAnalytics] Unity Services initialized successfully");
+                    Debug.Log("[UnityAnalytics] Unity Services initialized and data collection started");
                 }
                 catch (System.Exception e)
                 {
@@ -44,98 +48,93 @@ namespace DiceGame.Analytics
         }
         
         /// <summary>
-        /// Track when a hand is completed with score information
+        /// Track player progression (score and rounds)
         /// </summary>
-        public static void TrackHandCompleted(int handNumber, int finalScore, int totalScore, string comboName, int diceSubmitted)
+        public static void TrackPlayerProgression(int totalScore, int handsCompleted, int levelReached)
         {
             if (instance == null)
             {
-                Debug.LogWarning("[UnityAnalytics] Instance not created yet, skipping hand_completed event");
+                Debug.LogWarning("[UnityAnalytics] Instance not created yet, skipping player_progression event");
                 return;
             }
             
             if (!instance.isInitialized)
             {
-                Debug.LogWarning("[UnityAnalytics] Unity Services not initialized, skipping hand_completed event");
+                Debug.LogWarning("[UnityAnalytics] Unity Services not initialized, skipping player_progression event");
                 return;
             }
             
             var parameters = new Dictionary<string, object>
             {
-                {"hand_number", handNumber},
-                {"hand_score", finalScore},
                 {"total_score", totalScore},
-                {"combo_name", comboName},
-                {"dice_submitted", diceSubmitted}
+                {"hands_completed", handsCompleted},
+                {"level_reached", levelReached}
             };
             
             // Send to Unity Analytics
             try
             {
-                var customEvent = new CustomEvent("hand_completed");
+                var customEvent = new CustomEvent("player_progression");
                 foreach (var param in parameters)
                 {
                     customEvent.Add(param.Key, param.Value);
                 }
                 AnalyticsService.Instance.RecordEvent(customEvent);
-                Debug.Log($"[UnityAnalytics] Sent to Unity Analytics: hand_completed");
+                Debug.Log($"[UnityAnalytics] Sent to Unity Analytics: player_progression");
             }
             catch (System.Exception e)
             {
-                Debug.LogWarning($"[UnityAnalytics] Failed to send hand_completed: {e.Message}");
+                Debug.LogWarning($"[UnityAnalytics] Failed to send player_progression: {e.Message}");
             }
             
-            Debug.Log($"[UnityAnalytics] hand_completed: Hand {handNumber}, Score: {finalScore}, Total: {totalScore}, Combo: {comboName}");
+            Debug.Log($"[UnityAnalytics] player_progression: Score {totalScore}, Hands {handsCompleted}, Level {levelReached}");
         }
         
         /// <summary>
-        /// Track when a dice is used in a hand
+        /// Track dice usage frequency
         /// </summary>
-        public static void TrackDiceUsed(string diceName, string diceTier, int diceCost, int handNumber)
+        public static void TrackDiceUsage(string diceName)
         {
             if (instance == null)
             {
-                Debug.LogWarning("[UnityAnalytics] Instance not created yet, skipping dice_used event");
+                Debug.LogWarning("[UnityAnalytics] Instance not created yet, skipping dice_usage event");
                 return;
             }
             
             if (!instance.isInitialized)
             {
-                Debug.LogWarning("[UnityAnalytics] Unity Services not initialized, skipping dice_used event");
+                Debug.LogWarning("[UnityAnalytics] Unity Services not initialized, skipping dice_usage event");
                 return;
             }
             
             var parameters = new Dictionary<string, object>
             {
-                {"dice_name", diceName},
-                {"dice_tier", diceTier},
-                {"dice_cost", diceCost},
-                {"hand_number", handNumber}
+                {"dice_name", diceName}
             };
             
             // Send to Unity Analytics
             try
             {
-                var customEvent = new CustomEvent("dice_used");
+                var customEvent = new CustomEvent("dice_usage");
                 foreach (var param in parameters)
                 {
                     customEvent.Add(param.Key, param.Value);
                 }
                 AnalyticsService.Instance.RecordEvent(customEvent);
-                Debug.Log($"[UnityAnalytics] Sent to Unity Analytics: dice_used");
+                Debug.Log($"[UnityAnalytics] Sent to Unity Analytics: dice_usage");
             }
             catch (System.Exception e)
             {
-                Debug.LogWarning($"[UnityAnalytics] Failed to send dice_used: {e.Message}");
+                Debug.LogWarning($"[UnityAnalytics] Failed to send dice_usage: {e.Message}");
             }
             
-            Debug.Log($"[UnityAnalytics] dice_used: {diceName} ({diceTier}) in hand {handNumber}");
+            Debug.Log($"[UnityAnalytics] dice_usage: {diceName}");
         }
         
         /// <summary>
-        /// Track score combinations achieved
+        /// Track score combination frequency
         /// </summary>
-        public static void TrackScoreCombination(string comboName, int baseScore, int diceSum, float comboMultiplier, float diceMultiplier, int finalScore, int handNumber)
+        public static void TrackScoreCombination(string comboName)
         {
             if (instance == null)
             {
@@ -151,13 +150,7 @@ namespace DiceGame.Analytics
             
             var parameters = new Dictionary<string, object>
             {
-                {"combo_name", comboName},
-                {"base_score", baseScore},
-                {"dice_sum", diceSum},
-                {"combo_multiplier", comboMultiplier},
-                {"dice_multiplier", diceMultiplier},
-                {"final_score", finalScore},
-                {"hand_number", handNumber}
+                {"combo_name", comboName}
             };
             
             // Send to Unity Analytics
@@ -176,127 +169,8 @@ namespace DiceGame.Analytics
                 Debug.LogWarning($"[UnityAnalytics] Failed to send score_combination: {e.Message}");
             }
             
-            Debug.Log($"[UnityAnalytics] score_combination: {comboName} = {finalScore} points in hand {handNumber}");
+            Debug.Log($"[UnityAnalytics] score_combination: {comboName}");
         }
         
-        /// <summary>
-        /// Track when a battle/level is completed
-        /// </summary>
-        public static void TrackBattleCompleted(int level, int totalScore, int targetScore, bool targetReached, int handsCompleted, float sessionDuration)
-        {
-            if (instance == null)
-            {
-                Debug.LogWarning("[UnityAnalytics] Instance not created yet, skipping battle_completed event");
-                return;
-            }
-            
-            if (!instance.isInitialized)
-            {
-                Debug.LogWarning("[UnityAnalytics] Unity Services not initialized, skipping battle_completed event");
-                return;
-            }
-            
-            var parameters = new Dictionary<string, object>
-            {
-                {"level", level},
-                {"total_score", totalScore},
-                {"target_score", targetScore},
-                {"target_reached", targetReached},
-                {"hands_completed", handsCompleted},
-                {"session_duration", sessionDuration}
-            };
-            
-            // Send to Unity Analytics
-            try
-            {
-                var customEvent = new CustomEvent("battle_completed");
-                foreach (var param in parameters)
-                {
-                    customEvent.Add(param.Key, param.Value);
-                }
-                AnalyticsService.Instance.RecordEvent(customEvent);
-                Debug.Log($"[UnityAnalytics] Sent to Unity Analytics: battle_completed");
-            }
-            catch (System.Exception e)
-            {
-                Debug.LogWarning($"[UnityAnalytics] Failed to send battle_completed: {e.Message}");
-            }
-            
-            Debug.Log($"[UnityAnalytics] battle_completed: Level {level}, Score: {totalScore}/{targetScore}, Target: {targetReached}, Hands: {handsCompleted}");
-        }
-        
-        /// <summary>
-        /// Track when a new level starts
-        /// </summary>
-        public static void TrackLevelStarted(int level, int targetScore)
-        {
-            if (instance == null)
-            {
-                Debug.LogWarning("[UnityAnalytics] Instance not created yet, skipping level_started event");
-                return;
-            }
-            
-            if (!instance.isInitialized)
-            {
-                Debug.LogWarning("[UnityAnalytics] Unity Services not initialized, skipping level_started event");
-                return;
-            }
-            
-            var parameters = new Dictionary<string, object>
-            {
-                {"level", level},
-                {"target_score", targetScore}
-            };
-            
-            // Send to Unity Analytics
-            try
-            {
-                var customEvent = new CustomEvent("level_started");
-                foreach (var param in parameters)
-                {
-                    customEvent.Add(param.Key, param.Value);
-                }
-                AnalyticsService.Instance.RecordEvent(customEvent);
-                Debug.Log($"[UnityAnalytics] Sent to Unity Analytics: level_started");
-            }
-            catch (System.Exception e)
-            {
-                Debug.LogWarning($"[UnityAnalytics] Failed to send level_started: {e.Message}");
-            }
-            
-            Debug.Log($"[UnityAnalytics] level_started: Level {level}, Target: {targetScore}");
-        }
-        
-        /// <summary>
-        /// Track when a player starts a new session
-        /// </summary>
-        public static void TrackSessionStarted()
-        {
-            if (instance == null)
-            {
-                Debug.LogWarning("[UnityAnalytics] Instance not created yet, skipping session_started event");
-                return;
-            }
-            
-            if (!instance.isInitialized)
-            {
-                Debug.LogWarning("[UnityAnalytics] Unity Services not initialized, skipping session_started event");
-                return;
-            }
-            
-            // Send to Unity Analytics
-            try
-            {
-                var customEvent = new CustomEvent("session_started");
-                AnalyticsService.Instance.RecordEvent(customEvent);
-                Debug.Log("[UnityAnalytics] Sent to Unity Analytics: session_started");
-            }
-            catch (System.Exception e)
-            {
-                Debug.LogWarning($"[UnityAnalytics] Failed to send session_started: {e.Message}");
-            }
-            
-            Debug.Log("[UnityAnalytics] session_started");
-        }
     }
 }
