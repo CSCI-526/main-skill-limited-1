@@ -19,6 +19,10 @@ namespace DiceGame
     /// </summary>
     public class BattleController : MonoBehaviour
     {
+        // Static state for scene transitions
+        public static bool ContinuingFromReward = false;
+        public static int PendingLevel = 1;
+        public static int PendingTargetScore = 300;
         [Header("UI")]
         public Transform diceRowParent;   // Container for DiceView
         public GameObject diceViewPrefab; // Prefab (with DiceView component)
@@ -89,8 +93,19 @@ namespace DiceGame
             }
 
             // Initialize target score and level
-            _currentLevel = 1;
-            _currentTargetScore = baseTargetScore;
+            // Check if continuing from reward scene
+            if (ContinuingFromReward)
+            {
+                _currentLevel = PendingLevel;
+                _currentTargetScore = PendingTargetScore;
+                ContinuingFromReward = false; // Reset flag
+                Debug.Log($"[BattleController] Continuing from Reward Scene - Level {_currentLevel}, Target: {_currentTargetScore}");
+            }
+            else
+            {
+                _currentLevel = 1;
+                _currentTargetScore = baseTargetScore;
+            }
             _sessionStartTime = Time.time;
             UpdateTargetScoreDisplay();
             
@@ -122,6 +137,9 @@ namespace DiceGame
             resetRollButton.onClick.AddListener(ResetForNewHand);
             submitComboButton.onClick.AddListener(OnSubmitCombo);
             
+            // Check if there are pending reward dice from reward scene
+            IntegrateRewardDice();
+            
             // Start first hand
             StartNewHand();
             
@@ -146,6 +164,79 @@ namespace DiceGame
             {
                 Debug.Log("[BattleController] UnityGameAnalytics already exists");
             }
+        }
+
+        /// <summary>
+        /// Integrate reward dice from reward scene into the dice pool
+        /// </summary>
+        private void IntegrateRewardDice()
+        {
+            // Check if there are pending reward dice
+            if (RewardSceneManager.PendingDiceTypeIds.Count == 0)
+            {
+                Debug.Log("[BattleController] No pending reward dice to integrate");
+                return;
+            }
+
+            Debug.Log($"[BattleController] Found {RewardSceneManager.PendingDiceTypeIds.Count} reward dice to integrate");
+
+            // Get current dice pool
+            var currentPool = cooldownSystem.GetAllDice();
+            var newPool = new List<BaseDice>(currentPool);
+
+            // Create and add reward dice
+            foreach (var typeId in RewardSceneManager.PendingDiceTypeIds)
+            {
+                var rewardDice = CreateDiceFromTypeId(typeId);
+                if (rewardDice != null)
+                {
+                    newPool.Add(rewardDice);
+                    Debug.Log($"[BattleController] Added reward dice: {rewardDice.diceName} ({rewardDice.tier})");
+                }
+            }
+
+            // Clear pending list
+            RewardSceneManager.PendingDiceTypeIds.Clear();
+
+            // Update cooldown system with new pool
+            cooldownSystem.SetPlayerBackpackDice(newPool);
+
+            Debug.Log($"[BattleController] Integrated reward dice. New pool size: {newPool.Count}");
+        }
+
+        /// <summary>
+        /// Create a dice instance from type ID string
+        /// </summary>
+        private BaseDice CreateDiceFromTypeId(string typeId)
+        {
+            // Use DicePool to get all available dice prototypes
+            var allDice = DicePool.GetAll();
+            var prototype = allDice.FirstOrDefault(d => d.GetType().Name == typeId);
+
+            if (prototype != null)
+            {
+                // Create a new instance by cloning the prototype
+                var diceType = prototype.GetType();
+                var newDice = System.Activator.CreateInstance(diceType) as BaseDice;
+                
+                if (newDice != null)
+                {
+                    // Copy properties from prototype (since constructors might set these)
+                    newDice.diceName = prototype.diceName;
+                    newDice.description = prototype.description;
+                    newDice.tier = prototype.tier;
+                    newDice.cost = prototype.cost;
+                    newDice.cooldownAfterUse = prototype.cooldownAfterUse;
+                    newDice.cooldownRemain = 0;
+                    newDice.isLocked = false;
+                    newDice.lastRollValue = 0;
+                    
+                    return newDice;
+                }
+            }
+
+            Debug.LogWarning($"[BattleController] Could not create dice from typeId: {typeId}");
+            return null;
         }
 
     /// <summary>
