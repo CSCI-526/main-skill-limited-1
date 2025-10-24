@@ -476,11 +476,6 @@ namespace DiceGame
             // Update deck status after submitting
             UpdateDeckStatus();
 
-            if (cooldownSystem.GetHandCounter().remaining > 0)
-            {
-                StartCoroutine(DelayedStartNewHand());
-            }
-            
             // Check if we can start a new hand
             var (currentHand, handsRemaining) = cooldownSystem.GetHandCounter();
             if (handsRemaining > 0)
