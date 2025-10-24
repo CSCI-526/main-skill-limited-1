@@ -30,13 +30,11 @@ namespace DiceRogue.Boot
             {
                 wipeImage.fillAmount   = 1f;   // fully covered
                 wipeImage.raycastTarget = true; // block clicks while covered
-                wipeImage.gameObject.SetActive(true);
             }
             else
             {
                 wipeImage.fillAmount   = 0f;   // fully revealed
                 wipeImage.raycastTarget = false;
-                wipeImage.gameObject.SetActive(false);
             }
         }
 
@@ -44,16 +42,13 @@ namespace DiceRogue.Boot
         public IEnumerator FadeIn()
         {
             if (logDebug) Debug.Log("[WipeFader] FadeIn()");
-            ActivateImage();
             yield return AnimateFill(1f, 0f, blockDuring: false);
-            ForceReveal();
         }
 
         // Cover screen: top→bottom (fill 0 → 1)
         public IEnumerator FadeOut()
         {
             if (logDebug) Debug.Log("[WipeFader] FadeOut()");
-            ActivateImage();
             yield return AnimateFill(0f, 1f, blockDuring: true);
         }
 
@@ -62,7 +57,6 @@ namespace DiceRogue.Boot
             if (wipeImage == null) return;
             wipeImage.fillAmount = 0f;
             wipeImage.raycastTarget = false;
-            wipeImage.gameObject.SetActive(false);
         }
 
         public bool IsCovered()
@@ -74,7 +68,6 @@ namespace DiceRogue.Boot
         {
             if (wipeImage == null) yield break;
 
-            ActivateImage();
             wipeImage.raycastTarget = blockDuring;
             float t = 0f;
             while (t < duration)
@@ -89,7 +82,6 @@ namespace DiceRogue.Boot
             if (to <= 0.001f)
             {
                 wipeImage.raycastTarget = false;
-                wipeImage.gameObject.SetActive(false);
             }
         }
 
@@ -102,14 +94,6 @@ namespace DiceRogue.Boot
             wipeImage.type       = Image.Type.Filled;
             wipeImage.fillMethod = Image.FillMethod.Vertical;
             wipeImage.fillOrigin = (int)Image.OriginVertical.Top;
-        }
-
-        private void ActivateImage()
-        {
-            if (wipeImage != null && !wipeImage.gameObject.activeSelf)
-            {
-                wipeImage.gameObject.SetActive(true);
-            }
         }
     }
 }

@@ -745,7 +745,7 @@ namespace DiceGame
                 if (loader != null)
                 {
                     Debug.Log("[BattleController] FAIL → Using RunLoader wipe to EndScene.");
-                    yield return loader.GoToSceneRoutine(endSceneName);
+                    loader.GoToScene(endSceneName);
                 }
                 else
                 {

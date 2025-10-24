@@ -44,24 +44,19 @@ namespace DiceRogue.Boot
 
         public void StartRun()
         {
-            StartCoroutine(GoToSceneRoutine(battleSceneName));
+            StartCoroutine(LoadSceneWithWipe(battleSceneName));
         }
 
         // Generic wipe transition to the specified scene
         public void GoToScene(string sceneName)
         {
-            StartCoroutine(GoToSceneRoutine(sceneName));
+            StartCoroutine(LoadSceneWithWipe(sceneName));
         }
 
         // Public helper to return to Main Menu with the same wipe effect
         public void GoToMainMenu()
         {
-            StartCoroutine(GoToSceneRoutine(mainSceneName));
-        }
-
-        public IEnumerator GoToSceneRoutine(string sceneName)
-        {
-            yield return LoadSceneWithWipe(sceneName);
+            StartCoroutine(LoadSceneWithWipe(mainSceneName));
         }
 
         IEnumerator LoadSceneWithWipe(string sceneName)
@@ -73,11 +68,7 @@ namespace DiceRogue.Boot
 
             // Scene changed; fader may be under the persistent loader or scene—regrab it
             EnsureFader();
-            if (wipeFader != null)
-            {
-                yield return wipeFader.FadeIn();
-                wipeFader.ForceReveal();
-            }
+            if (wipeFader != null) yield return wipeFader.FadeIn();
         }
 
         void EnsureFader()
