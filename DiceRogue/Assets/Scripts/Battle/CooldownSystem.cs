@@ -7,7 +7,7 @@ namespace DiceGame
     /// <summary>
     /// Manages 8-dice pool rotation with cooldown system
     /// - Tracks 8-dice pool with 1-turn cooldown after use
-    /// - Hand counter (5 hands max)
+    /// - Hand counter (3 hands max)
     /// - Auto refresh when all hands used
     /// - Provides available dice for selection
     /// </summary>
@@ -15,12 +15,12 @@ namespace DiceGame
     {
         [Header("Configuration")]
         [SerializeField] private int maxDicePool = 8;
-        [SerializeField] private int maxHands = 5;
+        [SerializeField] private int maxHands = 3;
         [SerializeField] private int cooldownTurns = 1;
         
         [Header("Debug Info")]
         [SerializeField] private int currentHandCount = 0;
-        [SerializeField] private int handsRemaining = 5;
+        [SerializeField] private int handsRemaining = 3;
         
         // Core data
         private readonly List<BaseDice> _dicePool = new();
@@ -260,15 +260,13 @@ namespace DiceGame
             // Trigger events
             OnHandCounterUpdate?.Invoke(currentHandCount, handsRemaining);
             
-            // Check if we need to refresh (all hands used)
+            // Don't auto-refresh anymore - game should enter battle summary
+            // Just update available dice for display purposes
+            UpdateAvailableDice();
+            
             if (handsRemaining <= 0)
             {
-                RefreshDicePool();
-            }
-            else
-            {
-                // Don't advance cooldowns here - wait until next hand starts
-                UpdateAvailableDice();
+                Debug.Log("[CooldownSystem] All hands used! Battle should now enter summary phase.");
             }
         }
 
@@ -300,9 +298,9 @@ namespace DiceGame
         }
 
         /// <summary>
-        /// Refresh the entire dice pool (when all hands are used)
+        /// Refresh the entire dice pool (manual trigger for testing)
         /// </summary>
-        private void RefreshDicePool()
+        public void RefreshDicePool()
         {
             Debug.Log("[CooldownSystem] Refreshing dice pool - all hands used!");
             

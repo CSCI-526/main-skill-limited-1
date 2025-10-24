@@ -12,6 +12,7 @@ namespace DiceGame
     {
         [Header("Static Data")]
         public string diceName = "Base Dice";
+        public string description;
         public DiceTier tier = DiceTier.Common;
         /// <summary>本手牌预算消耗（GDD：Common=1, Rare=2, Legendary=3, Filler=0）</summary>
         public string description = "";

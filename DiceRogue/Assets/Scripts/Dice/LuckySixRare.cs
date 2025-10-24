@@ -12,6 +12,7 @@ namespace DiceGame
         public LuckySix()
         {
             diceName = "Lucky Six";
+            description = "If rolls 6, get a 1.5x multiplier";
             tier = DiceTier.Rare;
             cost = 2;
             cooldownAfterUse = 1;

@@ -14,6 +14,7 @@ namespace DiceGame
         public CounterDice()
         {
             diceName = "Counter Dice";
+            description = "A dice with face value 1, 2, 2, 5, 5, 6";
             tier = DiceTier.Common;
             cost = 1;
             cooldownAfterUse = 1;

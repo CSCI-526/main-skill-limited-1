@@ -14,6 +14,7 @@ namespace DiceGame
         public EvenDice()
         {
             diceName = "Even Dice";
+            description = "Only rolls even numbers (2, 4, 6).";
             tier = DiceTier.Common;
             cost = 1;
             cooldownAfterUse = 1;

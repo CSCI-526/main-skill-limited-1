@@ -24,16 +24,19 @@ namespace DiceGame
         public Button rollButton;
         public Button resetRollButton;
         public Button submitComboButton;  // NEW: Submit current locked combo
+        public Button continueButton;     // NEW: Continue to next level after evaluation
         public TMP_Text rollFeedbackText; // Shows dice status only
         public TMP_Text handCounterText;  // NEW: Display hand counter
         public TMP_Text deckStatusText;   // NEW: Display dice pool/deck status
 
         [Header("Score Display")]
         public ScoreAnimator scoreAnimator; // Animated score display system
+        public TMP_Text targetScoreText;    // Target score display
 
         [Header("Config")]
         public int diceCount = 5;         // Fixed 5 dice per hand
-        public int maxRollsPerHand = 3;   // Max 3 rolls per hand
+        public int maxRollsPerHand = 2;   // Max 2 rolls per hand
+        public int baseTargetScore = 300; // Starting target score
 
         [Header("Cooldown System")]
         public CooldownSystem cooldownSystem; // Reference to cooldown system
@@ -46,6 +49,8 @@ namespace DiceGame
         
         // Score tracking
         private int _totalScore = 0;
+        private int _currentLevel = 1;
+        private int _currentTargetScore;
 
         // Current hand state
         private readonly List<BaseDice> _dice = new();
@@ -78,6 +83,18 @@ namespace DiceGame
                 }
             }
 
+            // Initialize target score and level
+            _currentLevel = 1;
+            _currentTargetScore = baseTargetScore;
+            UpdateTargetScoreDisplay();
+
+            // Initialize and hide continue button
+            if (continueButton != null)
+            {
+                continueButton.gameObject.SetActive(false);
+                continueButton.onClick.AddListener(OnContinue);
+            }
+
             // Initialize core components
             _handManager = new HandManager();
             _handManager.SetMaxRolls(maxRollsPerHand);
@@ -107,8 +124,17 @@ namespace DiceGame
     /// </summary>
     private void StartNewHand()
     {
-        // Advance cooldowns before starting new hand (except for the very first hand)
+        // Check if hands remain (safety check before pool refresh)
         var (handCount, handRemaining) = cooldownSystem.GetHandCounter();
+        if (handRemaining <= 0 && handCount > 0) // Don't block the very first hand
+        {
+            Debug.LogWarning("[BattleController] Cannot start new hand - no hands remaining. Battle complete!");
+            UpdateFeedback("<color=#FF8888><b>No Hands Remaining!</b></color>\n\nAll hands have been used.\n<color=#AAAAAA>Battle complete! Press Continue to next level.</color>");
+            UpdateHandCounter(handCount, handRemaining);
+            return;
+        }
+
+        // Advance cooldowns before starting new hand (except for the very first hand)
         if (handCount > 0) // Only advance cooldowns if this is not the first hand
         {
             cooldownSystem.AdvanceCooldowns();
@@ -216,6 +242,15 @@ namespace DiceGame
 
         void OnRollOnce()
         {
+            // Check if hands remain
+            var (current, remaining) = cooldownSystem.GetHandCounter();
+            if (remaining <= 0)
+            {
+                UpdateFeedback("<color=#FF8888><b>No Hands Remaining!</b></color>\n\nAll hands have been used.\n<color=#AAAAAA>Battle complete! Press Reset to start new battle cycle (for testing).</color>");
+                Debug.LogWarning("[BattleController] Cannot roll - no hands remaining.");
+                return;
+            }
+
             // Check if we can roll using HandManager
             if (!_handManager.CanRoll)
             {
@@ -280,6 +315,15 @@ namespace DiceGame
 
         void OnSubmitCombo()
         {
+            // Check if hands remain
+            var (current, remaining) = cooldownSystem.GetHandCounter();
+            if (remaining <= 0)
+            {
+                UpdateFeedback("<color=#FF8888><b>No Hands Remaining!</b></color>\n\nAll hands have been used.\n<color=#AAAAAA>Battle complete! Press Reset to start new battle cycle (for testing).</color>");
+                Debug.LogWarning("[BattleController] Cannot submit - no hands remaining.");
+                return;
+            }
+
             // Validate using HandManager
             if (!_handManager.CanSubmit(_dice))
             {
@@ -358,15 +402,20 @@ namespace DiceGame
             UpdateDeckStatus();
             
             // Check if we can start a new hand
-            var (current, remaining) = cooldownSystem.GetHandCounter();
-            if (remaining > 0)
+            var (currentHand, handsRemaining) = cooldownSystem.GetHandCounter();
+            if (handsRemaining > 0)
             {
                 // Start next hand after animation completes (brief delay)
                 StartCoroutine(DelayedStartNewHand());
             }
             else
             {
-                Debug.Log("[BattleController] All hands completed! Dice pool will refresh.");
+                Debug.Log("[BattleController] All hands completed! Evaluating target score...");
+                // Update UI to show battle is complete
+                UpdateHandCounter(currentHand, handsRemaining);
+                
+                // Trigger target score evaluation animation
+                StartCoroutine(EvaluateTargetScore());
             }
         }
 
@@ -404,6 +453,43 @@ namespace DiceGame
         {
             Debug.Log("[BattleController] Resetting for new hand...");
             
+            // Check if hands remain
+            var (current, remaining) = cooldownSystem.GetHandCounter();
+            if (remaining <= 0)
+            {
+                // No hands remain - reset everything to level 1 (game over / try again)
+                Debug.Log("[BattleController] No hands remaining - resetting to Level 1...");
+                
+                // Hide continue button if visible
+                if (continueButton != null)
+                {
+                    continueButton.gameObject.SetActive(false);
+                }
+                
+                // Reset to level 1
+                _currentLevel = 1;
+                _currentTargetScore = baseTargetScore;
+                
+                // Reset total score
+                _totalScore = 0;
+                if (scoreAnimator != null)
+                {
+                    scoreAnimator.ResetTotalScore();
+                }
+                
+                // Refresh dice pool and hand counter
+                cooldownSystem.RefreshDicePool();
+                
+                // Update displays
+                UpdateTargetScoreDisplay();
+                UpdateFeedback("<color=#88FF88><b>Starting Fresh!</b></color>\n\nReturning to Level 1.\nTarget: " + _currentTargetScore + "\n\n<color=#AAAAAA>Good luck!</color>");
+                
+                // Start a new hand after refresh
+                StartNewHand();
+                return;
+            }
+            
+            // Normal reset behavior during active hands
             // Reset hand state using HandManager
             _handManager.Reset();
             
@@ -432,7 +518,14 @@ namespace DiceGame
         {
             if (handCounterText != null)
             {
-                handCounterText.text = $"Hand {current + 1}/{current + remaining} ({remaining} remaining)";
+                if (remaining <= 0)
+                {
+                    handCounterText.text = $"<color=#FF8888><b>No Hands Remaining!</b></color>\nHands: {current}/{current}\n<size=90%>(Battle complete - Press Reset to test again)</size>";
+                }
+                else
+                {
+                    handCounterText.text = $"Hand {current + 1}/{current + remaining} ({remaining} remaining)";
+                }
             }
         }
 
@@ -512,15 +605,121 @@ namespace DiceGame
             sb.AppendLine($"<color={statusColor}>[{statusText}]</color> <color={rarityColor}>{dice.diceName}</color>");
         }
 
+        /// <summary>
+        /// Update target score display
+        /// </summary>
+        private void UpdateTargetScoreDisplay()
+        {
+            if (targetScoreText != null)
+            {
+                targetScoreText.text = $"<size=70%>Target Score</size>\n<size=150%><b>{_currentTargetScore}</b></size>\n<size=80%><color=#AAAAAA>Level {_currentLevel}</color></size>";
+            }
+        }
+
+        /// <summary>
+        /// Continue to next level - reset game state and increase target score
+        /// </summary>
+        private void OnContinue()
+        {
+            Debug.Log($"[BattleController] Continuing to next level from Level {_currentLevel}...");
+
+            // Hide continue button
+            if (continueButton != null)
+            {
+                continueButton.gameObject.SetActive(false);
+            }
+
+            // Increase level
+            _currentLevel++;
+
+            // Calculate new target score based on level
+            // Progressive increase: +300, +400, +500, +600, +700, ...
+            // Formula: increase = 200 + n*100 where n = level number
+            // Level 1: 1000 (base)
+            // Level 2: 1000 + 300 = 1300
+            // Level 3: 1300 + 400 = 1700
+            // Level 4: 1700 + 500 = 2200
+            // Level 5: 2200 + 600 = 2800
+            // Level n: previous + (200 + n*100)
+            _currentTargetScore = baseTargetScore;
+            for (int i = 0; i < _currentLevel - 1; i++)
+            {
+                int increase = 300 + i * 100; // 300, 400, 500, 600, 700, ...
+                _currentTargetScore += increase;
+            }
+
+            Debug.Log($"[BattleController] Level {_currentLevel} - New target score: {_currentTargetScore}");
+
+            // Reset total score
+            _totalScore = 0;
+            if (scoreAnimator != null)
+            {
+                scoreAnimator.ResetTotalScore();
+            }
+
+            // Reset dice pool and hand counter
+            cooldownSystem.RefreshDicePool();
+
+            // Update displays
+            UpdateTargetScoreDisplay();
+            UpdateFeedback($"<size=120%><b>Level {_currentLevel} Start!</b></size>\n\n<color=#88FF88>New target: {_currentTargetScore}</color>\n\n<color=#AAAAAA>All dice and hands have been reset.\nGood luck!</color>");
+
+            // Start first hand of new level
+            StartNewHand();
+        }
+
+        /// <summary>
+        /// Evaluate if player passed target score with dramatic animation
+        /// </summary>
+        private System.Collections.IEnumerator EvaluateTargetScore()
+        {
+            // Wait for score animation to finish
+            yield return new UnityEngine.WaitForSeconds(3f);
+
+            int finalScore = scoreAnimator != null ? scoreAnimator.GetTotalScore() : _totalScore;
+            bool passed = finalScore >= _currentTargetScore;
+
+            Debug.Log($"[BattleController] Target Evaluation - Target: {_currentTargetScore}, Final: {finalScore}, Passed: {passed}");
+
+            // Trigger pass/fail animation in ScoreAnimator
+            if (scoreAnimator != null)
+            {
+                scoreAnimator.AnimateTargetEvaluation(finalScore, _currentTargetScore, passed);
+            }
+            else
+            {
+                // Fallback if no animator
+                string resultMsg = passed 
+                    ? "<color=#FFD700><b>TARGET PASSED!</b></color>\n\n" 
+                    : "<color=#FF6666><b>TARGET FAILED</b></color>\n\n";
+                resultMsg += $"Final Score: {finalScore}\nTarget: {_currentTargetScore}\n\n";
+                resultMsg += "<color=#AAAAAA>Press Reset to start new battle cycle.</color>";
+                UpdateFeedback(resultMsg);
+            }
+
+            // Wait for evaluation animation to complete, then show Continue button ONLY if passed
+            yield return new UnityEngine.WaitForSeconds(4.5f);
+            
+            if (passed && continueButton != null)
+            {
+                continueButton.gameObject.SetActive(true);
+            }
+            else if (!passed)
+            {
+                // Player failed - show game over message
+                UpdateFeedback("<color=#FF3333><b>GAME OVER</b></color>\n\nYou didn't reach the target score.\n\n<color=#AAAAAA>Press Reset to try again from Level 1.</color>");
+            }
+        }
+
         #region CooldownSystem Event Handlers
 
         /// <summary>
-        /// Called when dice pool refreshes (all hands used)
+        /// Called when dice pool refreshes (manual refresh via Reset button)
         /// </summary>
         private void OnDicePoolRefresh()
         {
-            Debug.Log("[BattleController] Dice pool refreshed - all hands completed!");
-            UpdateFeedback("Dice pool refreshed! All dice are now available again.");
+            Debug.Log("[BattleController] Dice pool refreshed - starting new battle cycle!");
+            UpdateFeedback("<color=#88FF88><b>Dice Pool Refreshed!</b></color>\n\nAll dice are now available again.\nStarting new battle cycle...");
             UpdateDeckStatus(); // Update deck display
             
             // Start a new hand with refreshed dice

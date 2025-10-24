@@ -282,6 +282,117 @@ namespace DiceGame
                 _fadeOutCoroutine = null;
             }
         }
+
+        /// <summary>
+        /// Animate target score evaluation with dramatic Balatro-style reveal
+        /// </summary>
+        public void AnimateTargetEvaluation(int finalScore, int targetScore, bool passed)
+        {
+            // Stop any existing animation
+            if (_animationCoroutine != null)
+            {
+                StopCoroutine(_animationCoroutine);
+            }
+
+            _animationCoroutine = StartCoroutine(AnimateTargetEvaluationCoroutine(finalScore, targetScore, passed));
+        }
+
+        private IEnumerator AnimateTargetEvaluationCoroutine(int finalScore, int targetScore, bool passed)
+        {
+            // Ensure combo text is visible at start
+            if (comboScoreText != null)
+            {
+                var color = comboScoreText.color;
+                color.a = 1f;
+                comboScoreText.color = color;
+            }
+
+            // Step 1: Show "Evaluating..."
+            string display = "<size=180%><b>EVALUATING...</b></size>\n\n";
+            UpdateComboDisplay(display);
+            yield return new WaitForSeconds(1.0f);
+
+            // Step 2: Show final score with emphasis
+            display = "<size=140%><b>Final Score</b></size>\n";
+            display += $"<size=200%><color=#FFD700><b>{finalScore}</b></color></size>\n\n";
+            UpdateComboDisplay(display);
+            
+            // Pulse effect
+            if (comboScoreText != null)
+            {
+                yield return StartCoroutine(PulseText(comboScoreText));
+            }
+            
+            yield return new WaitForSeconds(0.8f);
+
+            // Step 3: Show target score
+            display += "<size=140%><b>Target Score</b></size>\n";
+            display += $"<size=200%><color=#88CCFF><b>{targetScore}</b></color></size>\n\n";
+            UpdateComboDisplay(display);
+            yield return new WaitForSeconds(1.0f);
+
+            // Step 4: Dramatic reveal with screen shake effect
+            if (passed)
+            {
+                // SUCCESS ANIMATION
+                display += "<size=250%><color=#00FF00><b>You PASSED!</b></color></size>\n\n";
+                display += $"<color=#88FF88>+{finalScore - targetScore} over target!</color>";
+                
+                UpdateComboDisplay(display);
+                
+                // Multiple pulses for success
+                if (comboScoreText != null)
+                {
+                    yield return StartCoroutine(PulseText(comboScoreText));
+                    yield return StartCoroutine(PulseText(comboScoreText));
+                }
+            }
+            else
+            {
+                // FAILURE ANIMATION
+                display += "<size=250%><color=#FF3333><b>You FAILED!</b></color></size>\n\n";
+                display += $"<color=#FF8888>{targetScore - finalScore} short of target</color>";
+                
+                UpdateComboDisplay(display);
+                
+                // Shake effect for failure
+                if (comboScoreText != null)
+                {
+                    yield return StartCoroutine(ShakeText(comboScoreText));
+                }
+            }
+
+            // Hold the result
+            yield return new WaitForSeconds(3.5f);
+
+            // Optional: Fade out or keep visible
+            // (Keep visible so player can see the result)
+        }
+
+        /// <summary>
+        /// Shake animation for dramatic effect
+        /// </summary>
+        private IEnumerator ShakeText(TMP_Text text)
+        {
+            Vector3 originalPosition = text.transform.localPosition;
+            float elapsed = 0f;
+            float duration = 0.5f;
+            float magnitude = 10f;
+
+            while (elapsed < duration)
+            {
+                elapsed += Time.deltaTime;
+                
+                float x = originalPosition.x + Random.Range(-magnitude, magnitude);
+                float y = originalPosition.y + Random.Range(-magnitude, magnitude);
+                
+                text.transform.localPosition = new Vector3(x, y, originalPosition.z);
+                
+                yield return null;
+            }
+
+            text.transform.localPosition = originalPosition;
+        }
     }
 }
 

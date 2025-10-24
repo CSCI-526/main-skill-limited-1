@@ -11,6 +11,7 @@ namespace DiceGame
         public MirrorDice()
         {
             diceName = "Mirror Dice";
+            description = "Get 7 minus the last number you rolled";
             tier = DiceTier.Common;
             cost = 1;
             cooldownAfterUse = 1;

@@ -14,6 +14,7 @@ namespace DiceGame
         public CollectorDice()
         {
             diceName = "Collector Dice";
+            description = "If you roll the same number, get a 1.5x multiplier";
             tier = DiceTier.Rare;
             cost = 2;
             cooldownAfterUse = 1;
