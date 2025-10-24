@@ -6,6 +6,7 @@ using UnityEngine.UI;
 using TMPro;
 using DiceGame.Core;
 using DiceGame.Analytics;
+using UnityEngine.SceneManagement;
 
 namespace DiceGame
 {
@@ -833,11 +834,26 @@ namespace DiceGame
             // Wait for evaluation animation to complete, then show Continue button ONLY if passed
             yield return new UnityEngine.WaitForSeconds(4.5f);
             
-            if (passed && continueButton != null)
+            if (passed)
             {
-                continueButton.gameObject.SetActive(true);
+                // Prepare next level state for when we return from RewardScene
+                int nextLevel = _currentLevel + 1;
+                int nextTarget = baseTargetScore;
+                for (int i = 0; i < nextLevel - 1; i++)
+                {
+                    int increase = 300 + i * 100; // 300, 400, 500, 600, ...
+                    nextTarget += increase;
+                }
+
+                PendingLevel = nextLevel;
+                PendingTargetScore = nextTarget;
+                ContinuingFromReward = true;
+
+                // Transition to reward scene
+                Debug.Log($"[BattleController] Target passed! Loading RewardScene. Next Level: {nextLevel}, Next Target: {nextTarget}");
+                SceneManager.LoadScene("RewardScene");
             }
-            else if (!passed)
+            else
             {
                 // Player failed - show game over message
                 UpdateFeedback("<color=#FF3333><b>GAME OVER</b></color>\n\nYou didn't reach the target score.\n\n<color=#AAAAAA>Press Reset to try again from Level 1.</color>");
