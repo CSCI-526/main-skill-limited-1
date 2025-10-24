@@ -5,6 +5,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using DiceGame.Core;
+using DiceGame.Analytics;
 
 namespace DiceGame
 {
@@ -51,6 +52,7 @@ namespace DiceGame
         private int _totalScore = 0;
         private int _currentLevel = 1;
         private int _currentTargetScore;
+        private float _sessionStartTime;
 
         // Current hand state
         private readonly List<BaseDice> _dice = new();
@@ -58,6 +60,9 @@ namespace DiceGame
 
         void Start()
         {
+            // Initialize analytics first
+            InitializeAnalytics();
+            
             // Initialize cooldown system if not assigned
             if (cooldownSystem == null)
             {
@@ -86,7 +91,12 @@ namespace DiceGame
             // Initialize target score and level
             _currentLevel = 1;
             _currentTargetScore = baseTargetScore;
+            _sessionStartTime = Time.time;
             UpdateTargetScoreDisplay();
+            
+            // Track session start
+            UnityGameAnalytics.TrackSessionStarted();
+            UnityGameAnalytics.TrackLevelStarted(_currentLevel, _currentTargetScore);
 
             // Initialize and hide continue button
             if (continueButton != null)
@@ -117,6 +127,26 @@ namespace DiceGame
             StartNewHand();
             
             Debug.Log("[BattleController] Battle scene initialized with decoupled components.");
+        }
+        
+        /// <summary>
+        /// Initialize analytics system by creating the UnityGameAnalytics GameObject if it doesn't exist
+        /// </summary>
+        private void InitializeAnalytics()
+        {
+            // Check if UnityGameAnalytics already exists
+            if (FindObjectOfType<UnityGameAnalytics>() == null)
+            {
+                // Create the analytics GameObject
+                GameObject analyticsGO = new GameObject("UnityGameAnalytics");
+                analyticsGO.AddComponent<UnityGameAnalytics>();
+                
+                Debug.Log("[BattleController] Created UnityGameAnalytics GameObject");
+            }
+            else
+            {
+                Debug.Log("[BattleController] UnityGameAnalytics already exists");
+            }
         }
 
     /// <summary>
@@ -194,6 +224,12 @@ namespace DiceGame
 
         // Add selected special dice to hand
         _dice.AddRange(selectedDice);
+        
+        // Track dice usage for analytics
+        foreach (var dice in selectedDice)
+        {
+            UnityGameAnalytics.TrackDiceUsed(dice.diceName, dice.tier.ToString(), dice.cost, currentHand + 1);
+        }
         
         // Fill remaining slots with normal dice to reach 5 total
         int normalDiceNeeded = diceCount - _dice.Count;
@@ -374,6 +410,10 @@ namespace DiceGame
                 }
                 
                 _totalScore += finalScore;
+                
+                // Track analytics for hand completion and score combination
+                UnityGameAnalytics.TrackHandCompleted(current + 1, finalScore, _totalScore, combo, submittedDice.Count);
+                UnityGameAnalytics.TrackScoreCombination(combo, baseScore, diceSum, comboMult, mult, finalScore, current + 1);
             }
             else
             {
