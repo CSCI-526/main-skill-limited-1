@@ -181,8 +181,7 @@ namespace DiceGame
             layout.flexibleWidth = 1000f;
 
             var bg = go.GetComponent<Image>();
-            bg.sprite = Resources.GetBuiltinResource<Sprite>("UI/Skin/UISprite.psd");
-            bg.type = Image.Type.Sliced;
+            bg.sprite = null; // No sprite needed for solid color background
             bg.color = new Color(0.16f, 0.16f, 0.16f, 0.9f);
             bg.raycastTarget = true;
 
