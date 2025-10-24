@@ -47,6 +47,12 @@ namespace DiceRogue.Boot
             StartCoroutine(LoadSceneWithWipe(battleSceneName));
         }
 
+        // Public helper to return to Main Menu with the same wipe effect
+        public void GoToMainMenu()
+        {
+            StartCoroutine(LoadSceneWithWipe(mainSceneName));
+        }
+
         IEnumerator LoadSceneWithWipe(string sceneName)
         {
             EnsureFader();
