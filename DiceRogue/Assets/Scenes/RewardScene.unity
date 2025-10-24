@@ -1280,8 +1280,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7f1812c3abc6946b8aab6b386cc90ebc, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  rewardParent: {fileID: 0}
-  rewardCardPrefab: {fileID: 0}
+  rewardParent: {fileID: 1287390830}
+  rewardCardPrefab: {fileID: 8539968440692565016, guid: c1f51b0619b884abdba44ef9adc10700, type: 3}
   rewardCount: 3
 --- !u!4 &1986443602
 Transform:
