@@ -22,7 +22,7 @@ public class RewardDiceUI : MonoBehaviour, IPointerEnterHandler, IPointerExitHan
     {
         titleText.text = dice.diceName;
 
-        effectText.text = "";
+        effectText.text = dice.description;
         costText.text = $"Cost: {dice.cost}";
 
         switch (dice.tier)
