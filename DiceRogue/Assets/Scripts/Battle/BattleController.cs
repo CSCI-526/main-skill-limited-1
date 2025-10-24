@@ -5,7 +5,8 @@ using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using DiceGame.Core;
-using UnityEngine.SceneManagement; // for fallback scene load
+using DiceGame.Analytics;
+using UnityEngine.SceneManagement;
 using DiceRogue.Boot;              // for RunLoader wipe
 
 namespace DiceGame
@@ -20,6 +21,10 @@ namespace DiceGame
     /// </summary>
     public class BattleController : MonoBehaviour
     {
+        // Static state for scene transitions
+        public static bool ContinuingFromReward = false;
+        public static int PendingLevel = 1;
+        public static int PendingTargetScore = 300;
         [Header("UI")]
         public Transform diceRowParent;   // Container for DiceView
         public GameObject diceViewPrefab; // Prefab (with DiceView component)
@@ -102,8 +107,19 @@ namespace DiceGame
             }
 
             // Initialize target score and level
-            _currentLevel = 1;
-            _currentTargetScore = baseTargetScore;
+            // Check if continuing from reward scene
+            if (ContinuingFromReward)
+            {
+                _currentLevel = PendingLevel;
+                _currentTargetScore = PendingTargetScore;
+                ContinuingFromReward = false; // Reset flag
+                Debug.Log($"[BattleController] Continuing from Reward Scene - Level {_currentLevel}, Target: {_currentTargetScore}");
+            }
+            else
+            {
+                _currentLevel = 1;
+                _currentTargetScore = baseTargetScore;
+            }
             UpdateTargetScoreDisplay();
 
             // Initialize and hide continue button
@@ -135,10 +151,86 @@ namespace DiceGame
                 backpackButton.onClick.AddListener(OpenBackpackViewer);
             }
             
+            // Check if there are pending reward dice from reward scene
+            IntegrateRewardDice();
+            
             // Start first hand
             StartNewHand();
             
             Debug.Log("[BattleController] Battle scene initialized with decoupled components.");
+        }
+
+        /// <summary>
+        /// Integrate reward dice from reward scene into the dice pool
+        /// </summary>
+        private void IntegrateRewardDice()
+        {
+            // Check if there are pending reward dice
+            if (RewardSceneManager.PendingDiceTypeIds.Count == 0)
+            {
+                Debug.Log("[BattleController] No pending reward dice to integrate");
+                return;
+            }
+
+            Debug.Log($"[BattleController] Found {RewardSceneManager.PendingDiceTypeIds.Count} reward dice to integrate");
+
+            // Get current dice pool
+            var currentPool = cooldownSystem.GetAllDice();
+            var newPool = new List<BaseDice>(currentPool);
+
+            // Create and add reward dice
+            foreach (var typeId in RewardSceneManager.PendingDiceTypeIds)
+            {
+                var rewardDice = CreateDiceFromTypeId(typeId);
+                if (rewardDice != null)
+                {
+                    newPool.Add(rewardDice);
+                    Debug.Log($"[BattleController] Added reward dice: {rewardDice.diceName} ({rewardDice.tier})");
+                }
+            }
+
+            // Clear pending list
+            RewardSceneManager.PendingDiceTypeIds.Clear();
+
+            // Update cooldown system with new pool
+            cooldownSystem.SetPlayerBackpackDice(newPool);
+
+            Debug.Log($"[BattleController] Integrated reward dice. New pool size: {newPool.Count}");
+        }
+
+        /// <summary>
+        /// Create a dice instance from type ID string
+        /// </summary>
+        private BaseDice CreateDiceFromTypeId(string typeId)
+        {
+            // Use DicePool to get all available dice prototypes
+            var allDice = DicePool.GetAll();
+            var prototype = allDice.FirstOrDefault(d => d.GetType().Name == typeId);
+
+            if (prototype != null)
+            {
+                // Create a new instance by cloning the prototype
+                var diceType = prototype.GetType();
+                var newDice = System.Activator.CreateInstance(diceType) as BaseDice;
+                
+                if (newDice != null)
+                {
+                    // Copy properties from prototype (since constructors might set these)
+                    newDice.diceName = prototype.diceName;
+                    newDice.description = prototype.description;
+                    newDice.tier = prototype.tier;
+                    newDice.cost = prototype.cost;
+                    newDice.cooldownAfterUse = prototype.cooldownAfterUse;
+                    newDice.cooldownRemain = 0;
+                    newDice.isLocked = false;
+                    newDice.lastRollValue = 0;
+                    
+                    return newDice;
+                }
+            }
+
+            Debug.LogWarning($"[BattleController] Could not create dice from typeId: {typeId}");
+            return null;
         }
 
     /// <summary>
@@ -761,9 +853,28 @@ namespace DiceGame
                                $"Final Score: {finalScore}\nTarget: {_currentTargetScore}");
             }
 
-            // After success animation, reveal Continue
-            yield return new UnityEngine.WaitForSeconds(2.5f);
-            if (continueButton != null) continueButton.gameObject.SetActive(true);
+            // Wait for evaluation animation to complete, then transition based on result
+            yield return new UnityEngine.WaitForSeconds(4.5f);
+            
+            if (passed)
+            {
+                // Prepare next level state for when we return from RewardScene
+                int nextLevel = _currentLevel + 1;
+                int nextTarget = baseTargetScore;
+                for (int i = 0; i < nextLevel - 1; i++)
+                {
+                    int increase = 300 + i * 100; // 300, 400, 500, 600, ...
+                    nextTarget += increase;
+                }
+
+                PendingLevel = nextLevel;
+                PendingTargetScore = nextTarget;
+                ContinuingFromReward = true;
+
+                // Transition to reward scene
+                Debug.Log($"[BattleController] Target passed! Loading RewardScene. Next Level: {nextLevel}, Next Target: {nextTarget}");
+                SceneManager.LoadScene("RewardScene");
+            }
         }
 
         #region CooldownSystem Event Handlers
