@@ -142,6 +142,8 @@ namespace DiceGame
 
             // Fade out the combo score text
             yield return StartCoroutine(FadeOutComboText());
+
+            _animationCoroutine = null;
         }
 
         /// <summary>
@@ -378,6 +380,8 @@ namespace DiceGame
 
             // Hold the result
             yield return new WaitForSeconds(3.5f);
+
+            _animationCoroutine = null;
 
             // Optional: Fade out or keep visible
             // (Keep visible so player can see the result)

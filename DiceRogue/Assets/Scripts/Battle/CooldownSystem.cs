@@ -171,9 +171,8 @@ namespace DiceGame
         /// <returns>True if selection is valid</returns>
         public bool SelectDiceForHand(List<BaseDice> selectedDice)
         {
-            if (selectedDice == null || selectedDice.Count == 0)
+            if (selectedDice == null)
             {
-                Debug.LogWarning("[CooldownSystem] Cannot select empty dice list");
                 return false;
             }
 
@@ -219,11 +218,8 @@ namespace DiceGame
         /// <param name="submittedDice">List of dice that were locked and submitted</param>
         public void CompleteHand(List<BaseDice> submittedDice = null)
         {
-            if (_selectedDice.Count == 0)
-            {
-                Debug.LogWarning("[CooldownSystem] No dice selected to complete hand");
-                return;
-            }
+            // Progress existing cooldowns; a hand has just concluded
+            AdvanceCooldowns(false);
 
             Debug.Log($"[CooldownSystem] Completing hand with {_selectedDice.Count} dice");
             
@@ -273,7 +269,7 @@ namespace DiceGame
         /// <summary>
         /// Advance cooldowns by one turn (called before starting new hand)
         /// </summary>
-        public void AdvanceCooldowns()
+        public void AdvanceCooldowns(bool updateAvailability = true)
         {
             Debug.Log("[CooldownSystem] Advancing cooldowns...");
             
@@ -294,7 +290,10 @@ namespace DiceGame
                 }
             }
             
-            UpdateAvailableDice();
+            if (updateAvailability)
+            {
+                UpdateAvailableDice();
+            }
         }
 
         /// <summary>
