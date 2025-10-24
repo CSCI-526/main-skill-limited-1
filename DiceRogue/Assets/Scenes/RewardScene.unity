@@ -1215,7 +1215,6 @@ GameObject:
   m_Component:
   - component: {fileID: 1986443602}
   - component: {fileID: 1986443601}
-  - component: {fileID: 1986443603}
   m_Layer: 0
   m_Name: RewardMangager
   m_TagString: Untagged
@@ -1235,9 +1234,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7f1812c3abc6946b8aab6b386cc90ebc, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  rewardParent: {fileID: 0}
-  rewardCardPrefab: {fileID: 0}
-  rewardCount: 3
+  cardPrefab: {fileID: 2185137939266554920, guid: c1f51b0619b884abdba44ef9adc10700, type: 3}
+  cardsParent: {fileID: 1287390830}
 --- !u!4 &1986443602
 Transform:
   m_ObjectHideFlags: 0
@@ -1253,21 +1251,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 1582179533}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &1986443603
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1986443600}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 7f1812c3abc6946b8aab6b386cc90ebc, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  rewardParent: {fileID: 1287390830}
-  rewardCardPrefab: {fileID: 8539968440692565016, guid: c1f51b0619b884abdba44ef9adc10700, type: 3}
-  rewardCount: 3
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

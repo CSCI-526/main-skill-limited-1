@@ -50,10 +50,22 @@ public class RewardSceneManager : MonoBehaviour
         SceneManager.LoadScene("BattleScene");
     }
 
+    private List<BaseDice> GenerateDefaultDicePool()
+    {
+        return new List<BaseDice>
+        {
+            new BigOne(), new BigSix(), new CounterDice(), new EvenDice(), new OddDice(),
+            new HeavyDice(), new LightDice(), new MirrorDice(),
+            new CollectorDice(), new LuckySix(), new PlusOne(), new SevenSevenSeven(),
+            new TwinBond(), new WeightedEdge(),
+            new D8(), new GoldenDice(), new ZombieDice()
+        };
+    }
+
     void Start()
     {
         // 1) Build a pool (default prototypes) and pick 3 non-filler dice
-        allDicePool = DicePool.GetAll();
+        allDicePool = GenerateDefaultDicePool();
         GenerateRewardOptions();   // fills rewardResult with 3 random non-filler dice
 
         // 2) Render UI cards

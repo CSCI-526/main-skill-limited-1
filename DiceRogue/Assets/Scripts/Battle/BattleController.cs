@@ -57,7 +57,6 @@ namespace DiceGame
         private int _totalScore = 0;
         private int _currentLevel = 1;
         private int _currentTargetScore;
-        private float _sessionStartTime;
 
         // Current hand state
         private readonly List<BaseDice> _dice = new();
@@ -77,9 +76,6 @@ namespace DiceGame
 
         void Start()
         {
-            // Initialize analytics first
-            InitializeAnalytics();
-            
             // Initialize cooldown system if not assigned
             if (cooldownSystem == null)
             {
@@ -108,11 +104,7 @@ namespace DiceGame
             // Initialize target score and level
             _currentLevel = 1;
             _currentTargetScore = baseTargetScore;
-            _sessionStartTime = Time.time;
             UpdateTargetScoreDisplay();
-            
-            // Track initial player progression
-            UnityGameAnalytics.TrackPlayerProgression(_totalScore, 0, _currentLevel);
 
             // Initialize and hide continue button
             if (continueButton != null)
@@ -147,26 +139,6 @@ namespace DiceGame
             StartNewHand();
             
             Debug.Log("[BattleController] Battle scene initialized with decoupled components.");
-        }
-        
-        /// <summary>
-        /// Initialize analytics system by creating the UnityGameAnalytics GameObject if it doesn't exist
-        /// </summary>
-        private void InitializeAnalytics()
-        {
-            // Check if UnityGameAnalytics already exists
-            if (FindObjectOfType<UnityGameAnalytics>() == null)
-            {
-                // Create the analytics GameObject
-                GameObject analyticsGO = new GameObject("UnityGameAnalytics");
-                analyticsGO.AddComponent<UnityGameAnalytics>();
-                
-                Debug.Log("[BattleController] Created UnityGameAnalytics GameObject");
-            }
-            else
-            {
-                Debug.Log("[BattleController] UnityGameAnalytics already exists");
-            }
         }
 
     /// <summary>
@@ -486,13 +458,6 @@ namespace DiceGame
                 }
                 
                 _totalScore += finalScore;
-                
-                // Track analytics for hand completion and score combination
-                // Track player progression
-                UnityGameAnalytics.TrackPlayerProgression(_totalScore, current + 1, _currentLevel);
-                
-                // Track score combination
-                UnityGameAnalytics.TrackScoreCombination(combo);
             }
             else
             {
