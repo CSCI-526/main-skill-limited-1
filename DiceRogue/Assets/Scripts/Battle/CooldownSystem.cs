@@ -221,27 +221,39 @@ namespace DiceGame
             // Progress existing cooldowns; a hand has just concluded
             AdvanceCooldowns(false);
 
-            Debug.Log($"[CooldownSystem] Completing hand with {_selectedDice.Count} dice");
-            
+            Debug.Log("[CooldownSystem] Completing hand with {_selectedDice.Count} dice");
+
             // Apply cooldown only to submitted dice (locked and submitted)
-            if (submittedDice != null && submittedDice.Count > 0)
+            var cooldownTargets = new HashSet<BaseDice>();
+            if (submittedDice != null)
             {
-                Debug.Log($"[CooldownSystem] Applying cooldown to {submittedDice.Count} submitted dice:");
                 foreach (var dice in submittedDice)
                 {
-                    dice.cooldownRemain = dice.cooldownAfterUse + 1; // Set to 2 turns (1 + 1)
-                    Debug.Log($"  - {dice.diceName} cooldown: 0 → {dice.cooldownRemain} (will be unavailable for 1 hand)");
+                    if (dice == null) continue;
+                    cooldownTargets.Add(dice);
+                }
+            }
+
+            if (cooldownTargets.Count > 0)
+            {
+                Debug.Log($"[CooldownSystem] Applying cooldown to {cooldownTargets.Count} submitted dice:");
+                foreach (var dice in cooldownTargets)
+                {
+                    if (dice.cooldownAfterUse <= 0)
+                    {
+                        dice.cooldownRemain = 0;
+                        Debug.Log($"  - {dice.diceName} has no cooldown configured; remains ready");
+                        continue;
+                    }
+
+                    int previous = dice.cooldownRemain;
+                    dice.cooldownRemain = dice.cooldownAfterUse + 1; // +1 so the next hand still counts down
+                    Debug.Log($"  - {dice.diceName} cooldown: {previous} → {dice.cooldownRemain} (unavailable for {dice.cooldownAfterUse} hand(s))");
                 }
             }
             else
             {
-                Debug.Log("[CooldownSystem] No submitted dice provided, applying cooldown to all selected dice");
-                // Fallback: apply cooldown to all selected dice if no submitted dice provided
-                foreach (var dice in _selectedDice)
-                {
-                    dice.cooldownRemain = dice.cooldownAfterUse + 1; // Set to 2 turns (1 + 1)
-                    Debug.Log($"  - {dice.diceName} on cooldown for {dice.cooldownRemain} turns");
-                }
+                Debug.Log("[CooldownSystem] No submitted dice entered cooldown (nothing was locked and submitted).");
             }
             
             // Clear selection
