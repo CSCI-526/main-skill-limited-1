@@ -5,8 +5,8 @@ using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using DiceGame.Core;
-using UnityEngine.SceneManagement; // for fallback scene load
-using DiceRogue.Boot;              // for RunLoader wipe
+using DiceGame.Analytics;
+using UnityEngine.SceneManagement;
 
 namespace DiceGame
 {
@@ -20,6 +20,10 @@ namespace DiceGame
     /// </summary>
     public class BattleController : MonoBehaviour
     {
+        // Static state for scene transitions
+        public static bool ContinuingFromReward = false;
+        public static int PendingLevel = 1;
+        public static int PendingTargetScore = 300;
         [Header("UI")]
         public Transform diceRowParent;   // Container for DiceView
         public GameObject diceViewPrefab; // Prefab (with DiceView component)
@@ -30,8 +34,6 @@ namespace DiceGame
         public TMP_Text rollFeedbackText; // Shows dice status only
         public TMP_Text handCounterText;  // NEW: Display hand counter
         public TMP_Text deckStatusText;   // NEW: Display dice pool/deck status
-    public Button backpackButton;     // Opens the backpack viewer during a hand
-    public SimpleBackpackUI backpackUI; // Lightweight backpack overlay
 
         [Header("Score Display")]
         public ScoreAnimator scoreAnimator; // Animated score display system
@@ -41,8 +43,6 @@ namespace DiceGame
         public int diceCount = 5;         // Fixed 5 dice per hand
         public int maxRollsPerHand = 2;   // Max 2 rolls per hand
         public int baseTargetScore = 300; // Starting target score
-    [Tooltip("Scene to load when failing to reach target score")]
-    public string endSceneName = "EndScene";
 
         [Header("Cooldown System")]
         public CooldownSystem cooldownSystem; // Reference to cooldown system
@@ -57,25 +57,17 @@ namespace DiceGame
         private int _totalScore = 0;
         private int _currentLevel = 1;
         private int _currentTargetScore;
+        private float _sessionStartTime;
 
         // Current hand state
         private readonly List<BaseDice> _dice = new();
         private readonly List<DiceView> _views = new();
-    private readonly List<BaseDice> _selectedSpecialDice = new();
-    private readonly List<BaseDice> _allDiceCache = new();
-    private readonly List<BaseDice> _availableDiceCache = new();
-    private bool _awaitingSelection;
-
-        private void SetGameplayButtonsInteractable(bool enabled)
-        {
-            if (rollButton != null) rollButton.interactable = enabled;
-            if (resetRollButton != null) resetRollButton.interactable = enabled;
-            if (submitComboButton != null) submitComboButton.interactable = enabled;
-            if (backpackButton != null) backpackButton.interactable = enabled && !_awaitingSelection;
-        }
 
         void Start()
         {
+            // Initialize analytics first
+            InitializeAnalytics();
+            
             // Initialize cooldown system if not assigned
             if (cooldownSystem == null)
             {
@@ -102,9 +94,24 @@ namespace DiceGame
             }
 
             // Initialize target score and level
-            _currentLevel = 1;
-            _currentTargetScore = baseTargetScore;
+            // Check if continuing from reward scene
+            if (ContinuingFromReward)
+            {
+                _currentLevel = PendingLevel;
+                _currentTargetScore = PendingTargetScore;
+                ContinuingFromReward = false; // Reset flag
+                Debug.Log($"[BattleController] Continuing from Reward Scene - Level {_currentLevel}, Target: {_currentTargetScore}");
+            }
+            else
+            {
+                _currentLevel = 1;
+                _currentTargetScore = baseTargetScore;
+            }
+            _sessionStartTime = Time.time;
             UpdateTargetScoreDisplay();
+            
+            // Track initial player progression
+            UnityGameAnalytics.TrackPlayerProgression(_totalScore, 0, _currentLevel);
 
             // Initialize and hide continue button
             if (continueButton != null)
@@ -130,15 +137,107 @@ namespace DiceGame
             rollButton.onClick.AddListener(OnRollOnce);
             resetRollButton.onClick.AddListener(ResetForNewHand);
             submitComboButton.onClick.AddListener(OnSubmitCombo);
-            if (backpackButton != null)
-            {
-                backpackButton.onClick.AddListener(OpenBackpackViewer);
-            }
+            
+            // Check if there are pending reward dice from reward scene
+            IntegrateRewardDice();
             
             // Start first hand
             StartNewHand();
             
             Debug.Log("[BattleController] Battle scene initialized with decoupled components.");
+        }
+        
+        /// <summary>
+        /// Initialize analytics system by creating the UnityGameAnalytics GameObject if it doesn't exist
+        /// </summary>
+        private void InitializeAnalytics()
+        {
+            // Check if UnityGameAnalytics already exists
+            if (FindObjectOfType<UnityGameAnalytics>() == null)
+            {
+                // Create the analytics GameObject
+                GameObject analyticsGO = new GameObject("UnityGameAnalytics");
+                analyticsGO.AddComponent<UnityGameAnalytics>();
+                
+                Debug.Log("[BattleController] Created UnityGameAnalytics GameObject");
+            }
+            else
+            {
+                Debug.Log("[BattleController] UnityGameAnalytics already exists");
+            }
+        }
+
+        /// <summary>
+        /// Integrate reward dice from reward scene into the dice pool
+        /// </summary>
+        private void IntegrateRewardDice()
+        {
+            // Check if there are pending reward dice
+            if (RewardSceneManager.PendingDiceTypeIds.Count == 0)
+            {
+                Debug.Log("[BattleController] No pending reward dice to integrate");
+                return;
+            }
+
+            Debug.Log($"[BattleController] Found {RewardSceneManager.PendingDiceTypeIds.Count} reward dice to integrate");
+
+            // Get current dice pool
+            var currentPool = cooldownSystem.GetAllDice();
+            var newPool = new List<BaseDice>(currentPool);
+
+            // Create and add reward dice
+            foreach (var typeId in RewardSceneManager.PendingDiceTypeIds)
+            {
+                var rewardDice = CreateDiceFromTypeId(typeId);
+                if (rewardDice != null)
+                {
+                    newPool.Add(rewardDice);
+                    Debug.Log($"[BattleController] Added reward dice: {rewardDice.diceName} ({rewardDice.tier})");
+                }
+            }
+
+            // Clear pending list
+            RewardSceneManager.PendingDiceTypeIds.Clear();
+
+            // Update cooldown system with new pool
+            cooldownSystem.SetPlayerBackpackDice(newPool);
+
+            Debug.Log($"[BattleController] Integrated reward dice. New pool size: {newPool.Count}");
+        }
+
+        /// <summary>
+        /// Create a dice instance from type ID string
+        /// </summary>
+        private BaseDice CreateDiceFromTypeId(string typeId)
+        {
+            // Use DicePool to get all available dice prototypes
+            var allDice = DicePool.GetAll();
+            var prototype = allDice.FirstOrDefault(d => d.GetType().Name == typeId);
+
+            if (prototype != null)
+            {
+                // Create a new instance by cloning the prototype
+                var diceType = prototype.GetType();
+                var newDice = System.Activator.CreateInstance(diceType) as BaseDice;
+                
+                if (newDice != null)
+                {
+                    // Copy properties from prototype (since constructors might set these)
+                    newDice.diceName = prototype.diceName;
+                    newDice.description = prototype.description;
+                    newDice.tier = prototype.tier;
+                    newDice.cost = prototype.cost;
+                    newDice.cooldownAfterUse = prototype.cooldownAfterUse;
+                    newDice.cooldownRemain = 0;
+                    newDice.isLocked = false;
+                    newDice.lastRollValue = 0;
+                    
+                    return newDice;
+                }
+            }
+
+            Debug.LogWarning($"[BattleController] Could not create dice from typeId: {typeId}");
+            return null;
         }
 
     /// <summary>
@@ -162,15 +261,12 @@ namespace DiceGame
             cooldownSystem.AdvanceCooldowns();
         }
         
-    // Clear previous dice and views using factory
-    _dice.Clear();
-    _selectedSpecialDice.Clear();
-    _viewFactory.DestroyViews(_views);
+        // Clear previous dice and views using factory
+        _dice.Clear();
+        _viewFactory.DestroyViews(_views);
 
         // Display full dice pool with cooldown status
-    _allDiceCache.Clear();
-    _allDiceCache.AddRange(cooldownSystem.GetAllDice());
-    var allDice = _allDiceCache;
+        var allDice = cooldownSystem.GetAllDice();
         var (currentHand, remainingHands) = cooldownSystem.GetHandCounter();
         Debug.Log($"=== HAND {currentHand + 1} - DICE POOL STATUS ===");
         Debug.Log($"Hand {currentHand + 1}/{currentHand + remainingHands} ({remainingHands} remaining)");
@@ -183,148 +279,101 @@ namespace DiceGame
         Debug.Log("========================================");
 
         // Get available dice from cooldown system (after advancing cooldowns)
-        _availableDiceCache.Clear();
-        _availableDiceCache.AddRange(cooldownSystem.GetAvailableDice());
-
-        // Show selection UI and wait for player
-        _awaitingSelection = true;
-        OpenSelectionOverlay(currentHand + 1);
-    return;
-    }
-
-    private void OpenSelectionOverlay(int displayHandNumber)
-    {
-        if (backpackUI == null)
+        var availableDice = cooldownSystem.GetAvailableDice();
+        var selectedDice = new List<BaseDice>();
+        
+        if (availableDice.Count > 0)
         {
-            Debug.LogWarning("[BattleController] SimpleBackpackUI not assigned. Falling back to automatic selection.");
-            AutoSelectFallback("Backpack UI missing");
-            return;
-        }
-
-        SetGameplayButtonsInteractable(false);
-
-        UpdateFeedback($"<size=110%><b>Select Dice for Hand {displayHandNumber}</b></size>\n\n" +
-                       $"Pick up to {diceCount} dice. You can confirm with fewer if needed.");
-
-        backpackUI.OpenForSelection(_allDiceCache, _availableDiceCache, diceCount, OnSelectionConfirmed);
-    }
-
-    private void OnSelectionConfirmed(List<BaseDice> selection)
-    {
-        var sanitized = new List<BaseDice>();
-        if (selection != null)
-        {
-            foreach (var dice in selection)
+            // Select up to 5 dice (or all available if less than 5)
+            int diceToSelect = Mathf.Min(diceCount, availableDice.Count);
+            
+            // Randomly shuffle available dice for variety
+            var shuffledDice = availableDice.OrderBy(x => UnityEngine.Random.value).ToList();
+            
+            for (int i = 0; i < diceToSelect; i++)
             {
-                if (dice != null && (_availableDiceCache.Contains(dice) || sanitized.Contains(dice)))
-                {
-                    sanitized.Add(dice);
-                }
+                selectedDice.Add(shuffledDice[i]);
+            }
+
+            Debug.Log($"[BattleController] Selected {selectedDice.Count} special dice from pool:");
+            foreach (var dice in selectedDice)
+            {
+                Debug.Log($"  Selected: {dice.diceName}");
+            }
+
+            // Register selection with cooldown system
+            if (!cooldownSystem.SelectDiceForHand(selectedDice))
+            {
+                Debug.LogError("[BattleController] Failed to select dice for hand!");
+                return;
             }
         }
-
-        if (sanitized.Count > diceCount)
+        else
         {
-            sanitized = sanitized.Take(diceCount).ToList();
+            Debug.LogWarning("[BattleController] No special dice available from cooldown system!");
         }
-
-        if (!cooldownSystem.SelectDiceForHand(sanitized))
-        {
-            Debug.LogWarning("[BattleController] Backpack selection failed validation. Falling back to automatic choice.");
-            AutoSelectFallback("Selection validation failed");
-            return;
-        }
-
-        CompleteHandSetupAfterSelection(sanitized);
-        SetGameplayButtonsInteractable(true);
-    }
-
-    private void AutoSelectFallback(string reason)
-    {
-        var fallback = cooldownSystem.GetAvailableDice().Take(diceCount).ToList();
-        cooldownSystem.SelectDiceForHand(fallback);
-        CompleteHandSetupAfterSelection(fallback);
-        SetGameplayButtonsInteractable(true);
-
-        UpdateFeedback($"<size=110%><b>Auto Selection</b></size>\n\n" +
-                       "Couldn't open the bag, so we picked for you.");
-        Debug.LogWarning($"[BattleController] Auto-selected {fallback.Count} dice. Reason: {reason}");
-    }
-
-    private void CompleteHandSetupAfterSelection(List<BaseDice> selectedDice)
-    {
-        if (selectedDice == null)
-        {
-            selectedDice = new List<BaseDice>();
-        }
-
-        _selectedSpecialDice.Clear();
-        _selectedSpecialDice.AddRange(selectedDice);
-
-        if (_awaitingSelection)
-        {
-            _awaitingSelection = false;
-        }
-
-        CompleteHandSetup();
-    }
-
-    private void CompleteHandSetup()
-    {
-        var (currentHand, remainingHands) = cooldownSystem.GetHandCounter();
 
         // Add selected special dice to hand
-        _dice.AddRange(_selectedSpecialDice);
-
-        // Fill remaining slots with normal dice up to diceCount
-        int normalDiceNeeded = Mathf.Max(0, diceCount - _dice.Count);
-        for (int i = 0; i < normalDiceNeeded; i++)
+        _dice.AddRange(selectedDice);
+        
+        // Track dice usage for analytics
+        foreach (var dice in selectedDice)
         {
-            var normalDice = new NormalDice { diceName = $"Normal Dice #{i + 1}" };
-            _dice.Add(normalDice);
-            Debug.Log($"  Added: {normalDice.diceName}");
+            UnityGameAnalytics.TrackDiceUsage(dice.diceName);
         }
-
-        Debug.Log($"[BattleController] Final hand composition: {_dice.Count} dice total ({_selectedSpecialDice.Count} special + {normalDiceNeeded} normal)");
-
+        
+        // Fill remaining slots with normal dice to reach 5 total
+        int normalDiceNeeded = diceCount - _dice.Count;
+        if (normalDiceNeeded > 0)
+        {
+            Debug.Log($"[BattleController] Filling {normalDiceNeeded} remaining slots with Normal Dice");
+            for (int i = 0; i < normalDiceNeeded; i++)
+            {
+                var normalDice = new NormalDice();
+                normalDice.diceName = $"Normal Dice #{i + 1}";
+                _dice.Add(normalDice);
+                Debug.Log($"  Added: {normalDice.diceName}");
+            }
+        }
+        
+        Debug.Log($"[BattleController] Final hand composition: {_dice.Count} dice total ({selectedDice.Count} special + {normalDiceNeeded} normal)");
+        
+        // Reset dice state for new hand
         foreach (var dice in _dice)
         {
-            dice.ResetLockAndValue();
+            dice.ResetLockAndValue(); // This sets lastRollValue = 0 and isLocked = false
         }
 
+        // Create views using factory (includes placeholders for empty slots)
         var newViews = _viewFactory.CreateViews(_dice, diceCount);
         _views.AddRange(newViews);
 
+        // Start new hand in hand manager
         _handManager.StartHand();
-
+        
+        // Build feedback message
         string feedbackMsg = $"<size=110%><b>Hand {currentHand + 1}</b></size>\n\n";
-        feedbackMsg += $"<color=#88FF88>Ready! {_dice.Count} dice prepared.</color>\n";
-        if (_selectedSpecialDice.Count < diceCount)
+        feedbackMsg += $"<color=#88FF88>Ready! {diceCount} dice prepared.</color>\n";
+        if (selectedDice.Count < diceCount)
         {
-            feedbackMsg += $"<color=#AAAAAA>({_selectedSpecialDice.Count} special + {normalDiceNeeded} normal dice)</color>\n";
+            feedbackMsg += $"<color=#AAAAAA>({selectedDice.Count} special + {normalDiceNeeded} normal dice)</color>\n";
         }
         feedbackMsg += "\n<b>Instructions:</b>\n  • Roll the dice\n  • Click to lock dice you want to keep\n  • Submit when ready";
-
+        
         UpdateFeedback(feedbackMsg);
         UpdateHandCounter(currentHand, remainingHands);
-        UpdateDeckStatus();
-
-        Debug.Log($"[BattleController] Started hand with {_dice.Count} dice total");
+        UpdateDeckStatus(); // Update deck display
+        
+        Debug.Log($"[BattleController] Started hand with {diceCount} dice total");
     }
 
         void OnRollOnce()
         {
-            if (_awaitingSelection)
-            {
-                UpdateFeedback("<color=#FFD070><b>Select your dice from the backpack first!</b></color>");
-                return;
-            }
-
             // Check if hands remain
             var (current, remaining) = cooldownSystem.GetHandCounter();
             if (remaining <= 0)
             {
-                UpdateFeedback("<color=#FF8888><b>No Hands Remaining!</b></color>\n\nRound complete. Evaluating...");
+                UpdateFeedback("<color=#FF8888><b>No Hands Remaining!</b></color>\n\nAll hands have been used.\n<color=#AAAAAA>Battle complete! Press Reset to start new battle cycle (for testing).</color>");
                 Debug.LogWarning("[BattleController] Cannot roll - no hands remaining.");
                 return;
             }
@@ -393,17 +442,11 @@ namespace DiceGame
 
         void OnSubmitCombo()
         {
-            if (_awaitingSelection)
-            {
-                UpdateFeedback("<color=#FFD070><b>Select dice for the new hand first!</b></color>");
-                return;
-            }
-
             // Check if hands remain
             var (current, remaining) = cooldownSystem.GetHandCounter();
             if (remaining <= 0)
             {
-                UpdateFeedback("<color=#FF8888><b>No Hands Remaining!</b></color>\n\nRound complete. Evaluating...");
+                UpdateFeedback("<color=#FF8888><b>No Hands Remaining!</b></color>\n\nAll hands have been used.\n<color=#AAAAAA>Battle complete! Press Reset to start new battle cycle (for testing).</color>");
                 Debug.LogWarning("[BattleController] Cannot submit - no hands remaining.");
                 return;
             }
@@ -458,6 +501,13 @@ namespace DiceGame
                 }
                 
                 _totalScore += finalScore;
+                
+                // Track analytics for hand completion and score combination
+                // Track player progression
+                UnityGameAnalytics.TrackPlayerProgression(_totalScore, current + 1, _currentLevel);
+                
+                // Track score combination
+                UnityGameAnalytics.TrackScoreCombination(combo);
             }
             else
             {
@@ -470,12 +520,21 @@ namespace DiceGame
             // Complete the hand in cooldown system with submitted dice
             // Filter out NormalDice (temporary fillers) - only submit special dice from the pool
             var specialDiceOnly = submittedDice.Where(d => !(d is NormalDice)).ToList();
-            cooldownSystem.CompleteHand(specialDiceOnly);
+            if (specialDiceOnly.Count > 0)
+            {
+                Debug.Log($"[BattleController] Passing {specialDiceOnly.Count} special dice to cooldown system");
+                cooldownSystem.CompleteHand(specialDiceOnly);
+            }
+            else
+            {
+                Debug.Log("[BattleController] No special dice submitted, only normal dice used");
+                cooldownSystem.CompleteHand(new List<BaseDice>()); // Complete hand without cooldown
+            }
             _handManager.EndHand();
             
             // Update deck status after submitting
             UpdateDeckStatus();
-
+            
             // Check if we can start a new hand
             var (currentHand, handsRemaining) = cooldownSystem.GetHandCounter();
             if (handsRemaining > 0)
@@ -595,7 +654,7 @@ namespace DiceGame
             {
                 if (remaining <= 0)
                 {
-                    handCounterText.text = $"Hands: {current}/{current}";
+                    handCounterText.text = $"<color=#FF8888><b>No Hands Remaining!</b></color>\nHands: {current}/{current}\n<size=90%>(Battle complete - Press Reset to test again)</size>";
                 }
                 else
                 {
@@ -611,20 +670,73 @@ namespace DiceGame
         {
             if (deckStatusText == null) return;
 
-            int totalDice = _allDiceCache.Count;
-            int ready = Mathf.Max(0, _availableDiceCache.Count - _selectedSpecialDice.Count);
-            ready = Mathf.Min(ready, Mathf.Max(0, totalDice - _selectedSpecialDice.Count));
-            int active = _selectedSpecialDice.Count;
-            int onCooldown = Mathf.Max(0, totalDice - ready - active);
-
             var sb = new StringBuilder();
-            sb.AppendLine("<size=95%><b>Backpack Summary</b></size>");
-            sb.AppendLine($"Ready: {ready}");
-            sb.AppendLine($"Active: {active}");
-            sb.AppendLine($"Cooldown: {onCooldown}");
-            sb.AppendLine("<size=75%><color=#AAAAAA>Use the Backpack button to pick dice.</color></size>");
+            sb.AppendLine("<b>DICE DECK</b>\n");
+
+            var allDice = cooldownSystem.GetAllDice();
+            var selectedDiceNames = _dice.Where(d => !(d is NormalDice)).Select(d => d.diceName).ToHashSet();
+
+            // Display all dice in simple list with colored names by rarity
+            foreach (var dice in allDice)
+            {
+                AppendDiceStatus(sb, dice, selectedDiceNames);
+            }
+
+            // Compact summary
+            int available = allDice.Count(d => d.cooldownRemain == 0 && !selectedDiceNames.Contains(d.diceName));
+            int selected = selectedDiceNames.Count;
+            int onCooldown = allDice.Count(d => d.cooldownRemain > 0);
+
+            sb.AppendLine($"\n<size=90%>Ready: {available} | Active: {selected} | CD: {onCooldown}</size>");
 
             deckStatusText.text = sb.ToString();
+        }
+
+        /// <summary>
+        /// Helper method to append dice status line
+        /// </summary>
+        private void AppendDiceStatus(StringBuilder sb, BaseDice dice, HashSet<string> selectedDiceNames)
+        {
+            // Determine rarity color for dice name
+            string rarityColor;
+            switch (dice.tier)
+            {
+                case DiceTier.Legendary:
+                    rarityColor = "#FFD700"; // Gold
+                    break;
+                case DiceTier.Rare:
+                    rarityColor = "#9370DB"; // Purple
+                    break;
+                case DiceTier.Common:
+                    rarityColor = "#90EE90"; // Light Green
+                    break;
+                default:
+                    rarityColor = "#FFFFFF"; // White
+                    break;
+            }
+
+            // Determine status
+            string statusText;
+            string statusColor;
+
+            if (selectedDiceNames.Contains(dice.diceName))
+            {
+                statusText = "ACTIVE";
+                statusColor = "#FFD700"; // Gold
+            }
+            else if (dice.cooldownRemain > 0)
+            {
+                statusText = $"CD({dice.cooldownRemain})";
+                statusColor = "#FF6666"; // Red
+            }
+            else
+            {
+                statusText = "READY";
+                statusColor = "#88FF88"; // Green
+            }
+
+            // Compact format: [Status] Dice Name
+            sb.AppendLine($"<color={statusColor}>[{statusText}]</color> <color={rarityColor}>{dice.diceName}</color>");
         }
 
         /// <summary>
@@ -695,75 +807,57 @@ namespace DiceGame
         /// </summary>
         private System.Collections.IEnumerator EvaluateTargetScore()
         {
-            // Wait for the score counting animation to complete to keep the flow fluent
-            if (scoreAnimator != null)
-            {
-                yield return scoreAnimator.WaitForIdle();
-            }
-
-            // Small extra pause to let the final value linger
-            yield return new UnityEngine.WaitForSeconds(0.6f);
+            // Wait for score animation to finish
+            yield return new UnityEngine.WaitForSeconds(3f);
 
             int finalScore = scoreAnimator != null ? scoreAnimator.GetTotalScore() : _totalScore;
             bool passed = finalScore >= _currentTargetScore;
 
             Debug.Log($"[BattleController] Target Evaluation - Target: {_currentTargetScore}, Final: {finalScore}, Passed: {passed}");
 
-            if (!passed)
-            {
-                if (scoreAnimator != null)
-                {
-                    scoreAnimator.AnimateTargetEvaluation(finalScore, _currentTargetScore, false);
-                    yield return scoreAnimator.WaitForIdle();
-                }
-                else
-                {
-                    UpdateFeedback("<color=#FF5555><b>Failed to reach target.</b></color>\n\nPreparing results...");
-                    yield return new UnityEngine.WaitForSeconds(2.5f);
-                }
-
-                // Transition to EndScene with wipe after showing failure animation.
-                EndSceneData.Set(finalScore, _currentTargetScore, false);
-
-                if (Time.timeScale == 0f)
-                {
-                    Debug.LogWarning("[BattleController] Time.timeScale was 0. Resetting to 1 before loading EndScene.");
-                    Time.timeScale = 1f;
-                }
-
-                if (!Application.CanStreamedLevelBeLoaded(endSceneName))
-                {
-                    Debug.LogError($"[BattleController] EndScene '{endSceneName}' not found in Build Settings. Add it via File > Build Settings.");
-                }
-
-                var loader = RunLoader.Instance;
-                if (loader != null)
-                {
-                    Debug.Log("[BattleController] FAIL → Using RunLoader wipe to EndScene.");
-                    loader.GoToScene(endSceneName);
-                }
-                else
-                {
-                    Debug.Log("[BattleController] FAIL → RunLoader not found; using direct SceneManager.LoadScene.");
-                    SceneManager.LoadScene(endSceneName);
-                }
-                yield break;
-            }
-
-            // PASS: keep your existing battle-side animation and then show Continue
+            // Trigger pass/fail animation in ScoreAnimator
             if (scoreAnimator != null)
             {
-                scoreAnimator.AnimateTargetEvaluation(finalScore, _currentTargetScore, true);
+                scoreAnimator.AnimateTargetEvaluation(finalScore, _currentTargetScore, passed);
             }
             else
             {
-                UpdateFeedback("<color=#FFD700><b>TARGET PASSED!</b></color>\n\n" +
-                               $"Final Score: {finalScore}\nTarget: {_currentTargetScore}");
+                // Fallback if no animator
+                string resultMsg = passed 
+                    ? "<color=#FFD700><b>TARGET PASSED!</b></color>\n\n" 
+                    : "<color=#FF6666><b>TARGET FAILED</b></color>\n\n";
+                resultMsg += $"Final Score: {finalScore}\nTarget: {_currentTargetScore}\n\n";
+                resultMsg += "<color=#AAAAAA>Press Reset to start new battle cycle.</color>";
+                UpdateFeedback(resultMsg);
             }
 
-            // After success animation, reveal Continue
-            yield return new UnityEngine.WaitForSeconds(2.5f);
-            if (continueButton != null) continueButton.gameObject.SetActive(true);
+            // Wait for evaluation animation to complete, then show Continue button ONLY if passed
+            yield return new UnityEngine.WaitForSeconds(4.5f);
+            
+            if (passed)
+            {
+                // Prepare next level state for when we return from RewardScene
+                int nextLevel = _currentLevel + 1;
+                int nextTarget = baseTargetScore;
+                for (int i = 0; i < nextLevel - 1; i++)
+                {
+                    int increase = 300 + i * 100; // 300, 400, 500, 600, ...
+                    nextTarget += increase;
+                }
+
+                PendingLevel = nextLevel;
+                PendingTargetScore = nextTarget;
+                ContinuingFromReward = true;
+
+                // Transition to reward scene
+                Debug.Log($"[BattleController] Target passed! Loading RewardScene. Next Level: {nextLevel}, Next Target: {nextTarget}");
+                SceneManager.LoadScene("RewardScene");
+            }
+            else
+            {
+                // Player failed - show game over message
+                UpdateFeedback("<color=#FF3333><b>GAME OVER</b></color>\n\nYou didn't reach the target score.\n\n<color=#AAAAAA>Press Reset to try again from Level 1.</color>");
+            }
         }
 
         #region CooldownSystem Event Handlers
@@ -796,15 +890,6 @@ namespace DiceGame
         private void OnAvailableDiceChanged(List<BaseDice> availableDice)
         {
             Debug.Log($"[BattleController] Available dice changed: {availableDice.Count} dice available");
-
-            _availableDiceCache.Clear();
-            if (availableDice != null)
-            {
-                _availableDiceCache.AddRange(availableDice);
-            }
-
-            _allDiceCache.Clear();
-            _allDiceCache.AddRange(cooldownSystem.GetAllDice());
             
             // Update deck status display
             UpdateDeckStatus();
@@ -828,28 +913,6 @@ namespace DiceGame
         }
 
         #endregion
-
-        private void OpenBackpackViewer()
-        {
-            if (_awaitingSelection)
-            {
-                Debug.Log("[BattleController] Backpack already open for selection.");
-                return;
-            }
-
-            if (backpackUI == null)
-            {
-                Debug.LogWarning("[BattleController] SimpleBackpackUI not assigned. Cannot open viewer.");
-                return;
-            }
-
-            _allDiceCache.Clear();
-            _allDiceCache.AddRange(cooldownSystem.GetAllDice());
-            _availableDiceCache.Clear();
-            _availableDiceCache.AddRange(cooldownSystem.GetAvailableDice());
-
-            backpackUI.OpenViewer(_allDiceCache, _availableDiceCache);
-        }
 
         /// <summary>
         /// Clean up event subscriptions
