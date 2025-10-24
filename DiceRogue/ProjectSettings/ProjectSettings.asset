@@ -666,11 +666,11 @@ PlayerSettings:
   apiCompatibilityLevel: 6
   activeInputHandler: 0
   windowsGamepadBackendHint: 0
-  cloudProjectId: 81b2a8f6-c42b-49c3-bb75-ff066dd05ad6
+  cloudProjectId: eb690260-d113-4d41-9f36-3423231e4b1b
   framebufferDepthMemorylessMode: 0
   qualitySettingsNames: []
-  projectName: My project 2025-10-15_20-54-34
-  organizationId: lizn020423
+  projectName: My project
+  organizationId: mingruix
   cloudEnabled: 0
   legacyClampBlendShapeWeights: 0
   hmiLoadingImage: {fileID: 0}
