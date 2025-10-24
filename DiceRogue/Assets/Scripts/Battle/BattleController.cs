@@ -5,6 +5,8 @@ using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using DiceGame.Core;
+using UnityEngine.SceneManagement; // for fallback scene load
+using DiceRogue.Boot;              // for RunLoader wipe
 
 namespace DiceGame
 {
@@ -37,6 +39,8 @@ namespace DiceGame
         public int diceCount = 5;         // Fixed 5 dice per hand
         public int maxRollsPerHand = 2;   // Max 2 rolls per hand
         public int baseTargetScore = 300; // Starting target score
+    [Tooltip("Scene to load when failing to reach target score")]
+    public string endSceneName = "EndScene";
 
         [Header("Cooldown System")]
         public CooldownSystem cooldownSystem; // Reference to cooldown system
@@ -246,7 +250,7 @@ namespace DiceGame
             var (current, remaining) = cooldownSystem.GetHandCounter();
             if (remaining <= 0)
             {
-                UpdateFeedback("<color=#FF8888><b>No Hands Remaining!</b></color>\n\nAll hands have been used.\n<color=#AAAAAA>Battle complete! Press Reset to start new battle cycle (for testing).</color>");
+                UpdateFeedback("<color=#FF8888><b>No Hands Remaining!</b></color>\n\nRound complete. Evaluating...");
                 Debug.LogWarning("[BattleController] Cannot roll - no hands remaining.");
                 return;
             }
@@ -319,7 +323,7 @@ namespace DiceGame
             var (current, remaining) = cooldownSystem.GetHandCounter();
             if (remaining <= 0)
             {
-                UpdateFeedback("<color=#FF8888><b>No Hands Remaining!</b></color>\n\nAll hands have been used.\n<color=#AAAAAA>Battle complete! Press Reset to start new battle cycle (for testing).</color>");
+                UpdateFeedback("<color=#FF8888><b>No Hands Remaining!</b></color>\n\nRound complete. Evaluating...");
                 Debug.LogWarning("[BattleController] Cannot submit - no hands remaining.");
                 return;
             }
@@ -520,7 +524,7 @@ namespace DiceGame
             {
                 if (remaining <= 0)
                 {
-                    handCounterText.text = $"<color=#FF8888><b>No Hands Remaining!</b></color>\nHands: {current}/{current}\n<size=90%>(Battle complete - Press Reset to test again)</size>";
+                    handCounterText.text = $"Hands: {current}/{current}";
                 }
                 else
                 {
@@ -673,42 +677,64 @@ namespace DiceGame
         /// </summary>
         private System.Collections.IEnumerator EvaluateTargetScore()
         {
-            // Wait for score animation to finish
-            yield return new UnityEngine.WaitForSeconds(3f);
+            // Wait for the score counting animation to complete to keep the flow fluent
+            if (scoreAnimator != null)
+            {
+                yield return scoreAnimator.WaitForIdle();
+            }
+
+            // Small extra pause to let the final value linger
+            yield return new UnityEngine.WaitForSeconds(0.6f);
 
             int finalScore = scoreAnimator != null ? scoreAnimator.GetTotalScore() : _totalScore;
             bool passed = finalScore >= _currentTargetScore;
 
             Debug.Log($"[BattleController] Target Evaluation - Target: {_currentTargetScore}, Final: {finalScore}, Passed: {passed}");
 
-            // Trigger pass/fail animation in ScoreAnimator
+            if (!passed)
+            {
+                // Do NOT show failure UI in Battle. Transition to EndScene with wipe.
+                EndSceneData.Set(finalScore, _currentTargetScore, false);
+
+                if (Time.timeScale == 0f)
+                {
+                    Debug.LogWarning("[BattleController] Time.timeScale was 0. Resetting to 1 before loading EndScene.");
+                    Time.timeScale = 1f;
+                }
+
+                if (!Application.CanStreamedLevelBeLoaded(endSceneName))
+                {
+                    Debug.LogError($"[BattleController] EndScene '{endSceneName}' not found in Build Settings. Add it via File > Build Settings.");
+                }
+
+                var loader = RunLoader.Instance;
+                if (loader != null)
+                {
+                    Debug.Log("[BattleController] FAIL → Using RunLoader wipe to EndScene.");
+                    loader.GoToScene(endSceneName);
+                }
+                else
+                {
+                    Debug.Log("[BattleController] FAIL → RunLoader not found; using direct SceneManager.LoadScene.");
+                    SceneManager.LoadScene(endSceneName);
+                }
+                yield break;
+            }
+
+            // PASS: keep your existing battle-side animation and then show Continue
             if (scoreAnimator != null)
             {
-                scoreAnimator.AnimateTargetEvaluation(finalScore, _currentTargetScore, passed);
+                scoreAnimator.AnimateTargetEvaluation(finalScore, _currentTargetScore, true);
             }
             else
             {
-                // Fallback if no animator
-                string resultMsg = passed 
-                    ? "<color=#FFD700><b>TARGET PASSED!</b></color>\n\n" 
-                    : "<color=#FF6666><b>TARGET FAILED</b></color>\n\n";
-                resultMsg += $"Final Score: {finalScore}\nTarget: {_currentTargetScore}\n\n";
-                resultMsg += "<color=#AAAAAA>Press Reset to start new battle cycle.</color>";
-                UpdateFeedback(resultMsg);
+                UpdateFeedback("<color=#FFD700><b>TARGET PASSED!</b></color>\n\n" +
+                               $"Final Score: {finalScore}\nTarget: {_currentTargetScore}");
             }
 
-            // Wait for evaluation animation to complete, then show Continue button ONLY if passed
-            yield return new UnityEngine.WaitForSeconds(4.5f);
-            
-            if (passed && continueButton != null)
-            {
-                continueButton.gameObject.SetActive(true);
-            }
-            else if (!passed)
-            {
-                // Player failed - show game over message
-                UpdateFeedback("<color=#FF3333><b>GAME OVER</b></color>\n\nYou didn't reach the target score.\n\n<color=#AAAAAA>Press Reset to try again from Level 1.</color>");
-            }
+            // After success animation, reveal Continue
+            yield return new UnityEngine.WaitForSeconds(2.5f);
+            if (continueButton != null) continueButton.gameObject.SetActive(true);
         }
 
         #region CooldownSystem Event Handlers

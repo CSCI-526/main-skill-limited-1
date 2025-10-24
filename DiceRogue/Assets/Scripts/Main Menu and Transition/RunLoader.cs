@@ -47,6 +47,12 @@ namespace DiceRogue.Boot
             StartCoroutine(LoadSceneWithWipe(battleSceneName));
         }
 
+        // Generic wipe transition to the specified scene
+        public void GoToScene(string sceneName)
+        {
+            StartCoroutine(LoadSceneWithWipe(sceneName));
+        }
+
         // Public helper to return to Main Menu with the same wipe effect
         public void GoToMainMenu()
         {

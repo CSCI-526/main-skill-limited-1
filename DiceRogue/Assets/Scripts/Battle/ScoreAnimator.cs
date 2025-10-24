@@ -28,6 +28,20 @@ namespace DiceGame
         private Coroutine _animationCoroutine;
         private Coroutine _fadeOutCoroutine;
 
+        // Expose whether an animation is currently running
+        public bool IsAnimating => _animationCoroutine != null;
+
+        // Allow external callers to wait until animations finish (with a safety timeout)
+        public System.Collections.IEnumerator WaitForIdle(float timeoutSeconds = 6f)
+        {
+            float elapsed = 0f;
+            while (_animationCoroutine != null && elapsed < timeoutSeconds)
+            {
+                elapsed += Time.deltaTime;
+                yield return null;
+            }
+        }
+
         void Start()
         {
             // Initialize displays
