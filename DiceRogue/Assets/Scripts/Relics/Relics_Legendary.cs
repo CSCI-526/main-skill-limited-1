@@ -12,6 +12,13 @@ namespace DiceGame.Relics
         public float multOnThreePlus = 1.1f;
         public int baseOnFourPlus = 25;
 
+        private void Reset()
+        {
+            relicName = "Collector's Seal";
+            rarity = RelicRarity.Legendary;
+            description = "Three of a Kind: +15 base, ×1.1 mult. Four/Five of a Kind: +25 base.";
+        }
+
         public override void Apply(ScoringContext context)
         {
             var most = RelicUtils.MostFrequent(context.submittedValues);

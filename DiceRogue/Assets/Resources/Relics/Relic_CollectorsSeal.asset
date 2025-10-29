@@ -1,0 +1,22 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c31e66c2b7f3e4d2f96baad58225ba28, type: 3}
+  m_Name: Relic_CollectorsSeal
+  m_EditorClassIdentifier: 
+  relicName: Collector's Seal
+  description: "Three of a Kind: +15 base, \xD71.1 mult. Four/Five of a Kind: +25
+    base."
+  rarity: 2
+  unique: 1
+  baseOnThreePlus: 15
+  multOnThreePlus: 1.1
+  baseOnFourPlus: 25

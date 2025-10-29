@@ -6,6 +6,8 @@ using UnityEngine.UI;
 using TMPro;
 using DiceGame.Core;
 using DiceGame.Analytics;
+using DiceGame.Relics;
+using DiceGame.UI;
 
 namespace DiceGame
 {
@@ -33,6 +35,9 @@ namespace DiceGame
         [Header("Score Display")]
         public ScoreAnimator scoreAnimator; // Animated score display system
         public TMP_Text targetScoreText;    // Target score display
+        
+        [Header("Relic Display")]
+        public RelicDisplay relicDisplay;   // Visual display for equipped relics
 
         [Header("Config")]
         public int diceCount = 5;         // Fixed 5 dice per hand
@@ -47,6 +52,7 @@ namespace DiceGame
         private DiceEffectHandler _effectHandler;
         private DiceMultiplierCalculator _multiplierCalculator;
         private DiceViewFactory _viewFactory;
+        private RelicManager _relicManager;
         
         // Score tracking
         private int _totalScore = 0;
@@ -111,6 +117,10 @@ namespace DiceGame
             _effectHandler = new DiceEffectHandler();
             _multiplierCalculator = new DiceMultiplierCalculator();
             _viewFactory = new DiceViewFactory(diceViewPrefab, diceRowParent);
+            _relicManager = new RelicManager();
+            
+            // Add test relics (for demonstration - will be removed when proper relic acquisition system is added)
+            InitializeTestRelics();
 
             // Subscribe to cooldown system events
             cooldownSystem.OnDicePoolRefresh += OnDicePoolRefresh;
@@ -145,6 +155,38 @@ namespace DiceGame
             else
             {
                 Debug.Log("[BattleController] UnityGameAnalytics already exists");
+            }
+        }
+
+        /// <summary>
+        /// Initialize test relics for demonstration (will load from ScriptableObjects after Unity setup)
+        /// </summary>
+        private void InitializeTestRelics()
+        {
+            // Try to load relic ScriptableObjects from Resources
+            // User should create these in Unity and place them in Assets/Resources/Relics/
+            var relicAssets = Resources.LoadAll<RelicBase>("Relics");
+            
+            if (relicAssets != null && relicAssets.Length > 0)
+            {
+                Debug.Log($"[BattleController] Found {relicAssets.Length} relic(s) in Resources/Relics/");
+                foreach (var relic in relicAssets)
+                {
+                    if (_relicManager.AddRelic(relic))
+                    {
+                        Debug.Log($"[BattleController] Equipped relic: {relic.relicName} ({relic.rarity})");
+                    }
+                }
+            }
+            else
+            {
+                Debug.LogWarning("[BattleController] No relics found in Resources/Relics/. Create ScriptableObject relics in Unity to test the system.");
+            }
+            
+            // Update relic display UI
+            if (relicDisplay != null)
+            {
+                relicDisplay.DisplayRelics(_relicManager);
             }
         }
 
@@ -389,23 +431,35 @@ namespace DiceGame
             UpdateFeedback(sb.ToString());
 
             // Calculate multiplier using multiplier calculator
-            float mult = _multiplierCalculator.Calculate(submittedDice, submittedValues);
+            float diceMultiplier = _multiplierCalculator.Calculate(submittedDice, submittedValues);
 
             // Evaluate combo and trigger animated score display
             if (submittedValues.Count > 0)
             {
-                string combo = DiceHandEvaluator.Evaluate(submittedValues, out int finalScore, out float comboMult, mult);
+                // First evaluate combo to get base score and combo multiplier
+                string combo = DiceHandEvaluator.Evaluate(submittedValues, out int scoreBefore, out float comboMult, diceMultiplier);
                 
-                // Calculate breakdown for animation
+                // Calculate breakdown components
                 int diceSum = submittedValues.Sum();
                 int baseScore = CalculateBaseScore(combo);
                 
-                Debug.Log($"[BattleController] Combo: {combo}, Base: {baseScore}, Sum: {diceSum}, ComboMult: {comboMult}, DiceMult: {mult}, Final: {finalScore}");
+                // Create and populate ScoringContext for relics
+                var context = CreateScoringContext(submittedDice, submittedValues);
                 
-                // Trigger Balatro-style animated score display
+                // Apply all equipped relics
+                _relicManager.ApplyAll(context);
+                
+                // Calculate final score with relic modifiers
+                int finalScore = CalculateFinalScoreWithRelics(baseScore, diceSum, comboMult, diceMultiplier, context);
+                
+                // Log the scoring breakdown
+                LogScoringBreakdown(combo, baseScore, diceSum, comboMult, diceMultiplier, context, finalScore);
+                
+                // Trigger Balatro-style animated score display with relic info
                 if (scoreAnimator != null)
                 {
-                    scoreAnimator.AnimateScore(submittedValues, combo, baseScore, diceSum, comboMult, mult, finalScore);
+                    scoreAnimator.AnimateScore(submittedValues, combo, baseScore, diceSum, comboMult, diceMultiplier, 
+                                              context.additionalBase, context.multiplier, finalScore);
                 }
                 
                 _totalScore += finalScore;
@@ -468,6 +522,65 @@ namespace DiceGame
         {
             yield return new UnityEngine.WaitForSeconds(2.5f); // Wait for animation to complete
             StartNewHand();
+        }
+
+        /// <summary>
+        /// Create and populate ScoringContext for relic application
+        /// </summary>
+        private ScoringContext CreateScoringContext(List<BaseDice> submittedDice, List<int> submittedValues)
+        {
+            var context = new ScoringContext
+            {
+                submittedValues = new List<int>(submittedValues),
+                submittedDice = new List<BaseDice>(submittedDice),
+                handBudget = 6, // Default hand budget (could be modified by relics in future)
+                totalSelectedCost = submittedDice.Sum(d => d.cost),
+                rollsUsed = _handManager.RollsUsed,
+                maxRollsPerHand = maxRollsPerHand,
+                hasFillerInHand = submittedDice.Any(d => d is NormalDice)
+            };
+            
+            return context;
+        }
+
+        /// <summary>
+        /// Calculate final score with relic modifiers applied
+        /// Formula: (Base + Sum + RelicBase) × ComboMult × DiceMult × RelicMult
+        /// </summary>
+        private int CalculateFinalScoreWithRelics(int baseScore, int diceSum, float comboMult, 
+                                                   float diceMultiplier, ScoringContext context)
+        {
+            int adjustedBase = baseScore + diceSum + context.additionalBase;
+            float totalMultiplier = comboMult * diceMultiplier * context.multiplier;
+            return Mathf.RoundToInt(adjustedBase * totalMultiplier);
+        }
+
+        /// <summary>
+        /// Log detailed scoring breakdown with relic effects
+        /// </summary>
+        private void LogScoringBreakdown(string combo, int baseScore, int diceSum, float comboMult, 
+                                        float diceMultiplier, ScoringContext context, int finalScore)
+        {
+            Debug.Log("[BattleController] ====== SCORING BREAKDOWN ======");
+            Debug.Log($"  Combo: {combo}");
+            Debug.Log($"  Base Score: {baseScore}");
+            Debug.Log($"  Dice Sum: {diceSum}");
+            Debug.Log($"  Combo Multiplier: ×{comboMult:F2}");
+            Debug.Log($"  Dice Multiplier: ×{diceMultiplier:F2}");
+            
+            if (context.additionalBase != 0 || context.multiplier != 1f)
+            {
+                Debug.Log($"  --- RELIC EFFECTS ---");
+                if (context.additionalBase != 0)
+                    Debug.Log($"  Relic Base Bonus: +{context.additionalBase}");
+                if (context.multiplier != 1f)
+                    Debug.Log($"  Relic Multiplier: ×{context.multiplier:F2}");
+                Debug.Log($"  Adjusted Base: {baseScore + diceSum + context.additionalBase}");
+                Debug.Log($"  Total Multiplier: ×{(comboMult * diceMultiplier * context.multiplier):F2}");
+            }
+            
+            Debug.Log($"  FINAL SCORE: {finalScore}");
+            Debug.Log("[BattleController] =================================");
         }
 
         /// <summary>

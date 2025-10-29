@@ -13,6 +13,13 @@ namespace DiceGame.Relics
         public float straightMult = 1.2f;
         public float setKindPenalty = 0.9f;
 
+        private void Reset()
+        {
+            relicName = "Straight Edge";
+            rarity = RelicRarity.Common;
+            description = "Straights: +15 base, ×1.2 mult. Three/Four of a Kind: ×0.9 mult.";
+        }
+
         public override void Apply(ScoringContext context)
         {
             bool large = RelicUtils.IsLargeStraight(context.submittedValues);
@@ -40,6 +47,13 @@ namespace DiceGame.Relics
         public int baseOnAnyPair = 10;
         public float multOnTwoPlus = 1.15f;
         public float missPenalty = 0.95f;
+
+        private void Reset()
+        {
+            relicName = "Pair Bond";
+            rarity = RelicRarity.Common;
+            description = "Any pair: +10 base. Two Pair/Full House: ×1.15 mult. No pairs: ×0.95 mult.";
+        }
 
         public override void Apply(ScoringContext context)
         {
@@ -71,6 +85,13 @@ namespace DiceGame.Relics
         public int baseBonus = 10;
         public float multBonus = 1.15f;
         public float earlyPenalty = 0.9f;
+
+        private void Reset()
+        {
+            relicName = "Momentum Gyro";
+            rarity = RelicRarity.Common;
+            description = "Max rolls used: +10 base, ×1.15 mult. Early submit (≤1 roll): ×0.9 mult.";
+        }
 
         public override void Apply(ScoringContext context)
         {

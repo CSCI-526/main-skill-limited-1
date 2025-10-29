@@ -36,10 +36,10 @@ namespace DiceGame
         }
 
         /// <summary>
-        /// Animate score calculation with Balatro-style breakdown
+        /// Animate score calculation with Balatro-style breakdown (with optional relic bonuses)
         /// </summary>
         public void AnimateScore(List<int> diceValues, string comboName, int baseScore, int diceSum, 
-                                float comboMultiplier, float diceMultiplier, int finalScore)
+                                float comboMultiplier, float diceMultiplier, int relicBase, float relicMultiplier, int finalScore)
         {
             // Stop any existing animation
             if (_animationCoroutine != null)
@@ -49,12 +49,21 @@ namespace DiceGame
 
             _animationCoroutine = StartCoroutine(AnimateScoreCoroutine(
                 diceValues, comboName, baseScore, diceSum, 
-                comboMultiplier, diceMultiplier, finalScore));
+                comboMultiplier, diceMultiplier, relicBase, relicMultiplier, finalScore));
+        }
+
+        /// <summary>
+        /// Legacy AnimateScore method without relic parameters (for backward compatibility)
+        /// </summary>
+        public void AnimateScore(List<int> diceValues, string comboName, int baseScore, int diceSum, 
+                                float comboMultiplier, float diceMultiplier, int finalScore)
+        {
+            AnimateScore(diceValues, comboName, baseScore, diceSum, comboMultiplier, diceMultiplier, 0, 1f, finalScore);
         }
 
         private IEnumerator AnimateScoreCoroutine(List<int> diceValues, string comboName, int baseScore, 
                                                    int diceSum, float comboMultiplier, float diceMultiplier, 
-                                                   int finalScore)
+                                                   int relicBase, float relicMultiplier, int finalScore)
         {
             // Ensure combo text is visible at start
             if (comboScoreText != null)
@@ -110,12 +119,52 @@ namespace DiceGame
                     yield return StartCoroutine(PulseText(comboScoreText));
                 }
                 
-                display += $"<color=#FFAA44>= {finalScore}</color>\n";
+                int afterDiceMult = Mathf.RoundToInt(afterComboMult * diceMultiplier);
+                display += $"<color=#FFAA44>= {afterDiceMult}</color>\n";
                 UpdateComboDisplay(display);
                 yield return new WaitForSeconds(stepDelay);
             }
 
-            // Step 6: Show final score with emphasis (SMALLER SIZE)
+            // Step 6: Show relic bonuses (if applicable)
+            bool hasRelicEffects = relicBase != 0 || relicMultiplier != 1f;
+            if (hasRelicEffects)
+            {
+                display += $"<color=#00FFFF>--- RELIC EFFECTS ---</color>\n";
+                UpdateComboDisplay(display);
+                yield return new WaitForSeconds(stepDelay * 0.5f);
+                
+                if (relicBase != 0)
+                {
+                    display += $"<color=#00FFFF>+ Relic Base Bonus:</color> <b>+{relicBase}</b>\n";
+                    int newBase = baseScore + diceSum + relicBase;
+                    display += $"<color=#FFAA44>Base → {newBase}</color>\n";
+                    UpdateComboDisplay(display);
+                    
+                    if (comboScoreText != null)
+                    {
+                        yield return StartCoroutine(PulseText(comboScoreText));
+                    }
+                    
+                    yield return new WaitForSeconds(stepDelay);
+                }
+                
+                if (relicMultiplier != 1f)
+                {
+                    display += $"<color=#00FFFF>× Relic Multiplier:</color> <b>×{relicMultiplier:F2}</b>\n";
+                    UpdateComboDisplay(display);
+                    
+                    if (comboScoreText != null)
+                    {
+                        yield return StartCoroutine(PulseText(comboScoreText));
+                    }
+                    
+                    display += $"<color=#FFAA44>= {finalScore}</color>\n";
+                    UpdateComboDisplay(display);
+                    yield return new WaitForSeconds(stepDelay);
+                }
+            }
+
+            // Step 7: Show final score with emphasis (SMALLER SIZE)
             display += $"<size=150%><color=#FFD700><b>FINAL SCORE: {finalScore}</b></color></size>";
             UpdateComboDisplay(display);
             

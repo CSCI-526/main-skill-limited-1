@@ -11,6 +11,13 @@ namespace DiceGame.Relics
     {
         public float unspentPenalty = 0.95f;
 
+        private void Reset()
+        {
+            relicName = "Tight Purse";
+            rarity = RelicRarity.Rare;
+            description = "+1 hand budget. Unspent budget ≥1: ×0.95 mult.";
+        }
+
         public override void Apply(ScoringContext context)
         {
             context.handBudget += 1;
@@ -29,6 +36,13 @@ namespace DiceGame.Relics
     {
         public int futureExtraCooldown = 1;
 
+        private void Reset()
+        {
+            relicName = "Cooldown Radiator";
+            rarity = RelicRarity.Rare;
+            description = "Can select one cooling die. Next hand: +1 extra cooldown.";
+        }
+
         public override void Apply(ScoringContext context)
         {
             // Only record the debt; actual selection rule handled by gameplay later
@@ -44,6 +58,13 @@ namespace DiceGame.Relics
     {
         public int rerolls = 1;
         public int nextHandBudgetCost = -1;
+
+        private void Reset()
+        {
+            relicName = "Filler Battery";
+            rarity = RelicRarity.Rare;
+            description = "With filler dice: +1 reroll. Next hand: -1 budget.";
+        }
 
         public override void Apply(ScoringContext context)
         {
@@ -64,6 +85,13 @@ namespace DiceGame.Relics
         public float perSix = 0.05f;
         public float maxBonus = 0.25f;
         public float floorOnOne = 0.85f;
+
+        private void Reset()
+        {
+            relicName = "Loaded Coin";
+            rarity = RelicRarity.Rare;
+            description = "Each 6: +5% mult (max +25%). Any 1s: mult capped at ×0.85.";
+        }
 
         public override void Apply(ScoringContext context)
         {
@@ -87,6 +115,13 @@ namespace DiceGame.Relics
         public float rewardMult = 1.15f;
         public float thriftPenalty = 0.95f;
 
+        private void Reset()
+        {
+            relicName = "Crown of Excess";
+            rarity = RelicRarity.Rare;
+            description = "Cost ≥ budget: ×1.15 mult. Cost ≤ budget-2: ×0.95 mult.";
+        }
+
         public override void Apply(ScoringContext context)
         {
             if (context.totalSelectedCost >= context.handBudget)
@@ -106,6 +141,13 @@ namespace DiceGame.Relics
     [CreateAssetMenu(menuName = "DiceRogue/Relics/Echo Prism", fileName = "Relic_EchoPrism")]
     public class RelicEchoPrism : RelicBase
     {
+        private void Reset()
+        {
+            relicName = "Echo Prism";
+            rarity = RelicRarity.Rare;
+            description = "Highest die value added to base score again.";
+        }
+
         public override void Apply(ScoringContext context)
         {
             if (context.submittedValues.Count == 0) return;
