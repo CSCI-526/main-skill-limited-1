@@ -6,6 +6,8 @@ using UnityEngine.UI;
 using TMPro;
 using DiceGame.Core;
 using DiceGame.Analytics;
+using DiceGame.Relics;
+using DiceGame.UI;
 using UnityEngine.SceneManagement;
 
 namespace DiceGame
@@ -38,6 +40,9 @@ namespace DiceGame
         [Header("Score Display")]
         public ScoreAnimator scoreAnimator; // Animated score display system
         public TMP_Text targetScoreText;    // Target score display
+        
+        [Header("Relic Display")]
+        public RelicDisplay relicDisplay;   // Visual display for equipped relics
 
         [Header("Config")]
         public int diceCount = 5;         // Fixed 5 dice per hand
@@ -50,14 +55,12 @@ namespace DiceGame
         // Core components
         private HandManager _handManager;
         private DiceEffectHandler _effectHandler;
-        private DiceMultiplierCalculator _multiplierCalculator;
         private DiceViewFactory _viewFactory;
-        
-        // Score tracking
-        private int _totalScore = 0;
-        private int _currentLevel = 1;
-        private int _currentTargetScore;
-        private float _sessionStartTime;
+        private RelicManager _relicManager;
+        private ScoreCalculator _scoreCalculator;
+        private ProgressionManager _progressionManager;
+        private BattleUIPresenter _uiPresenter;
+        private HandCompositionService _compositionService;
 
         // Current hand state
         private readonly List<BaseDice> _dice = new();
@@ -92,26 +95,42 @@ namespace DiceGame
                     scoreAnimator.ResetTotalScore();
                 }
             }
+            
+            // Link score animator to relic display for pop effects
+            if (scoreAnimator != null && relicDisplay != null)
+            {
+                scoreAnimator.relicDisplay = relicDisplay;
+            }
 
-            // Initialize target score and level
-            // Check if continuing from reward scene
+            // Initialize core components first (needed for other initialization)
+            _handManager = new HandManager();
+            _handManager.SetMaxRolls(maxRollsPerHand);
+            
+            _effectHandler = new DiceEffectHandler();
+            _viewFactory = new DiceViewFactory(diceViewPrefab, diceRowParent);
+            _relicManager = new RelicManager();
+            _scoreCalculator = new ScoreCalculator();
+            _uiPresenter = new BattleUIPresenter();
+            _compositionService = new HandCompositionService();
+            
+            // Initialize progression manager
+            // Check if continuing from reward scene to restore level/target
             if (ContinuingFromReward)
             {
-                _currentLevel = PendingLevel;
-                _currentTargetScore = PendingTargetScore;
+                _progressionManager = new ProgressionManager(baseTargetScore);
+                _progressionManager.RestoreLevelState(PendingLevel, PendingTargetScore);
                 ContinuingFromReward = false; // Reset flag
-                Debug.Log($"[BattleController] Continuing from Reward Scene - Level {_currentLevel}, Target: {_currentTargetScore}");
+                Debug.Log($"[BattleController] Continuing from Reward Scene - Level {PendingLevel}, Target: {PendingTargetScore}");
             }
             else
             {
-                _currentLevel = 1;
-                _currentTargetScore = baseTargetScore;
+                _progressionManager = new ProgressionManager(baseTargetScore);
             }
-            _sessionStartTime = Time.time;
+            
             UpdateTargetScoreDisplay();
             
             // Track initial player progression
-            UnityGameAnalytics.TrackPlayerProgression(_totalScore, 0, _currentLevel);
+            UnityGameAnalytics.TrackPlayerProgression(_progressionManager.TotalScore, 0, _progressionManager.CurrentLevel);
 
             // Initialize and hide continue button
             if (continueButton != null)
@@ -119,14 +138,9 @@ namespace DiceGame
                 continueButton.gameObject.SetActive(false);
                 continueButton.onClick.AddListener(OnContinue);
             }
-
-            // Initialize core components
-            _handManager = new HandManager();
-            _handManager.SetMaxRolls(maxRollsPerHand);
             
-            _effectHandler = new DiceEffectHandler();
-            _multiplierCalculator = new DiceMultiplierCalculator();
-            _viewFactory = new DiceViewFactory(diceViewPrefab, diceRowParent);
+            // Add test relics (for demonstration - will be removed when proper relic acquisition system is added)
+            InitializeTestRelics();
 
             // Subscribe to cooldown system events
             cooldownSystem.OnDicePoolRefresh += OnDicePoolRefresh;
@@ -164,6 +178,38 @@ namespace DiceGame
             else
             {
                 Debug.Log("[BattleController] UnityGameAnalytics already exists");
+            }
+        }
+
+        /// <summary>
+        /// Initialize test relics for demonstration (will load from ScriptableObjects after Unity setup)
+        /// </summary>
+        private void InitializeTestRelics()
+        {
+            // Try to load relic ScriptableObjects from Resources
+            // User should create these in Unity and place them in Assets/Resources/Relics/
+            var relicAssets = Resources.LoadAll<RelicBase>("Relics");
+            
+            if (relicAssets != null && relicAssets.Length > 0)
+            {
+                Debug.Log($"[BattleController] Found {relicAssets.Length} relic(s) in Resources/Relics/");
+                foreach (var relic in relicAssets)
+                {
+                    if (_relicManager.AddRelic(relic))
+                    {
+                        Debug.Log($"[BattleController] Equipped relic: {relic.relicName} ({relic.rarity})");
+                    }
+                }
+            }
+            else
+            {
+                Debug.LogWarning("[BattleController] No relics found in Resources/Relics/. Create ScriptableObject relics in Unity to test the system.");
+            }
+            
+            // Update relic display UI
+            if (relicDisplay != null)
+            {
+                relicDisplay.DisplayRelics(_relicManager);
             }
         }
 
@@ -250,7 +296,7 @@ namespace DiceGame
         if (handRemaining <= 0 && handCount > 0) // Don't block the very first hand
         {
             Debug.LogWarning("[BattleController] Cannot start new hand - no hands remaining. Battle complete!");
-            UpdateFeedback("<color=#FF8888><b>No Hands Remaining!</b></color>\n\nAll hands have been used.\n<color=#AAAAAA>Battle complete! Press Continue to next level.</color>");
+            UpdateFeedback(_uiPresenter.FormatNoHandsRemaining());
             UpdateHandCounter(handCount, handRemaining);
             return;
         }
@@ -280,85 +326,51 @@ namespace DiceGame
 
         // Get available dice from cooldown system (after advancing cooldowns)
         var availableDice = cooldownSystem.GetAvailableDice();
-        var selectedDice = new List<BaseDice>();
         
-        if (availableDice.Count > 0)
+        // Use HandCompositionService to compose the hand
+        var composedHand = _compositionService.ComposeHand(availableDice, diceCount, shuffle: true);
+        _dice.AddRange(composedHand);
+        
+        // Separate special dice from normal dice for cooldown registration
+        var selectedSpecialDice = composedHand.Where(d => !(d is NormalDice)).ToList();
+        
+        if (selectedSpecialDice.Count > 0)
         {
-            // Select up to 5 dice (or all available if less than 5)
-            int diceToSelect = Mathf.Min(diceCount, availableDice.Count);
-            
-            // Randomly shuffle available dice for variety
-            var shuffledDice = availableDice.OrderBy(x => UnityEngine.Random.value).ToList();
-            
-            for (int i = 0; i < diceToSelect; i++)
-            {
-                selectedDice.Add(shuffledDice[i]);
-            }
-
-            Debug.Log($"[BattleController] Selected {selectedDice.Count} special dice from pool:");
-            foreach (var dice in selectedDice)
-            {
-                Debug.Log($"  Selected: {dice.diceName}");
-            }
-
             // Register selection with cooldown system
-            if (!cooldownSystem.SelectDiceForHand(selectedDice))
+            if (!cooldownSystem.SelectDiceForHand(selectedSpecialDice))
             {
                 Debug.LogError("[BattleController] Failed to select dice for hand!");
                 return;
             }
-        }
-        else
-        {
-            Debug.LogWarning("[BattleController] No special dice available from cooldown system!");
-        }
-
-        // Add selected special dice to hand
-        _dice.AddRange(selectedDice);
-        
-        // Track dice usage for analytics
-        foreach (var dice in selectedDice)
-        {
-            UnityGameAnalytics.TrackDiceUsage(dice.diceName);
-        }
-        
-        // Fill remaining slots with normal dice to reach 5 total
-        int normalDiceNeeded = diceCount - _dice.Count;
-        if (normalDiceNeeded > 0)
-        {
-            Debug.Log($"[BattleController] Filling {normalDiceNeeded} remaining slots with Normal Dice");
-            for (int i = 0; i < normalDiceNeeded; i++)
+            
+            // Track dice usage for analytics
+            foreach (var dice in selectedSpecialDice)
             {
-                var normalDice = new NormalDice();
-                normalDice.diceName = $"Normal Dice #{i + 1}";
-                _dice.Add(normalDice);
-                Debug.Log($"  Added: {normalDice.diceName}");
+                UnityGameAnalytics.TrackDiceUsage(dice.diceName);
             }
         }
         
-        Debug.Log($"[BattleController] Final hand composition: {_dice.Count} dice total ({selectedDice.Count} special + {normalDiceNeeded} normal)");
-        
         // Reset dice state for new hand
-        foreach (var dice in _dice)
-        {
-            dice.ResetLockAndValue(); // This sets lastRollValue = 0 and isLocked = false
-        }
+        _compositionService.ResetHandDice(_dice);
 
         // Create views using factory (includes placeholders for empty slots)
         var newViews = _viewFactory.CreateViews(_dice, diceCount);
         _views.AddRange(newViews);
+        
+        // Pass dice views to score animator for pop effects
+        if (scoreAnimator != null)
+        {
+            scoreAnimator.SetDiceViews(_views);
+        }
 
         // Start new hand in hand manager
         _handManager.StartHand();
         
-        // Build feedback message
-        string feedbackMsg = $"<size=110%><b>Hand {currentHand + 1}</b></size>\n\n";
-        feedbackMsg += $"<color=#88FF88>Ready! {diceCount} dice prepared.</color>\n";
-        if (selectedDice.Count < diceCount)
-        {
-            feedbackMsg += $"<color=#AAAAAA>({selectedDice.Count} special + {normalDiceNeeded} normal dice)</color>\n";
-        }
-        feedbackMsg += "\n<b>Instructions:</b>\n  • Roll the dice\n  • Click to lock dice you want to keep\n  • Submit when ready";
+        // Get hand composition for feedback
+        var (specialCount, normalCount) = _compositionService.GetHandComposition(_dice);
+        
+        // Build feedback message using UI presenter
+        string feedbackMsg = _uiPresenter.FormatHandReady(currentHand + 1, diceCount, specialCount, normalCount);
         
         UpdateFeedback(feedbackMsg);
         UpdateHandCounter(currentHand, remainingHands);
@@ -417,27 +429,9 @@ namespace DiceGame
             // Update deck status after roll
             UpdateDeckStatus();
 
-            // Build feedback - ONLY show dice status, no score calculation
-            var sb = new StringBuilder();
-            sb.AppendLine($"<size=110%><b>Roll {rollNumber}/{maxRollsPerHand}</b></size>\n");
-            sb.AppendLine("<b>Dice Status:</b>");
-            for (int i = 0; i < _dice.Count; i++)
-            {
-                var d = _dice[i];
-                if (d.tier != DiceTier.Filler) // Only show real dice
-                {
-                    string status = d.isLocked ? "<color=#FFD700>[LOCKED]</color>" : "";
-                    sb.AppendLine($"  • <b>{d.diceName}:</b> {d.lastRollValue} {status}");
-                }
-            }
-
-            sb.AppendLine(); // Empty line
-            if (rollNumber < maxRollsPerHand)
-                sb.AppendLine("<color=#88FF88>Click dice to lock/unlock, then Roll again or Submit.</color>");
-            else
-                sb.AppendLine("<color=#FF8888>Max rolls reached! Submit your combo now.</color>");
-
-            UpdateFeedback(sb.ToString());
+            // Build feedback using UI presenter
+            string feedbackMsg = _uiPresenter.FormatRollFeedback(_dice, rollNumber, maxRollsPerHand);
+            UpdateFeedback(feedbackMsg);
         }
 
         void OnSubmitCombo()
@@ -454,7 +448,7 @@ namespace DiceGame
             // Validate using HandManager
             if (!_handManager.CanSubmit(_dice))
             {
-                UpdateFeedback("<color=#FF8888><b>No dice are locked!</b></color>\n\nLock some dice before submitting.");
+                UpdateFeedback(_uiPresenter.FormatNoDiceLocked());
                 return;
             }
 
@@ -466,57 +460,127 @@ namespace DiceGame
             Debug.Log($"[BattleController] Rolls used: {_handManager.RollsUsed}/{maxRollsPerHand}");
             Debug.Log($"[BattleController] Submitted {submittedDice.Count} locked dice");
             
-            // Update feedback to show submitted dice (DICE STATUS ONLY)
-            var sb = new StringBuilder();
-            sb.AppendLine("<size=110%><b>COMBO SUBMITTED</b></size>\n");
-            sb.AppendLine($"<color=#AAAAAA>Rolls used: {_handManager.RollsUsed}/{maxRollsPerHand}</color>");
-            sb.AppendLine($"<color=#AAAAAA>Submitted {submittedDice.Count} dice:</color>\n");
+            // Update feedback to show submitted dice (using UI presenter)
+            string submittedFeedback = _uiPresenter.FormatComboSubmitted(submittedDice, _handManager.RollsUsed, maxRollsPerHand);
+            UpdateFeedback(submittedFeedback);
             
+            // Log submitted dice
             foreach (var dice in submittedDice)
             {
-                sb.AppendLine($"  • <b>{dice.diceName}:</b> {dice.lastRollValue} <color=#FFD700>[SUBMITTED]</color>");
                 Debug.Log($"  {dice.diceName}: {dice.lastRollValue} [SUBMITTED]");
             }
-            
-            UpdateFeedback(sb.ToString());
 
-            // Calculate multiplier using multiplier calculator
-            float mult = _multiplierCalculator.Calculate(submittedDice, submittedValues);
-
-            // Evaluate combo and trigger animated score display
+            // Calculate score using centralized ScoreCalculator
             if (submittedValues.Count > 0)
             {
-                string combo = DiceHandEvaluator.Evaluate(submittedValues, out int finalScore, out float comboMult, mult);
+                // Create and populate ScoringContext for relics
+                var context = CreateScoringContext(submittedDice, submittedValues);
                 
-                // Calculate breakdown for animation
-                int diceSum = submittedValues.Sum();
-                int baseScore = CalculateBaseScore(combo);
+                // Calculate score breakdown (but final score will come from animation)
+                // This handles: combo evaluation, dice multipliers, and relic effects
+                var scoreResult = _scoreCalculator.CalculateScore(submittedDice, submittedValues, _relicManager, context);
                 
-                Debug.Log($"[BattleController] Combo: {combo}, Base: {baseScore}, Sum: {diceSum}, ComboMult: {comboMult}, DiceMult: {mult}, Final: {finalScore}");
-                
-                // Trigger Balatro-style animated score display
+                // Trigger animated score display - animation calculates the final score step-by-step
                 if (scoreAnimator != null)
                 {
-                    scoreAnimator.AnimateScore(submittedValues, combo, baseScore, diceSum, comboMult, mult, finalScore);
+                    scoreAnimator.AnimateScore(scoreResult, submittedDice);
+                    
+                    // Start coroutine to handle post-animation logic (UI refresh, score addition, next hand)
+                    StartCoroutine(AddScoreAfterAnimation(scoreResult.comboName, current + 1, submittedDice));
                 }
-                
-                _totalScore += finalScore;
-                
-                // Track analytics for hand completion and score combination
-                // Track player progression
-                UnityGameAnalytics.TrackPlayerProgression(_totalScore, current + 1, _currentLevel);
-                
-                // Track score combination
-                UnityGameAnalytics.TrackScoreCombination(combo);
+                else
+                {
+                    // Fallback if no animator: use calculator's final score and proceed immediately
+                    _progressionManager.AddScore(scoreResult.finalScore);
+                    UnityGameAnalytics.TrackPlayerProgression(_progressionManager.TotalScore, current + 1, _progressionManager.CurrentLevel);
+                    UnityGameAnalytics.TrackScoreCombination(scoreResult.comboName);
+                    
+                    // Complete hand and continue flow
+                    CompleteHandAndContinue(submittedDice);
+                }
             }
             else
             {
-                UpdateFeedback(sb.ToString() + "\n<color=#FF8888>No dice submitted!</color>");
+                UpdateFeedback(submittedFeedback + "\n<color=#FF8888>No dice submitted!</color>");
             }
             
             Debug.Log($"[BattleController] Submitted dice values: [{string.Join(", ", submittedValues)}]");
             Debug.Log("[BattleController] ============================");
             
+            // NOTE: Hand completion and UI refresh now happens AFTER animation in AddScoreAfterAnimation()
+        }
+
+        /// <summary>
+        /// Start a new hand after a brief delay
+        /// </summary>
+        private System.Collections.IEnumerator DelayedStartNewHand()
+        {
+            // Brief pause before starting new hand (animation already completed when this is called)
+            yield return new UnityEngine.WaitForSeconds(0.5f);
+            StartNewHand();
+        }
+
+        /// <summary>
+        /// Wait for score animation to complete, then refresh UI and add the calculated score to progression
+        /// </summary>
+        private System.Collections.IEnumerator AddScoreAfterAnimation(string comboName, int handNumber, List<BaseDice> submittedDice)
+        {
+            // Wait for animation to reach the UI refresh point (variable timing based on number of steps)
+            float timeout = 0f;
+            float maxTimeout = 15f; // Safety timeout
+            
+            while (!scoreAnimator.IsReadyForUIRefresh && timeout < maxTimeout)
+            {
+                yield return new WaitForSeconds(0.1f);
+                timeout += 0.1f;
+            }
+            
+            if (timeout >= maxTimeout)
+            {
+                Debug.LogWarning("[BattleController] Animation timeout - proceeding with UI refresh");
+            }
+            
+            // REFRESH UI: Dice, Deck, and Feedback (happens AFTER animation steps, BEFORE total score update)
+            Debug.Log("[BattleController] Refreshing UI after score animation...");
+            
+            // Clear dice views and refresh deck status
+            UpdateFeedback(_uiPresenter.FormatComboSubmitted(submittedDice, _handManager.RollsUsed, maxRollsPerHand) + "\n<color=#88FF88>Score calculated!</color>");
+            UpdateDeckStatus();
+            
+            // Get the final calculated score from the animator (already available at this point)
+            int finalScore = scoreAnimator.GetLastHandScore();
+            
+            // Add score to progression manager (this is the authoritative score from animation)
+            _progressionManager.AddScore(finalScore);
+            
+            // Track analytics
+            UnityGameAnalytics.TrackPlayerProgression(_progressionManager.TotalScore, handNumber, _progressionManager.CurrentLevel);
+            UnityGameAnalytics.TrackScoreCombination(comboName);
+            
+            Debug.Log($"[BattleController] Score added after animation: {finalScore}");
+            
+            // Wait for the entire animation to complete (total score update + fade out)
+            timeout = 0f;
+            while (scoreAnimator.IsAnimating && timeout < maxTimeout)
+            {
+                yield return new WaitForSeconds(0.1f);
+                timeout += 0.1f;
+            }
+            
+            if (timeout >= maxTimeout)
+            {
+                Debug.LogWarning("[BattleController] Animation completion timeout - proceeding anyway");
+            }
+            
+            // Complete hand and continue to next hand or evaluation
+            CompleteHandAndContinue(submittedDice);
+        }
+
+        /// <summary>
+        /// Complete the current hand and continue to next hand or evaluation
+        /// </summary>
+        private void CompleteHandAndContinue(List<BaseDice> submittedDice)
+        {
             // Complete the hand in cooldown system with submitted dice
             // Filter out NormalDice (temporary fillers) - only submit special dice from the pool
             var specialDiceOnly = submittedDice.Where(d => !(d is NormalDice)).ToList();
@@ -532,14 +596,11 @@ namespace DiceGame
             }
             _handManager.EndHand();
             
-            // Update deck status after submitting
-            UpdateDeckStatus();
-            
             // Check if we can start a new hand
             var (currentHand, handsRemaining) = cooldownSystem.GetHandCounter();
             if (handsRemaining > 0)
             {
-                // Start next hand after animation completes (brief delay)
+                // Start next hand after a brief delay
                 StartCoroutine(DelayedStartNewHand());
             }
             else
@@ -554,34 +615,23 @@ namespace DiceGame
         }
 
         /// <summary>
-        /// Start a new hand after a brief delay
+        /// Create and populate ScoringContext for relic application
         /// </summary>
-        private System.Collections.IEnumerator DelayedStartNewHand()
+        private ScoringContext CreateScoringContext(List<BaseDice> submittedDice, List<int> submittedValues)
         {
-            yield return new UnityEngine.WaitForSeconds(2.5f); // Wait for animation to complete
-            StartNewHand();
+            var context = new ScoringContext
+            {
+                submittedValues = new List<int>(submittedValues),
+                submittedDice = new List<BaseDice>(submittedDice),
+                handBudget = 6, // Default hand budget (could be modified by relics in future)
+                totalSelectedCost = submittedDice.Sum(d => d.cost),
+                rollsUsed = _handManager.RollsUsed,
+                maxRollsPerHand = maxRollsPerHand,
+                hasFillerInHand = submittedDice.Any(d => d is NormalDice)
+            };
+            
+            return context;
         }
-
-        /// <summary>
-        /// Helper method to extract base score from combo name
-        /// This matches the values in DiceHandEvaluator
-        /// </summary>
-        private int CalculateBaseScore(string comboName)
-        {
-            if (comboName.Contains("Five of a Kind") || comboName.Contains("Yahtzee")) return 180;
-            if (comboName.Contains("Four of a Kind")) return 120;
-            if (comboName.Contains("Full House")) return 100;
-            if (comboName.Contains("Large Straight")) return 90;
-            if (comboName.Contains("Small Straight")) return 75;
-            if (comboName.Contains("Sum Jackpot")) return 70;
-            if (comboName.Contains("Three of a Kind")) return 60;
-            if (comboName.Contains("Two Pair")) return 45;
-            if (comboName.Contains("All Even") || comboName.Contains("All Odd")) return 35;
-            if (comboName.Contains("One Pair")) return 30;
-            if (comboName.Contains("Low Roll") || comboName.Contains("High Roll")) return 25;
-            return 10; // No Combo (Bust)
-        }
-
 
         void ResetForNewHand()
         {
@@ -600,12 +650,10 @@ namespace DiceGame
                     continueButton.gameObject.SetActive(false);
                 }
                 
-                // Reset to level 1
-                _currentLevel = 1;
-                _currentTargetScore = baseTargetScore;
+                // Reset progression to level 1
+                _progressionManager.ResetToLevelOne();
                 
-                // Reset total score
-                _totalScore = 0;
+                // Reset score animator
                 if (scoreAnimator != null)
                 {
                     scoreAnimator.ResetTotalScore();
@@ -616,7 +664,7 @@ namespace DiceGame
                 
                 // Update displays
                 UpdateTargetScoreDisplay();
-                UpdateFeedback("<color=#88FF88><b>Starting Fresh!</b></color>\n\nReturning to Level 1.\nTarget: " + _currentTargetScore + "\n\n<color=#AAAAAA>Good luck!</color>");
+                UpdateFeedback(_uiPresenter.FormatResetToLevelOne(_progressionManager.TargetScore));
                 
                 // Start a new hand after refresh
                 StartNewHand();
@@ -652,14 +700,7 @@ namespace DiceGame
         {
             if (handCounterText != null)
             {
-                if (remaining <= 0)
-                {
-                    handCounterText.text = $"<color=#FF8888><b>No Hands Remaining!</b></color>\nHands: {current}/{current}\n<size=90%>(Battle complete - Press Reset to test again)</size>";
-                }
-                else
-                {
-                    handCounterText.text = $"Hand {current + 1}/{current + remaining} ({remaining} remaining)";
-                }
+                handCounterText.text = _uiPresenter.FormatHandCounter(current, remaining);
             }
         }
 
@@ -670,73 +711,10 @@ namespace DiceGame
         {
             if (deckStatusText == null) return;
 
-            var sb = new StringBuilder();
-            sb.AppendLine("<b>DICE DECK</b>\n");
-
             var allDice = cooldownSystem.GetAllDice();
             var selectedDiceNames = _dice.Where(d => !(d is NormalDice)).Select(d => d.diceName).ToHashSet();
 
-            // Display all dice in simple list with colored names by rarity
-            foreach (var dice in allDice)
-            {
-                AppendDiceStatus(sb, dice, selectedDiceNames);
-            }
-
-            // Compact summary
-            int available = allDice.Count(d => d.cooldownRemain == 0 && !selectedDiceNames.Contains(d.diceName));
-            int selected = selectedDiceNames.Count;
-            int onCooldown = allDice.Count(d => d.cooldownRemain > 0);
-
-            sb.AppendLine($"\n<size=90%>Ready: {available} | Active: {selected} | CD: {onCooldown}</size>");
-
-            deckStatusText.text = sb.ToString();
-        }
-
-        /// <summary>
-        /// Helper method to append dice status line
-        /// </summary>
-        private void AppendDiceStatus(StringBuilder sb, BaseDice dice, HashSet<string> selectedDiceNames)
-        {
-            // Determine rarity color for dice name
-            string rarityColor;
-            switch (dice.tier)
-            {
-                case DiceTier.Legendary:
-                    rarityColor = "#FFD700"; // Gold
-                    break;
-                case DiceTier.Rare:
-                    rarityColor = "#9370DB"; // Purple
-                    break;
-                case DiceTier.Common:
-                    rarityColor = "#90EE90"; // Light Green
-                    break;
-                default:
-                    rarityColor = "#FFFFFF"; // White
-                    break;
-            }
-
-            // Determine status
-            string statusText;
-            string statusColor;
-
-            if (selectedDiceNames.Contains(dice.diceName))
-            {
-                statusText = "ACTIVE";
-                statusColor = "#FFD700"; // Gold
-            }
-            else if (dice.cooldownRemain > 0)
-            {
-                statusText = $"CD({dice.cooldownRemain})";
-                statusColor = "#FF6666"; // Red
-            }
-            else
-            {
-                statusText = "READY";
-                statusColor = "#88FF88"; // Green
-            }
-
-            // Compact format: [Status] Dice Name
-            sb.AppendLine($"<color={statusColor}>[{statusText}]</color> <color={rarityColor}>{dice.diceName}</color>");
+            deckStatusText.text = _uiPresenter.FormatDeckStatus(allDice, selectedDiceNames);
         }
 
         /// <summary>
@@ -746,7 +724,7 @@ namespace DiceGame
         {
             if (targetScoreText != null)
             {
-                targetScoreText.text = $"<size=70%>Target Score</size>\n<size=150%><b>{_currentTargetScore}</b></size>\n<size=80%><color=#AAAAAA>Level {_currentLevel}</color></size>";
+                targetScoreText.text = _uiPresenter.FormatTargetScore(_progressionManager.TargetScore, _progressionManager.CurrentLevel);
             }
         }
 
@@ -755,7 +733,7 @@ namespace DiceGame
         /// </summary>
         private void OnContinue()
         {
-            Debug.Log($"[BattleController] Continuing to next level from Level {_currentLevel}...");
+            Debug.Log($"[BattleController] Continuing to next level from Level {_progressionManager.CurrentLevel}...");
 
             // Hide continue button
             if (continueButton != null)
@@ -763,29 +741,11 @@ namespace DiceGame
                 continueButton.gameObject.SetActive(false);
             }
 
-            // Increase level
-            _currentLevel++;
+            // Advance to next level using progression manager
+            _progressionManager.AdvanceToNextLevel();
+            _progressionManager.ResetScore();
 
-            // Calculate new target score based on level
-            // Progressive increase: +300, +400, +500, +600, +700, ...
-            // Formula: increase = 200 + n*100 where n = level number
-            // Level 1: 1000 (base)
-            // Level 2: 1000 + 300 = 1300
-            // Level 3: 1300 + 400 = 1700
-            // Level 4: 1700 + 500 = 2200
-            // Level 5: 2200 + 600 = 2800
-            // Level n: previous + (200 + n*100)
-            _currentTargetScore = baseTargetScore;
-            for (int i = 0; i < _currentLevel - 1; i++)
-            {
-                int increase = 300 + i * 100; // 300, 400, 500, 600, 700, ...
-                _currentTargetScore += increase;
-            }
-
-            Debug.Log($"[BattleController] Level {_currentLevel} - New target score: {_currentTargetScore}");
-
-            // Reset total score
-            _totalScore = 0;
+            // Reset score animator
             if (scoreAnimator != null)
             {
                 scoreAnimator.ResetTotalScore();
@@ -796,7 +756,7 @@ namespace DiceGame
 
             // Update displays
             UpdateTargetScoreDisplay();
-            UpdateFeedback($"<size=120%><b>Level {_currentLevel} Start!</b></size>\n\n<color=#88FF88>New target: {_currentTargetScore}</color>\n\n<color=#AAAAAA>All dice and hands have been reset.\nGood luck!</color>");
+            UpdateFeedback(_uiPresenter.FormatLevelStart(_progressionManager.CurrentLevel, _progressionManager.TargetScore));
 
             // Start first hand of new level
             StartNewHand();
@@ -810,15 +770,13 @@ namespace DiceGame
             // Wait for score animation to finish
             yield return new UnityEngine.WaitForSeconds(3f);
 
-            int finalScore = scoreAnimator != null ? scoreAnimator.GetTotalScore() : _totalScore;
-            bool passed = finalScore >= _currentTargetScore;
-
-            Debug.Log($"[BattleController] Target Evaluation - Target: {_currentTargetScore}, Final: {finalScore}, Passed: {passed}");
+            int finalScore = scoreAnimator != null ? scoreAnimator.GetTotalScore() : _progressionManager.TotalScore;
+            bool passed = _progressionManager.EvaluateTargetScore();
 
             // Trigger pass/fail animation in ScoreAnimator
             if (scoreAnimator != null)
             {
-                scoreAnimator.AnimateTargetEvaluation(finalScore, _currentTargetScore, passed);
+                scoreAnimator.AnimateTargetEvaluation(finalScore, _progressionManager.TargetScore, passed);
             }
             else
             {
@@ -826,7 +784,7 @@ namespace DiceGame
                 string resultMsg = passed 
                     ? "<color=#FFD700><b>TARGET PASSED!</b></color>\n\n" 
                     : "<color=#FF6666><b>TARGET FAILED</b></color>\n\n";
-                resultMsg += $"Final Score: {finalScore}\nTarget: {_currentTargetScore}\n\n";
+                resultMsg += $"Final Score: {finalScore}\nTarget: {_progressionManager.TargetScore}\n\n";
                 resultMsg += "<color=#AAAAAA>Press Reset to start new battle cycle.</color>";
                 UpdateFeedback(resultMsg);
             }
@@ -837,13 +795,8 @@ namespace DiceGame
             if (passed)
             {
                 // Prepare next level state for when we return from RewardScene
-                int nextLevel = _currentLevel + 1;
-                int nextTarget = baseTargetScore;
-                for (int i = 0; i < nextLevel - 1; i++)
-                {
-                    int increase = 300 + i * 100; // 300, 400, 500, 600, ...
-                    nextTarget += increase;
-                }
+                int nextLevel = _progressionManager.CurrentLevel + 1;
+                int nextTarget = _progressionManager.CalculateTargetScore(nextLevel);
 
                 PendingLevel = nextLevel;
                 PendingTargetScore = nextTarget;
@@ -856,7 +809,7 @@ namespace DiceGame
             else
             {
                 // Player failed - show game over message
-                UpdateFeedback("<color=#FF3333><b>GAME OVER</b></color>\n\nYou didn't reach the target score.\n\n<color=#AAAAAA>Press Reset to try again from Level 1.</color>");
+                UpdateFeedback(_uiPresenter.FormatGameOver());
             }
         }
 
@@ -868,7 +821,7 @@ namespace DiceGame
         private void OnDicePoolRefresh()
         {
             Debug.Log("[BattleController] Dice pool refreshed - starting new battle cycle!");
-            UpdateFeedback("<color=#88FF88><b>Dice Pool Refreshed!</b></color>\n\nAll dice are now available again.\nStarting new battle cycle...");
+            UpdateFeedback(_uiPresenter.FormatDicePoolRefreshed());
             UpdateDeckStatus(); // Update deck display
             
             // Start a new hand with refreshed dice

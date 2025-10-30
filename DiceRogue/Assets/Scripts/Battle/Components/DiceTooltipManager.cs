@@ -1,8 +1,12 @@
 using UnityEngine;
 using TMPro;
+using DiceGame.Relics;
 
 namespace DiceGame.Core
 {
+    /// <summary>
+    /// Unified tooltip manager for both dice and relics
+    /// </summary>
     public class DiceTooltipManager : MonoBehaviour
     {
         public static DiceTooltipManager Instance;
@@ -64,17 +68,13 @@ namespace DiceGame.Core
                     break;
 
                 case DiceTier.Legendary:
-                    // Rainbow
-                    string rainbow = "<color=#FFD700>L</color><color=#FF8C00>e</color><color=#FF4500>g</color><color=#FF1493>e</color><color=#9400D3>n</color><color=#4B0082>d</color><color=#1E90FF>a</color><color=#00CED1>r</color><color=#32CD32>y</color>";
-                    rarityText = rainbow;
-                    nameTextColored = Rainbowify(dice.diceName);
+                    // Gold
+                    nameColor = new Color32(255, 215, 0, 255);  // Gold
+                    rarityColor = new Color32(255, 215, 0, 255);
                     break;
             }
 
-            if (dice.tier != DiceTier.Legendary)
-                nameText.text = $"<color=#{ColorUtility.ToHtmlStringRGB(nameColor)}>{dice.diceName}</color>";
-            else
-                nameText.text = nameTextColored;
+            nameText.text = $"<color=#{ColorUtility.ToHtmlStringRGB(nameColor)}>{dice.diceName}</color>";
 
             descText.text = dice.description;
             extraText.text = $"Rarity: <color=#{ColorUtility.ToHtmlStringRGB(rarityColor)}>{rarityText}</color>   Cost: {dice.cost}";
@@ -82,18 +82,54 @@ namespace DiceGame.Core
             tooltipPanel.SetActive(true);
         }
 
-        private string Rainbowify(string text)
+        /// <summary>
+        /// Show tooltip for a relic
+        /// </summary>
+        public void ShowTooltip(RelicBase relic)
         {
-            string[] colors = { "#FFD700", "#FF8C00", "#FF4500", "#FF1493", "#9400D3", "#1E90FF", "#00CED1", "#32CD32" };
-            System.Text.StringBuilder sb = new System.Text.StringBuilder();
-            for (int i = 0; i < text.Length; i++)
+            if (relic == null)
             {
-                string c = colors[i % colors.Length];
-                sb.Append($"<color={c}>{text[i]}</color>");
+                Debug.LogWarning("[DiceTooltipManager] Relic is null");
+                return;
             }
-            return sb.ToString();
-        }
 
+            Color nameColor = Color.white;
+            Color rarityColor = Color.white;
+            string rarityText = relic.rarity.ToString();
+            string nameTextColored = relic.relicName;
+
+            switch (relic.rarity)
+            {
+                case RelicRarity.Common:
+                    nameColor = new Color32(143, 238, 143, 255);  // Light Green
+                    rarityColor = new Color32(143, 238, 143, 255);
+                    break;
+
+                case RelicRarity.Rare:
+                    nameColor = new Color32(147, 112, 219, 255);  // Purple
+                    rarityColor = new Color32(147, 112, 219, 255);
+                    break;
+
+                case RelicRarity.Legendary:
+                    // Gold
+                    nameColor = new Color32(255, 215, 0, 255);  // Gold
+                    rarityColor = new Color32(255, 215, 0, 255);
+                    break;
+            }
+
+            // Set name with color
+            nameText.text = $"<color=#{ColorUtility.ToHtmlStringRGB(nameColor)}>{relic.relicName}</color>";
+
+            // Set description
+            descText.text = string.IsNullOrEmpty(relic.description) 
+                ? "<i>No description available</i>" 
+                : relic.description;
+
+            // Set rarity info (relics don't have cost, just show rarity)
+            extraText.text = $"Rarity: <color=#{ColorUtility.ToHtmlStringRGB(rarityColor)}>{rarityText}</color>";
+
+            tooltipPanel.SetActive(true);
+        }
 
         public void HideTooltip()
         {
