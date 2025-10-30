@@ -90,6 +90,12 @@ namespace DiceGame
                     scoreAnimator.ResetTotalScore();
                 }
             }
+            
+            // Link score animator to relic display for pop effects
+            if (scoreAnimator != null && relicDisplay != null)
+            {
+                scoreAnimator.relicDisplay = relicDisplay;
+            }
 
             // Initialize core components first (needed for other initialization)
             _handManager = new HandManager();
@@ -257,6 +263,12 @@ namespace DiceGame
         // Create views using factory (includes placeholders for empty slots)
         var newViews = _viewFactory.CreateViews(_dice, diceCount);
         _views.AddRange(newViews);
+        
+        // Pass dice views to score animator for pop effects
+        if (scoreAnimator != null)
+        {
+            scoreAnimator.SetDiceViews(_views);
+        }
 
         // Start new hand in hand manager
         _handManager.StartHand();
@@ -375,19 +387,10 @@ namespace DiceGame
                 // This handles: combo evaluation, dice multipliers, and relic effects
                 var scoreResult = _scoreCalculator.CalculateScore(submittedDice, submittedValues, _relicManager, context);
                 
-                // Trigger Balatro-style animated score display with complete breakdown
+                // Trigger new animated score display with step-by-step breakdown
                 if (scoreAnimator != null)
                 {
-                    scoreAnimator.AnimateScore(
-                        submittedValues, 
-                        scoreResult.comboName, 
-                        scoreResult.comboBaseScore, 
-                        scoreResult.diceSum, 
-                        scoreResult.comboMultiplier, 
-                        scoreResult.totalDiceMultiplier, 
-                        scoreResult.relicAdditionalBase, 
-                        scoreResult.relicMultiplier, 
-                        scoreResult.finalScore);
+                    scoreAnimator.AnimateScore(scoreResult, submittedDice);
                 }
                 
                 // Add score to progression manager

@@ -2,44 +2,64 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using TMPro;
+using DiceGame.Core;
+using DiceGame.Relics;
+using DiceGame.UI;
 
 namespace DiceGame
 {
     /// <summary>
-    /// Balatro-style animated score display system
-    /// Shows calculation breakdown with smooth number counting animations
+    /// Clean score animation system with 2-line display
+    /// Line 1: Combo name
+    /// Line 2: Animated score with sliding bonuses
     /// </summary>
     public class ScoreAnimator : MonoBehaviour
     {
         [Header("UI References")]
-        public TMP_Text comboScoreText;
-        public TMP_Text totalScoreText;
-
+        public TMP_Text comboScoreText;     // Shows combo name and animated score
+        public TMP_Text totalScoreText;     // Shows total accumulated score
+        public TMP_Text bonusText;          // Floating bonus text (e.g., "+15")
+        
+        [Header("Component References")]
+        public RelicDisplay relicDisplay;   // For triggering relic pop effects
+        
         [Header("Animation Settings")]
-        public float countDuration = 0.5f;        // Duration for number counting animation
-        public float stepDelay = 0.3f;            // Delay between calculation steps
-        public float multiplierPulseScale = 1.2f; // Scale for multiplier pulse effect
-        public float displayDuration = 3.0f;      // How long to show result before fading
-        public float fadeOutDuration = 0.5f;      // Duration of fade out animation
+        public float stepDuration = 0.5f;           // Duration for each animation step
+        public float slideDistance = 100f;          // Distance for sliding bonus text
+        public float countUpDuration = 0.3f;        // Duration for counting up numbers
         public Color highlightColor = Color.yellow;
         public Color normalColor = Color.white;
-
+        
         private int _currentTotalScore = 0;
         private Coroutine _animationCoroutine;
-        private Coroutine _fadeOutCoroutine;
+        
+        // References to dice views (set by BattleController)
+        private List<DiceView> _diceViews = new List<DiceView>();
 
         void Start()
         {
             // Initialize displays
-            UpdateComboDisplay("");
-            UpdateTotalScore(0, false);
+            if (comboScoreText != null)
+                comboScoreText.text = "<color=#AAAAAA>Submit a combo to see score</color>";
+            
+            UpdateTotalScore(0);
+            
+            if (bonusText != null)
+                bonusText.gameObject.SetActive(false);
         }
 
         /// <summary>
-        /// Animate score calculation with Balatro-style breakdown (with optional relic bonuses)
+        /// Set references to dice views for pop effects
         /// </summary>
-        public void AnimateScore(List<int> diceValues, string comboName, int baseScore, int diceSum, 
-                                float comboMultiplier, float diceMultiplier, int relicBase, float relicMultiplier, int finalScore)
+        public void SetDiceViews(List<DiceView> diceViews)
+        {
+            _diceViews = new List<DiceView>(diceViews);
+        }
+
+        /// <summary>
+        /// Animate score calculation with new step-by-step system
+        /// </summary>
+        public void AnimateScore(ScoreCalculator.ScoreResult scoreResult, List<BaseDice> submittedDice)
         {
             // Stop any existing animation
             if (_animationCoroutine != null)
@@ -47,25 +67,12 @@ namespace DiceGame
                 StopCoroutine(_animationCoroutine);
             }
 
-            _animationCoroutine = StartCoroutine(AnimateScoreCoroutine(
-                diceValues, comboName, baseScore, diceSum, 
-                comboMultiplier, diceMultiplier, relicBase, relicMultiplier, finalScore));
+            _animationCoroutine = StartCoroutine(AnimateScoreCoroutine(scoreResult, submittedDice));
         }
 
-        /// <summary>
-        /// Legacy AnimateScore method without relic parameters (for backward compatibility)
-        /// </summary>
-        public void AnimateScore(List<int> diceValues, string comboName, int baseScore, int diceSum, 
-                                float comboMultiplier, float diceMultiplier, int finalScore)
+        private IEnumerator AnimateScoreCoroutine(ScoreCalculator.ScoreResult scoreResult, List<BaseDice> submittedDice)
         {
-            AnimateScore(diceValues, comboName, baseScore, diceSum, comboMultiplier, diceMultiplier, 0, 1f, finalScore);
-        }
-
-        private IEnumerator AnimateScoreCoroutine(List<int> diceValues, string comboName, int baseScore, 
-                                                   int diceSum, float comboMultiplier, float diceMultiplier, 
-                                                   int relicBase, float relicMultiplier, int finalScore)
-        {
-            // Ensure combo text is visible at start
+            // Ensure text is visible
             if (comboScoreText != null)
             {
                 var color = comboScoreText.color;
@@ -73,129 +80,193 @@ namespace DiceGame
                 comboScoreText.color = color;
             }
 
-            // Step 1: Show combo name and dice (SMALLER SIZE)
-            string display = $"<size=120%><b>{comboName}</b></size>\n";
-            display += $"<color=#000000>Dice: [{string.Join(", ", diceValues)}]</color>\n";
-            UpdateComboDisplay(display);
-            yield return new WaitForSeconds(stepDelay);
-
-            // Step 2: Show base score
-            display += $"<color=#88FF88>Base Score:</color> <b>{baseScore}</b>\n";
-            UpdateComboDisplay(display);
-            yield return new WaitForSeconds(stepDelay);
-
-            // Step 3: Add dice sum
-            int currentScore = baseScore;
-            display += $"<color=#88FF88>+ Dice Sum:</color> <b>{diceSum}</b>\n";
-            display += $"<color=#FFAA44>= {baseScore + diceSum}</color>\n";
-            UpdateComboDisplay(display);
-            yield return new WaitForSeconds(stepDelay);
-
-            // Step 4: Show combo multiplier
-            currentScore = baseScore + diceSum;
-            display += $"<color=#FF88FF>× Combo Multiplier:</color> <b>×{comboMultiplier:F1}</b>\n";
-            UpdateComboDisplay(display);
-            
-            // Pulse effect for multiplier
+            // Step 1: Show combo name
             if (comboScoreText != null)
             {
-                yield return StartCoroutine(PulseText(comboScoreText));
+                comboScoreText.text = $"<size=120%><b>{scoreResult.comboName}</b></size>\n";
             }
-            
-            int afterComboMult = Mathf.RoundToInt(currentScore * comboMultiplier);
-            display += $"<color=#FFAA44>= {afterComboMult}</color>\n";
-            UpdateComboDisplay(display);
-            yield return new WaitForSeconds(stepDelay);
+            yield return new WaitForSeconds(0.2f);
 
-            // Step 5: Show dice multiplier (if applicable)
-            if (diceMultiplier > 1f)
+            // Step 2: Show base score
+            int currentScore = scoreResult.comboBaseScore;
+            UpdateComboScore(scoreResult.comboName, currentScore);
+            yield return StartCoroutine(PopScoreText(1.0f));
+            yield return new WaitForSeconds(0.15f);
+
+            // Step 3: Add dice sum with sliding animation
+            yield return StartCoroutine(AnimateSlidingBonus(scoreResult.diceSum, false));
+            currentScore += scoreResult.diceSum;
+            yield return StartCoroutine(CountToScore(scoreResult.comboName, currentScore, 1.2f));
+
+            // Step 4: Process each step (bonuses and multipliers)
+            foreach (var step in scoreResult.steps)
             {
-                display += $"<color=#FF88FF>× Dice Multiplier:</color> <b>×{diceMultiplier:F1}</b>\n";
-                UpdateComboDisplay(display);
-                
-                // Pulse effect for multiplier
-                if (comboScoreText != null)
+                if (step.isMultiplier)
                 {
-                    yield return StartCoroutine(PulseText(comboScoreText));
+                    // Show multiplier with pop effect
+                    yield return StartCoroutine(AnimateSlidingBonus(0, true, step.multiplier));
+                    
+                    // Apply multiplier
+                    int newScore = Mathf.RoundToInt(currentScore * step.multiplier);
+                    
+                    // Calculate intensity based on score gain
+                    float scoreGain = newScore - currentScore;
+                    float intensity = CalculateIntensity(scoreGain);
+                    
+                    currentScore = newScore;
+                    yield return StartCoroutine(CountToScore(scoreResult.comboName, currentScore, intensity));
+                    
+                    // Trigger pop on source object
+                    TriggerSourcePop(step.sourceObject, submittedDice, intensity);
                 }
-                
-                int afterDiceMult = Mathf.RoundToInt(afterComboMult * diceMultiplier);
-                display += $"<color=#FFAA44>= {afterDiceMult}</color>\n";
-                UpdateComboDisplay(display);
-                yield return new WaitForSeconds(stepDelay);
-            }
-
-            // Step 6: Show relic bonuses (if applicable)
-            bool hasRelicEffects = relicBase != 0 || relicMultiplier != 1f;
-            if (hasRelicEffects)
-            {
-                display += $"<color=#00FFFF>--- RELIC EFFECTS ---</color>\n";
-                UpdateComboDisplay(display);
-                yield return new WaitForSeconds(stepDelay * 0.5f);
-                
-                if (relicBase != 0)
+                else
                 {
-                    display += $"<color=#00FFFF>+ Relic Base Bonus:</color> <b>+{relicBase}</b>\n";
-                    int newBase = baseScore + diceSum + relicBase;
-                    display += $"<color=#FFAA44>Base → {newBase}</color>\n";
-                    UpdateComboDisplay(display);
+                    // Show addition bonus with sliding animation
+                    yield return StartCoroutine(AnimateSlidingBonus(step.amount, false));
                     
-                    if (comboScoreText != null)
-                    {
-                        yield return StartCoroutine(PulseText(comboScoreText));
-                    }
+                    // Calculate intensity based on bonus amount
+                    float intensity = CalculateIntensity(step.amount);
                     
-                    yield return new WaitForSeconds(stepDelay);
-                }
-                
-                if (relicMultiplier != 1f)
-                {
-                    display += $"<color=#00FFFF>× Relic Multiplier:</color> <b>×{relicMultiplier:F2}</b>\n";
-                    UpdateComboDisplay(display);
+                    currentScore += step.amount;
+                    yield return StartCoroutine(CountToScore(scoreResult.comboName, currentScore, intensity));
                     
-                    if (comboScoreText != null)
-                    {
-                        yield return StartCoroutine(PulseText(comboScoreText));
-                    }
-                    
-                    display += $"<color=#FFAA44>= {finalScore}</color>\n";
-                    UpdateComboDisplay(display);
-                    yield return new WaitForSeconds(stepDelay);
+                    // Trigger pop on source object
+                    TriggerSourcePop(step.sourceObject, submittedDice, intensity);
                 }
             }
 
-            // Step 7: Show final score with emphasis (SMALLER SIZE)
-            display += $"<size=150%><color=#FFD700><b>FINAL SCORE: {finalScore}</b></color></size>";
-            UpdateComboDisplay(display);
+            // Step 5: Show final hand score and update total with big pop
+            int handScore = scoreResult.finalScore;
+            float finalIntensity = CalculateIntensity(handScore);
             
-            // Animate counting up the total score
-            yield return StartCoroutine(CountUpScore(_currentTotalScore, _currentTotalScore + finalScore));
-            _currentTotalScore += finalScore;
+            yield return new WaitForSeconds(0.3f);
+            yield return StartCoroutine(AnimateTotalScoreUpdate(handScore, finalIntensity));
+            
+            _currentTotalScore += handScore;
 
-            // Hold the final display for a moment
-            yield return new WaitForSeconds(displayDuration);
+            // Hold for a moment
+            yield return new WaitForSeconds(0.8f);
 
-            // Fade out the combo score text
+            // Fade out combo text
             yield return StartCoroutine(FadeOutComboText());
         }
 
         /// <summary>
-        /// Pulse animation for emphasis
+        /// Animate sliding bonus text from right to center with fade
         /// </summary>
-        private IEnumerator PulseText(TMP_Text text)
+        private IEnumerator AnimateSlidingBonus(int amount, bool isMultiplier, float multiplier = 1f)
         {
-            Vector3 originalScale = text.transform.localScale;
-            Vector3 targetScale = originalScale * multiplierPulseScale;
-            
+            if (bonusText == null) yield break;
+
+            // Set text
+            if (isMultiplier)
+            {
+                bonusText.text = $"<b>×{multiplier:F1}</b>";
+            }
+            else
+            {
+                bonusText.text = $"<b>+{amount}</b>";
+            }
+
+            // Position on right side
+            RectTransform rt = bonusText.GetComponent<RectTransform>();
+            if (rt != null)
+            {
+                Vector3 startPos = rt.anchoredPosition;
+                startPos.x += slideDistance;
+                Vector3 endPos = rt.anchoredPosition;
+                
+                rt.anchoredPosition = startPos;
+
+                // Make visible
+                bonusText.gameObject.SetActive(true);
+                Color startColor = bonusText.color;
+                startColor.a = 1f;
+                bonusText.color = startColor;
+
+                float elapsed = 0f;
+                float duration = stepDuration * 0.6f;
+
+                // Slide and fade
+                while (elapsed < duration)
+                {
+                    elapsed += Time.deltaTime;
+                    float t = elapsed / duration;
+
+                    // Ease out movement
+                    float smoothT = 1f - Mathf.Pow(1f - t, 3f);
+                    rt.anchoredPosition = Vector3.Lerp(startPos, endPos, smoothT);
+
+                    // Fade out in second half
+                    if (t > 0.5f)
+                    {
+                        float fadeT = (t - 0.5f) * 2f;
+                        Color color = bonusText.color;
+                        color.a = Mathf.Lerp(1f, 0f, fadeT);
+                        bonusText.color = color;
+                    }
+
+                    yield return null;
+                }
+
+                // Hide
+                bonusText.gameObject.SetActive(false);
+            }
+        }
+
+        /// <summary>
+        /// Count up to target score with pop effect
+        /// </summary>
+        private IEnumerator CountToScore(string comboName, int targetScore, float intensity)
+        {
+            if (comboScoreText == null) yield break;
+
+            // Extract current score from text
+            string currentText = comboScoreText.text;
+            int startScore = ExtractScoreFromText(currentText);
+
             float elapsed = 0f;
-            float duration = 0.2f;
+            float duration = countUpDuration;
+
+            while (elapsed < duration)
+            {
+                elapsed += Time.deltaTime;
+                float t = elapsed / duration;
+
+                // Ease out
+                float smoothT = 1f - Mathf.Pow(1f - t, 3f);
+                int score = Mathf.RoundToInt(Mathf.Lerp(startScore, targetScore, smoothT));
+
+                UpdateComboScore(comboName, score);
+                yield return null;
+            }
+
+            UpdateComboScore(comboName, targetScore);
+            
+            // Pop effect based on intensity
+            yield return StartCoroutine(PopScoreText(intensity));
+        }
+
+        /// <summary>
+        /// Pop animation on score text
+        /// </summary>
+        private IEnumerator PopScoreText(float intensity)
+        {
+            if (comboScoreText == null) yield break;
+
+            Vector3 originalScale = comboScoreText.transform.localScale;
+            float scaleMultiplier = 1.0f + (0.15f * Mathf.Min(intensity, 3f)); // Cap at 3x
+            Vector3 targetScale = originalScale * scaleMultiplier;
+
+            float duration = 0.1f;
+            float elapsed = 0f;
 
             // Scale up
             while (elapsed < duration)
             {
                 elapsed += Time.deltaTime;
                 float t = elapsed / duration;
-                text.transform.localScale = Vector3.Lerp(originalScale, targetScale, t);
+                comboScoreText.transform.localScale = Vector3.Lerp(originalScale, targetScale, t);
                 yield return null;
             }
 
@@ -205,76 +276,178 @@ namespace DiceGame
             {
                 elapsed += Time.deltaTime;
                 float t = elapsed / duration;
-                text.transform.localScale = Vector3.Lerp(targetScale, originalScale, t);
+                comboScoreText.transform.localScale = Vector3.Lerp(targetScale, originalScale, t);
                 yield return null;
             }
 
-            text.transform.localScale = originalScale;
+            comboScoreText.transform.localScale = originalScale;
         }
 
         /// <summary>
-        /// Animate counting from start to end value
+        /// Animate total score update with +handScore display
         /// </summary>
-        private IEnumerator CountUpScore(int startValue, int endValue)
+        private IEnumerator AnimateTotalScoreUpdate(int handScore, float intensity)
         {
+            // Show +handScore in bonus text
+            if (bonusText != null)
+            {
+                bonusText.text = $"<size=150%><b>+{handScore}</b></size>";
+                bonusText.gameObject.SetActive(true);
+                
+                Color color = bonusText.color;
+                color.a = 1f;
+                bonusText.color = color;
+            }
+
+            // Count up total score
+            int startScore = _currentTotalScore;
+            int targetScore = _currentTotalScore + handScore;
+
             float elapsed = 0f;
-            
-            while (elapsed < countDuration)
+            float duration = countUpDuration; // Match standard count duration
+
+            while (elapsed < duration)
             {
                 elapsed += Time.deltaTime;
-                float t = elapsed / countDuration;
-                
-                // Use ease-out curve for smooth deceleration
+                float t = elapsed / duration;
+
                 float smoothT = 1f - Mathf.Pow(1f - t, 3f);
-                int currentValue = Mathf.RoundToInt(Mathf.Lerp(startValue, endValue, smoothT));
+                int score = Mathf.RoundToInt(Mathf.Lerp(startScore, targetScore, smoothT));
+
+                UpdateTotalScore(score);
                 
-                UpdateTotalScore(currentValue, true);
+                // Pop total score text
+                if (totalScoreText != null && t > 0.5f)
+                {
+                    float popT = (t - 0.5f) * 2f;
+                    float scale = 1.0f + (0.2f * intensity * Mathf.Sin(popT * Mathf.PI));
+                    totalScoreText.transform.localScale = Vector3.one * scale;
+                }
+
                 yield return null;
             }
+
+            UpdateTotalScore(targetScore);
             
-            UpdateTotalScore(endValue, false);
+            if (totalScoreText != null)
+            {
+                totalScoreText.transform.localScale = Vector3.one;
+            }
+
+            // Fade out bonus text
+            if (bonusText != null)
+            {
+                elapsed = 0f;
+                duration = 0.3f;
+                Color startColor = bonusText.color;
+
+                while (elapsed < duration)
+                {
+                    elapsed += Time.deltaTime;
+                    float t = elapsed / duration;
+                    Color color = bonusText.color;
+                    color.a = Mathf.Lerp(startColor.a, 0f, t);
+                    bonusText.color = color;
+                    yield return null;
+                }
+
+                bonusText.gameObject.SetActive(false);
+            }
         }
 
         /// <summary>
-        /// Update combo score display
+        /// Trigger pop effect on source dice or relic
         /// </summary>
-        private void UpdateComboDisplay(string text)
+        private void TriggerSourcePop(object sourceObject, List<BaseDice> submittedDice, float intensity)
+        {
+            if (sourceObject == null) return;
+
+            // Check if it's a dice
+            if (sourceObject is BaseDice dice)
+            {
+                // Find corresponding dice view
+                int diceIndex = submittedDice.IndexOf(dice);
+                if (diceIndex >= 0 && diceIndex < _diceViews.Count && _diceViews[diceIndex] != null)
+                {
+                    _diceViews[diceIndex].PopEffect(intensity);
+                }
+            }
+            // Check if it's a relic
+            else if (sourceObject is RelicBase relic)
+            {
+                if (relicDisplay != null)
+                {
+                    relicDisplay.PopRelicByReference(relic, intensity);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Calculate animation intensity based on score value
+        /// Higher scores = stronger effects
+        /// </summary>
+        private float CalculateIntensity(float scoreValue)
+        {
+            // Scale intensity: 0-50 = 1x, 50-200 = 1-2x, 200+ = 2-3x
+            if (scoreValue < 50) return 1.0f;
+            else if (scoreValue < 200) return 1.0f + ((scoreValue - 50) / 150f);
+            else return 2.0f + Mathf.Min((scoreValue - 200) / 200f, 1f);
+        }
+
+        /// <summary>
+        /// Update combo score display (2 lines: combo name + score)
+        /// </summary>
+        private void UpdateComboScore(string comboName, int score)
         {
             if (comboScoreText != null)
             {
-                comboScoreText.text = text;
+                comboScoreText.text = $"<size=120%><b>{comboName}</b></size>\n<size=200%><b>{score}</b></size>";
             }
+        }
+
+        /// <summary>
+        /// Extract current score value from formatted text
+        /// </summary>
+        private int ExtractScoreFromText(string text)
+        {
+            // Try to extract number from second line
+            string[] lines = text.Split('\n');
+            if (lines.Length > 1)
+            {
+                string scoreLine = lines[1];
+                // Remove all formatting tags
+                scoreLine = System.Text.RegularExpressions.Regex.Replace(scoreLine, "<.*?>", string.Empty);
+                if (int.TryParse(scoreLine.Trim(), out int score))
+                {
+                    return score;
+                }
+            }
+            return 0;
         }
 
         /// <summary>
         /// Update total score display
         /// </summary>
-        private void UpdateTotalScore(int score, bool isAnimating)
+        private void UpdateTotalScore(int score)
         {
             if (totalScoreText != null)
             {
                 totalScoreText.text = $"<size=80%>Total Score</size>\n<size=150%><b>{score}</b></size>";
-                
-                // Highlight during animation
-                if (isAnimating)
-                {
-                    totalScoreText.color = highlightColor;
-                }
-                else
-                {
-                    totalScoreText.color = normalColor;
-                }
             }
         }
 
         /// <summary>
-        /// Reset total score (e.g., for new run)
+        /// Reset total score
         /// </summary>
         public void ResetTotalScore()
         {
             _currentTotalScore = 0;
-            UpdateTotalScore(0, false);
-            UpdateComboDisplay("<color=#AAAAAA>Submit a combo to see score breakdown</color>");
+            UpdateTotalScore(0);
+            
+            if (comboScoreText != null)
+            {
+                comboScoreText.text = "<color=#AAAAAA>Submit a combo to see score</color>";
+            }
         }
 
         /// <summary>
@@ -286,7 +459,7 @@ namespace DiceGame
         }
 
         /// <summary>
-        /// Fade out the combo score text
+        /// Fade out combo text
         /// </summary>
         private IEnumerator FadeOutComboText()
         {
@@ -294,50 +467,30 @@ namespace DiceGame
 
             Color startColor = comboScoreText.color;
             float elapsed = 0f;
+            float duration = 0.3f;
 
-            while (elapsed < fadeOutDuration)
+            while (elapsed < duration)
             {
                 elapsed += Time.deltaTime;
-                float t = elapsed / fadeOutDuration;
-                
-                Color newColor = startColor;
-                newColor.a = Mathf.Lerp(1f, 0f, t);
-                comboScoreText.color = newColor;
-                
+                float t = elapsed / duration;
+
+                Color color = startColor;
+                color.a = Mathf.Lerp(1f, 0f, t);
+                comboScoreText.color = color;
+
                 yield return null;
             }
 
-            // Fully transparent and clear text
             Color finalColor = comboScoreText.color;
             finalColor.a = 0f;
             comboScoreText.color = finalColor;
-            comboScoreText.text = "";
         }
 
         /// <summary>
-        /// Skip animation and show final result immediately
-        /// </summary>
-        public void SkipAnimation()
-        {
-            if (_animationCoroutine != null)
-            {
-                StopCoroutine(_animationCoroutine);
-                _animationCoroutine = null;
-            }
-            
-            if (_fadeOutCoroutine != null)
-            {
-                StopCoroutine(_fadeOutCoroutine);
-                _fadeOutCoroutine = null;
-            }
-        }
-
-        /// <summary>
-        /// Animate target score evaluation with dramatic Balatro-style reveal
+        /// Animate target score evaluation with dramatic reveal
         /// </summary>
         public void AnimateTargetEvaluation(int finalScore, int targetScore, bool passed)
         {
-            // Stop any existing animation
             if (_animationCoroutine != null)
             {
                 StopCoroutine(_animationCoroutine);
@@ -348,82 +501,49 @@ namespace DiceGame
 
         private IEnumerator AnimateTargetEvaluationCoroutine(int finalScore, int targetScore, bool passed)
         {
-            // Ensure combo text is visible at start
-            if (comboScoreText != null)
-            {
-                var color = comboScoreText.color;
-                color.a = 1f;
-                comboScoreText.color = color;
-            }
+            if (comboScoreText == null) yield break;
 
-            // Step 1: Show "Evaluating..."
-            string display = "<size=180%><b>EVALUATING...</b></size>\n\n";
-            UpdateComboDisplay(display);
+            // Make visible
+            var color = comboScoreText.color;
+            color.a = 1f;
+            comboScoreText.color = color;
+
+            // Show "Evaluating..."
+            comboScoreText.text = "<size=180%><b>EVALUATING...</b></size>";
             yield return new WaitForSeconds(1.0f);
 
-            // Step 2: Show final score with emphasis
-            display = "<size=140%><b>Final Score</b></size>\n";
-            display += $"<size=200%><color=#FFD700><b>{finalScore}</b></color></size>\n\n";
-            UpdateComboDisplay(display);
-            
-            // Pulse effect
-            if (comboScoreText != null)
-            {
-                yield return StartCoroutine(PulseText(comboScoreText));
-            }
-            
-            yield return new WaitForSeconds(0.8f);
+            // Show final vs target
+            comboScoreText.text = $"<size=120%>Final Score</size>\n<size=200%><color=#FFD700><b>{finalScore}</b></color></size>\n\n";
+            comboScoreText.text += $"<size=120%>Target</size>\n<size=200%><color=#88CCFF><b>{targetScore}</b></color></size>";
+            yield return StartCoroutine(PopScoreText(2.0f));
+            yield return new WaitForSeconds(1.5f);
 
-            // Step 3: Show target score
-            display += "<size=140%><b>Target Score</b></size>\n";
-            display += $"<size=200%><color=#88CCFF><b>{targetScore}</b></color></size>\n\n";
-            UpdateComboDisplay(display);
-            yield return new WaitForSeconds(1.0f);
-
-            // Step 4: Dramatic reveal with screen shake effect
+            // Result
             if (passed)
             {
-                // SUCCESS ANIMATION
-                display += "<size=250%><color=#00FF00><b>You PASSED!</b></color></size>\n\n";
-                display += $"<color=#88FF88>+{finalScore - targetScore} over target!</color>";
-                
-                UpdateComboDisplay(display);
-                
-                // Multiple pulses for success
-                if (comboScoreText != null)
-                {
-                    yield return StartCoroutine(PulseText(comboScoreText));
-                    yield return StartCoroutine(PulseText(comboScoreText));
-                }
+                comboScoreText.text = "<size=250%><color=#00FF00><b>PASSED!</b></color></size>\n\n";
+                comboScoreText.text += $"<color=#88FF88>+{finalScore - targetScore} over target!</color>";
+                yield return StartCoroutine(PopScoreText(3.0f));
+                yield return StartCoroutine(PopScoreText(3.0f));
             }
             else
             {
-                // FAILURE ANIMATION
-                display += "<size=250%><color=#FF3333><b>You FAILED!</b></color></size>\n\n";
-                display += $"<color=#FF8888>{targetScore - finalScore} short of target</color>";
-                
-                UpdateComboDisplay(display);
-                
-                // Shake effect for failure
-                if (comboScoreText != null)
-                {
-                    yield return StartCoroutine(ShakeText(comboScoreText));
-                }
+                comboScoreText.text = "<size=250%><color=#FF3333><b>FAILED!</b></color></size>\n\n";
+                comboScoreText.text += $"<color=#FF8888>{targetScore - finalScore} short of target</color>";
+                yield return StartCoroutine(ShakeText());
             }
 
-            // Hold the result
             yield return new WaitForSeconds(3.5f);
-
-            // Optional: Fade out or keep visible
-            // (Keep visible so player can see the result)
         }
 
         /// <summary>
-        /// Shake animation for dramatic effect
+        /// Shake animation for failure
         /// </summary>
-        private IEnumerator ShakeText(TMP_Text text)
+        private IEnumerator ShakeText()
         {
-            Vector3 originalPosition = text.transform.localPosition;
+            if (comboScoreText == null) yield break;
+
+            Vector3 originalPosition = comboScoreText.transform.localPosition;
             float elapsed = 0f;
             float duration = 0.5f;
             float magnitude = 10f;
@@ -431,17 +551,16 @@ namespace DiceGame
             while (elapsed < duration)
             {
                 elapsed += Time.deltaTime;
-                
+
                 float x = originalPosition.x + Random.Range(-magnitude, magnitude);
                 float y = originalPosition.y + Random.Range(-magnitude, magnitude);
-                
-                text.transform.localPosition = new Vector3(x, y, originalPosition.z);
-                
+
+                comboScoreText.transform.localPosition = new Vector3(x, y, originalPosition.z);
+
                 yield return null;
             }
 
-            text.transform.localPosition = originalPosition;
+            comboScoreText.transform.localPosition = originalPosition;
         }
     }
 }
-

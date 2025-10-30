@@ -172,6 +172,66 @@ namespace DiceGame.UI
             _relicIcons.Clear();
         }
         
+        /// <summary>
+        /// Trigger pop effect on a specific relic by name
+        /// </summary>
+        public void PopRelicByName(string relicName, float intensity = 1.0f)
+        {
+            foreach (var icon in _relicIcons)
+            {
+                if (icon != null && icon.name.Contains(relicName))
+                {
+                    StartCoroutine(PopEffectCoroutine(icon.transform, intensity));
+                    return;
+                }
+            }
+        }
+        
+        /// <summary>
+        /// Trigger pop effect on a specific relic by reference
+        /// </summary>
+        public void PopRelicByReference(RelicBase relic, float intensity = 1.0f)
+        {
+            if (relic == null) return;
+            PopRelicByName(relic.relicName, intensity);
+        }
+        
+        /// <summary>
+        /// Pop effect animation coroutine
+        /// </summary>
+        private System.Collections.IEnumerator PopEffectCoroutine(Transform target, float intensity)
+        {
+            Vector3 originalScale = target.localScale;
+            
+            // Scale based on intensity (1.0 = normal, higher = bigger pop)
+            float targetScale = 1.0f + (0.3f * intensity);
+            Vector3 popScale = originalScale * targetScale;
+            
+            float duration = 0.15f;
+            float elapsed = 0f;
+            
+            // Scale up
+            while (elapsed < duration)
+            {
+                elapsed += Time.deltaTime;
+                float t = elapsed / duration;
+                target.localScale = Vector3.Lerp(originalScale, popScale, t);
+                yield return null;
+            }
+            
+            elapsed = 0f;
+            // Scale down
+            while (elapsed < duration)
+            {
+                elapsed += Time.deltaTime;
+                float t = elapsed / duration;
+                target.localScale = Vector3.Lerp(popScale, originalScale, t);
+                yield return null;
+            }
+            
+            target.localScale = originalScale;
+        }
+        
         void OnDestroy()
         {
             ClearRelics();

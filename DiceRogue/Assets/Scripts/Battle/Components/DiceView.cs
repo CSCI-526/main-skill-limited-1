@@ -73,5 +73,48 @@ namespace DiceGame
                 DiceTooltipManager.Instance.HideTooltip();
             }
         }
+
+        /// <summary>
+        /// Trigger a pop effect animation on this dice view
+        /// Scale increases with the magnitude of the score
+        /// </summary>
+        public void PopEffect(float intensity = 1.0f)
+        {
+            StopAllCoroutines();
+            StartCoroutine(PopEffectCoroutine(intensity));
+        }
+
+        private System.Collections.IEnumerator PopEffectCoroutine(float intensity)
+        {
+            Vector3 originalScale = transform.localScale;
+            
+            // Scale based on intensity (1.0 = normal, higher = bigger pop)
+            float targetScale = 1.0f + (0.3f * intensity);
+            Vector3 popScale = originalScale * targetScale;
+            
+            float duration = 0.15f;
+            float elapsed = 0f;
+            
+            // Scale up
+            while (elapsed < duration)
+            {
+                elapsed += Time.deltaTime;
+                float t = elapsed / duration;
+                transform.localScale = Vector3.Lerp(originalScale, popScale, t);
+                yield return null;
+            }
+            
+            elapsed = 0f;
+            // Scale down
+            while (elapsed < duration)
+            {
+                elapsed += Time.deltaTime;
+                float t = elapsed / duration;
+                transform.localScale = Vector3.Lerp(popScale, originalScale, t);
+                yield return null;
+            }
+            
+            transform.localScale = originalScale;
+        }
     }
 }

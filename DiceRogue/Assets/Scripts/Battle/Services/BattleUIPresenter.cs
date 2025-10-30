@@ -102,18 +102,6 @@ namespace DiceGame
         {
             var sb = new StringBuilder();
             sb.AppendLine($"<size=110%><b>Roll {rollNumber}/{maxRolls}</b></size>\n");
-            sb.AppendLine("<b>Dice Status:</b>");
-            
-            foreach (var d in dice)
-            {
-                if (d.tier != DiceTier.Filler) // Only show real dice
-                {
-                    string status = d.isLocked ? $"<color={COLOR_GOLD}>[LOCKED]</color>" : "";
-                    sb.AppendLine($"  • <b>{d.diceName}:</b> {d.lastRollValue} {status}");
-                }
-            }
-
-            sb.AppendLine(); // Empty line
             
             if (rollNumber < maxRolls)
             {

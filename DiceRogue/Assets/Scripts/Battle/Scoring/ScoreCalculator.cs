@@ -19,6 +19,19 @@ namespace DiceGame.Core
     public class ScoreCalculator
     {
         /// <summary>
+        /// Individual score contribution step for animation
+        /// </summary>
+        public class ScoreStep
+        {
+            public string source;           // Name of dice/relic/system
+            public int amount;              // Amount of bonus (for additions)
+            public float multiplier;        // Multiplier value (for multiplications)
+            public bool isMultiplier;       // true = multiplier, false = addition
+            public object sourceObject;     // Reference to actual dice/relic object
+            public string description;      // Human-readable description
+        }
+
+        /// <summary>
         /// Complete score calculation result with detailed breakdown
         /// </summary>
         public class ScoreResult
@@ -40,6 +53,9 @@ namespace DiceGame.Core
             public int totalBase;  // comboBase + diceSum + relicBase
             public float totalMultiplier;  // comboMult × diceMult × relicMult
             public int finalScore;
+            
+            // NEW: Step-by-step breakdown for animation
+            public List<ScoreStep> steps = new List<ScoreStep>();
         }
 
         private readonly DiceMultiplierCalculator _diceMultiplierCalculator;
@@ -80,18 +96,65 @@ namespace DiceGame.Core
             // Step 2: Calculate dice sum
             result.diceSum = submittedValues.Sum();
             
-            // Step 3: Calculate dice multipliers (from special dice)
+            // Add dice sum as a step
+            result.steps.Add(new ScoreStep
+            {
+                source = "Dice Sum",
+                amount = result.diceSum,
+                isMultiplier = false,
+                sourceObject = null,
+                description = $"Sum of dice values"
+            });
+            
+            // Step 3: Calculate individual dice multipliers (from special dice)
+            AddIndividualDiceMultiplierSteps(result, submittedDice, submittedValues);
             result.totalDiceMultiplier = _diceMultiplierCalculator.Calculate(submittedDice, submittedValues);
             
-            // Step 4: Apply relic effects
+            // Step 4: Apply relic effects with individual tracking
             if (relicManager != null && scoringContext != null)
             {
                 // Ensure context has the submitted values and dice
                 scoringContext.submittedValues = new List<int>(submittedValues);
                 scoringContext.submittedDice = new List<BaseDice>(submittedDice);
                 
-                // Apply all relics
-                relicManager.ApplyAll(scoringContext);
+                // Apply all relics and track individual contributions
+                var relics = relicManager.Equipped;
+                foreach (var relic in relics)
+                {
+                    int beforeBase = scoringContext.additionalBase;
+                    float beforeMult = scoringContext.multiplier;
+                    
+                    relic.Apply(scoringContext);
+                    
+                    int baseBonus = scoringContext.additionalBase - beforeBase;
+                    float multBonus = scoringContext.multiplier / beforeMult;
+                    
+                    // Add step for base bonus
+                    if (baseBonus != 0)
+                    {
+                        result.steps.Add(new ScoreStep
+                        {
+                            source = relic.relicName,
+                            amount = baseBonus,
+                            isMultiplier = false,
+                            sourceObject = relic,
+                            description = relic.description
+                        });
+                    }
+                    
+                    // Add step for multiplier bonus
+                    if (multBonus != 1f)
+                    {
+                        result.steps.Add(new ScoreStep
+                        {
+                            source = relic.relicName,
+                            multiplier = multBonus,
+                            isMultiplier = true,
+                            sourceObject = relic,
+                            description = relic.description
+                        });
+                    }
+                }
                 
                 result.relicAdditionalBase = scoringContext.additionalBase;
                 result.relicMultiplier = scoringContext.multiplier;
@@ -100,6 +163,19 @@ namespace DiceGame.Core
             {
                 result.relicAdditionalBase = 0;
                 result.relicMultiplier = 1f;
+            }
+            
+            // Add combo multiplier as final step
+            if (result.comboMultiplier != 1f)
+            {
+                result.steps.Add(new ScoreStep
+                {
+                    source = "Combo",
+                    multiplier = result.comboMultiplier,
+                    isMultiplier = true,
+                    sourceObject = null,
+                    description = result.comboName
+                });
             }
             
             // Step 5: Calculate final score
@@ -112,6 +188,66 @@ namespace DiceGame.Core
             LogScoreBreakdown(result);
             
             return result;
+        }
+        
+        /// <summary>
+        /// Add individual dice multiplier steps for animation
+        /// </summary>
+        private void AddIndividualDiceMultiplierSteps(ScoreResult result, List<BaseDice> submittedDice, List<int> submittedValues)
+        {
+            foreach (var dice in submittedDice)
+            {
+                float multiplier = GetIndividualDiceMultiplier(dice, submittedValues);
+                
+                if (multiplier > 1f)
+                {
+                    result.steps.Add(new ScoreStep
+                    {
+                        source = dice.diceName,
+                        multiplier = multiplier,
+                        isMultiplier = true,
+                        sourceObject = dice,
+                        description = GetMultiplierDescription(dice, submittedValues)
+                    });
+                }
+            }
+        }
+        
+        /// <summary>
+        /// Get individual dice multiplier (extracted from DiceMultiplierCalculator logic)
+        /// </summary>
+        private float GetIndividualDiceMultiplier(BaseDice dice, List<int> submittedValues)
+        {
+            if (dice is CollectorDice collector)
+                return collector.GetMultiplier();
+            else if (dice is D8 d8)
+                return d8.GetMultiplier();
+            else if (dice is LuckySix luckySix)
+                return luckySix.GetMultiplier();
+            else if (dice is SevenSevenSeven sevenSevenSeven)
+            {
+                bool isThreeOfAKind = sevenSevenSeven.IsPartOfThreeOfAKind(submittedValues.ToArray());
+                return sevenSevenSeven.GetMultiplier(isThreeOfAKind);
+            }
+            
+            return 1f;
+        }
+        
+        /// <summary>
+        /// Get multiplier description for UI
+        /// </summary>
+        private string GetMultiplierDescription(BaseDice dice, List<int> submittedValues)
+        {
+            if (dice is CollectorDice)
+                return "Matched previous roll";
+            else if (dice is D8)
+                return $"Rolled {dice.lastRollValue}";
+            else if (dice is LuckySix)
+                return "Rolled 6";
+            else if (dice is SevenSevenSeven)
+                return "Three-of-a-kind";
+            
+            return dice.diceName;
         }
 
         /// <summary>
