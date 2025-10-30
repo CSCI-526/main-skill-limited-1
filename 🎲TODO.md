@@ -158,5 +158,4 @@
 > > Short, readable, and expandable — perfect for a 48-hour proof-of-concept.
 
 
-- [ ] Score text and real text is diff
-- [ ] Score should first add then multiply, now add and multiply is messy
+- [ ] The roll and submit button should be disabled when score is animating
