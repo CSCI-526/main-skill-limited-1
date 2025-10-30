@@ -123,6 +123,68 @@ NavMeshSettings:
     debug:
       m_Flags: 0
   m_NavMeshData: {fileID: 0}
+--- !u!1 &54714156
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 54714157}
+  - component: {fileID: 54714158}
+  m_Layer: 5
+  m_Name: RelicContainer
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!224 &54714157
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 54714156}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1145702027}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0.5, y: 0.5}
+  m_AnchorMax: {x: 0.5, y: 0.5}
+  m_AnchoredPosition: {x: 0, y: 0}
+  m_SizeDelta: {x: 500, y: 80}
+  m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &54714158
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 54714156}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 30649d3a9faa99c48a7b1166b86bf2a0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  m_Padding:
+    m_Left: 0
+    m_Right: 0
+    m_Top: 0
+    m_Bottom: 0
+  m_ChildAlignment: 3
+  m_Spacing: 10
+  m_ChildForceExpandWidth: 0
+  m_ChildForceExpandHeight: 1
+  m_ChildControlWidth: 0
+  m_ChildControlHeight: 0
+  m_ChildScaleWidth: 0
+  m_ChildScaleHeight: 0
+  m_ReverseArrangement: 0
 --- !u!1 &75448647
 GameObject:
   m_ObjectHideFlags: 0
@@ -412,19 +474,19 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 4289563167458984627, guid: 57b26623852395545909f6715b98b7ac, type: 3}
       propertyPath: m_AnchorMax.x
-      value: 0.5
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 4289563167458984627, guid: 57b26623852395545909f6715b98b7ac, type: 3}
       propertyPath: m_AnchorMax.y
-      value: 0.5
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 4289563167458984627, guid: 57b26623852395545909f6715b98b7ac, type: 3}
       propertyPath: m_AnchorMin.x
-      value: 0.5
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 4289563167458984627, guid: 57b26623852395545909f6715b98b7ac, type: 3}
       propertyPath: m_AnchorMin.y
-      value: 0.5
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 4289563167458984627, guid: 57b26623852395545909f6715b98b7ac, type: 3}
       propertyPath: m_SizeDelta.x
@@ -464,11 +526,11 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 4289563167458984627, guid: 57b26623852395545909f6715b98b7ac, type: 3}
       propertyPath: m_AnchoredPosition.x
-      value: -706
+      value: 254
       objectReference: {fileID: 0}
     - target: {fileID: 4289563167458984627, guid: 57b26623852395545909f6715b98b7ac, type: 3}
       propertyPath: m_AnchoredPosition.y
-      value: 389.93057
+      value: -200
       objectReference: {fileID: 0}
     - target: {fileID: 4289563167458984627, guid: 57b26623852395545909f6715b98b7ac, type: 3}
       propertyPath: m_LocalEulerAnglesHint.x
@@ -545,7 +607,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &457933283
 RectTransform:
   m_ObjectHideFlags: 0
@@ -561,10 +623,10 @@ RectTransform:
   - {fileID: 1841103476}
   m_Father: {fileID: 2052889061}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0, y: 0.5}
-  m_AnchorMax: {x: 0, y: 0.5}
-  m_AnchoredPosition: {x: 280, y: -400}
-  m_SizeDelta: {x: 200, y: 200}
+  m_AnchorMin: {x: 0, y: 0}
+  m_AnchorMax: {x: 0, y: 0}
+  m_AnchoredPosition: {x: 80, y: 80}
+  m_SizeDelta: {x: 100, y: 100}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &457933284
 MonoBehaviour:
@@ -1259,7 +1321,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 3167966650341254033, guid: c868685ad8462834cab76c52a9c05832, type: 3}
       propertyPath: m_SizeDelta.y
-      value: 959.1966
+      value: 814.59827
       objectReference: {fileID: 0}
     - target: {fileID: 3167966650341254033, guid: c868685ad8462834cab76c52a9c05832, type: 3}
       propertyPath: m_LocalPosition.x
@@ -1295,7 +1357,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 3167966650341254033, guid: c868685ad8462834cab76c52a9c05832, type: 3}
       propertyPath: m_AnchoredPosition.y
-      value: 15
+      value: -57.299133
       objectReference: {fileID: 0}
     - target: {fileID: 3167966650341254033, guid: c868685ad8462834cab76c52a9c05832, type: 3}
       propertyPath: m_LocalEulerAnglesHint.x
@@ -2920,6 +2982,7 @@ MonoBehaviour:
   deckStatusText: {fileID: 2029777468}
   scoreAnimator: {fileID: 915512911}
   targetScoreText: {fileID: 986318006}
+  relicDisplay: {fileID: 1145702026}
   diceCount: 5
   maxRollsPerHand: 2
   baseTargetScore: 300
@@ -3428,6 +3491,60 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1114674602}
   m_CullTransparentMesh: 1
+--- !u!1 &1145702025
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1145702027}
+  - component: {fileID: 1145702026}
+  m_Layer: 5
+  m_Name: RelicDisplayPanel
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1145702026
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1145702025}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9a2b3c4d5e6f7890abcdef1234567890, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  relicContainer: {fileID: 54714157}
+  relicIconPrefab: {fileID: 0}
+  commonColor: {r: 0.56, g: 0.93, b: 0.56, a: 1}
+  rareColor: {r: 0.58, g: 0.44, b: 0.86, a: 1}
+  legendaryColor: {r: 1, g: 0.84, b: 0, a: 1}
+--- !u!224 &1145702027
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1145702025}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 54714157}
+  m_Father: {fileID: 2052889061}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0, y: 1}
+  m_AnchorMax: {x: 0, y: 1}
+  m_AnchoredPosition: {x: 300, y: -100}
+  m_SizeDelta: {x: 500, y: 80}
+  m_Pivot: {x: 0.5, y: 0.5}
 --- !u!1001 &1245283427
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -4652,6 +4769,7 @@ RectTransform:
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 1345153188}
+  - {fileID: 1145702027}
   - {fileID: 739783604}
   - {fileID: 457933283}
   - {fileID: 1374099278}

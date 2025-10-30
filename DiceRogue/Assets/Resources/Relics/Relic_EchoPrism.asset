@@ -9,14 +9,10 @@ MonoBehaviour:
   m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: b8c9d0e1f2a34e1b9c0d1e2f3a4b5c6d, type: 3}
-  m_Name: Relic_PairBond
+  m_Script: {fileID: 11500000, guid: f6a7b8c9d0e14c9f9a0b1c2d3e4f5a6b, type: 3}
+  m_Name: Relic_EchoPrism
   m_EditorClassIdentifier: 
-  relicName: Pair Bond
-  description: "Any pair: +10 base. Two Pair/Full House: \xD71.15 mult. No pairs:
-    \xD70.95 mult."
-  rarity: 0
+  relicName: Echo Prism
+  description: Highest dice value added to base score again.
+  rarity: 1
   unique: 1
-  baseOnAnyPair: 10
-  multOnTwoPlus: 1.15
-  missPenalty: 0.95

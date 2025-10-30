@@ -9,7 +9,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: c31e66c2b7f3e4d2f96baad58225ba28, type: 3}
+  m_Script: {fileID: 11500000, guid: d0e1f2a3b4c54a3d9e0f1a2b3c4d5e6f, type: 3}
   m_Name: Relic_CollectorsSeal
   m_EditorClassIdentifier: 
   relicName: Collector's Seal

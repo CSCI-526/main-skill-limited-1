@@ -156,3 +156,6 @@
 > **Core Identity:**  
 > > *“8-dice pool + 6 budget + 1-turn cooldown = every hand a new puzzle.”*  
 > > Short, readable, and expandable — perfect for a 48-hour proof-of-concept.
+
+
+- [ ] Relic Score Caculation, multiple relics should be applied at the same time
