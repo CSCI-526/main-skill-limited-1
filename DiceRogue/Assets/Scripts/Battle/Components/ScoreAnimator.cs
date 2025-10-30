@@ -119,35 +119,35 @@ namespace DiceGame
             {
                 if (step.isMultiplier)
                 {
-                    // Show multiplier with pop effect
-                    yield return StartCoroutine(AnimateSlidingBonus(0, true, step.multiplier));
-                    
-                    // Apply multiplier
-                    int newScore = Mathf.RoundToInt(currentScore * step.multiplier);
-                    
                     // Calculate intensity based on score gain
+                    int newScore = Mathf.RoundToInt(currentScore * step.multiplier);
                     float scoreGain = newScore - currentScore;
                     float intensity = CalculateIntensity(scoreGain);
                     
+                    // Trigger pop on source object IMMEDIATELY (when bonus appears)
+                    TriggerSourcePop(step.sourceObject, submittedDice, intensity);
+                    
+                    // Show multiplier with sliding animation
+                    yield return StartCoroutine(AnimateSlidingBonus(0, true, step.multiplier));
+                    
+                    // Apply multiplier and update score
                     currentScore = newScore;
                     yield return StartCoroutine(CountToScore(scoreResult.comboName, currentScore, intensity));
-                    
-                    // Trigger pop on source object
-                    TriggerSourcePop(step.sourceObject, submittedDice, intensity);
                 }
                 else
                 {
-                    // Show addition bonus with sliding animation
-                    yield return StartCoroutine(AnimateSlidingBonus(step.amount, false));
-                    
                     // Calculate intensity based on bonus amount
                     float intensity = CalculateIntensity(step.amount);
                     
+                    // Trigger pop on source object IMMEDIATELY (when bonus appears)
+                    TriggerSourcePop(step.sourceObject, submittedDice, intensity);
+                    
+                    // Show addition bonus with sliding animation
+                    yield return StartCoroutine(AnimateSlidingBonus(step.amount, false));
+                    
+                    // Apply addition and update score
                     currentScore += step.amount;
                     yield return StartCoroutine(CountToScore(scoreResult.comboName, currentScore, intensity));
-                    
-                    // Trigger pop on source object
-                    TriggerSourcePop(step.sourceObject, submittedDice, intensity);
                 }
             }
 

@@ -197,35 +197,51 @@ namespace DiceGame.UI
         }
         
         /// <summary>
-        /// Pop effect animation coroutine
+        /// Pop effect animation coroutine with bounce
         /// </summary>
         private System.Collections.IEnumerator PopEffectCoroutine(Transform target, float intensity)
         {
             Vector3 originalScale = target.localScale;
             
             // Scale based on intensity (1.0 = normal, higher = bigger pop)
-            float targetScale = 1.0f + (0.3f * intensity);
+            // Increased from 0.3f to 0.5f for more dramatic effect
+            float targetScale = 1.0f + (0.5f * Mathf.Min(intensity, 2.5f));
             Vector3 popScale = originalScale * targetScale;
             
-            float duration = 0.15f;
+            float duration = 0.12f; // Slightly faster for snappier feel
             float elapsed = 0f;
             
-            // Scale up
+            // Scale up with ease-out
             while (elapsed < duration)
             {
                 elapsed += Time.deltaTime;
                 float t = elapsed / duration;
-                target.localScale = Vector3.Lerp(originalScale, popScale, t);
+                // Ease out cubic for snappier start
+                float smoothT = 1f - Mathf.Pow(1f - t, 3f);
+                target.localScale = Vector3.Lerp(originalScale, popScale, smoothT);
                 yield return null;
             }
             
             elapsed = 0f;
-            // Scale down
+            // Scale down with bounce
             while (elapsed < duration)
             {
                 elapsed += Time.deltaTime;
                 float t = elapsed / duration;
-                target.localScale = Vector3.Lerp(popScale, originalScale, t);
+                // Ease in cubic with slight overshoot for bounce
+                float smoothT = Mathf.Pow(t, 2f);
+                target.localScale = Vector3.Lerp(popScale, originalScale * 0.95f, smoothT);
+                yield return null;
+            }
+            
+            // Small bounce back to original
+            elapsed = 0f;
+            duration = 0.08f;
+            while (elapsed < duration)
+            {
+                elapsed += Time.deltaTime;
+                float t = elapsed / duration;
+                target.localScale = Vector3.Lerp(originalScale * 0.95f, originalScale, t);
                 yield return null;
             }
             
