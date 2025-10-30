@@ -8,6 +8,7 @@ using DiceGame.Core;
 using DiceGame.Analytics;
 using DiceGame.Relics;
 using DiceGame.UI;
+using UnityEngine.SceneManagement;
 
 namespace DiceGame
 {
@@ -21,6 +22,10 @@ namespace DiceGame
     /// </summary>
     public class BattleController : MonoBehaviour
     {
+        // Static state for scene transitions
+        public static bool ContinuingFromReward = false;
+        public static int PendingLevel = 1;
+        public static int PendingTargetScore = 300;
         [Header("UI")]
         public Transform diceRowParent;   // Container for DiceView
         public GameObject diceViewPrefab; // Prefab (with DiceView component)
@@ -109,7 +114,19 @@ namespace DiceGame
             _compositionService = new HandCompositionService();
             
             // Initialize progression manager
-            _progressionManager = new ProgressionManager(baseTargetScore);
+            // Check if continuing from reward scene to restore level/target
+            if (ContinuingFromReward)
+            {
+                _progressionManager = new ProgressionManager(baseTargetScore);
+                _progressionManager.RestoreLevelState(PendingLevel, PendingTargetScore);
+                ContinuingFromReward = false; // Reset flag
+                Debug.Log($"[BattleController] Continuing from Reward Scene - Level {PendingLevel}, Target: {PendingTargetScore}");
+            }
+            else
+            {
+                _progressionManager = new ProgressionManager(baseTargetScore);
+            }
+            
             UpdateTargetScoreDisplay();
             
             // Track initial player progression
@@ -134,6 +151,9 @@ namespace DiceGame
             rollButton.onClick.AddListener(OnRollOnce);
             resetRollButton.onClick.AddListener(ResetForNewHand);
             submitComboButton.onClick.AddListener(OnSubmitCombo);
+            
+            // Check if there are pending reward dice from reward scene
+            IntegrateRewardDice();
             
             // Start first hand
             StartNewHand();
@@ -191,6 +211,79 @@ namespace DiceGame
             {
                 relicDisplay.DisplayRelics(_relicManager);
             }
+        }
+
+        /// <summary>
+        /// Integrate reward dice from reward scene into the dice pool
+        /// </summary>
+        private void IntegrateRewardDice()
+        {
+            // Check if there are pending reward dice
+            if (RewardSceneManager.PendingDiceTypeIds.Count == 0)
+            {
+                Debug.Log("[BattleController] No pending reward dice to integrate");
+                return;
+            }
+
+            Debug.Log($"[BattleController] Found {RewardSceneManager.PendingDiceTypeIds.Count} reward dice to integrate");
+
+            // Get current dice pool
+            var currentPool = cooldownSystem.GetAllDice();
+            var newPool = new List<BaseDice>(currentPool);
+
+            // Create and add reward dice
+            foreach (var typeId in RewardSceneManager.PendingDiceTypeIds)
+            {
+                var rewardDice = CreateDiceFromTypeId(typeId);
+                if (rewardDice != null)
+                {
+                    newPool.Add(rewardDice);
+                    Debug.Log($"[BattleController] Added reward dice: {rewardDice.diceName} ({rewardDice.tier})");
+                }
+            }
+
+            // Clear pending list
+            RewardSceneManager.PendingDiceTypeIds.Clear();
+
+            // Update cooldown system with new pool
+            cooldownSystem.SetPlayerBackpackDice(newPool);
+
+            Debug.Log($"[BattleController] Integrated reward dice. New pool size: {newPool.Count}");
+        }
+
+        /// <summary>
+        /// Create a dice instance from type ID string
+        /// </summary>
+        private BaseDice CreateDiceFromTypeId(string typeId)
+        {
+            // Use DicePool to get all available dice prototypes
+            var allDice = DicePool.GetAll();
+            var prototype = allDice.FirstOrDefault(d => d.GetType().Name == typeId);
+
+            if (prototype != null)
+            {
+                // Create a new instance by cloning the prototype
+                var diceType = prototype.GetType();
+                var newDice = System.Activator.CreateInstance(diceType) as BaseDice;
+                
+                if (newDice != null)
+                {
+                    // Copy properties from prototype (since constructors might set these)
+                    newDice.diceName = prototype.diceName;
+                    newDice.description = prototype.description;
+                    newDice.tier = prototype.tier;
+                    newDice.cost = prototype.cost;
+                    newDice.cooldownAfterUse = prototype.cooldownAfterUse;
+                    newDice.cooldownRemain = 0;
+                    newDice.isLocked = false;
+                    newDice.lastRollValue = 0;
+                    
+                    return newDice;
+                }
+            }
+
+            Debug.LogWarning($"[BattleController] Could not create dice from typeId: {typeId}");
+            return null;
         }
 
     /// <summary>
@@ -699,11 +792,21 @@ namespace DiceGame
             // Wait for evaluation animation to complete, then show Continue button ONLY if passed
             yield return new UnityEngine.WaitForSeconds(4.5f);
             
-            if (passed && continueButton != null)
+            if (passed)
             {
-                continueButton.gameObject.SetActive(true);
+                // Prepare next level state for when we return from RewardScene
+                int nextLevel = _progressionManager.CurrentLevel + 1;
+                int nextTarget = _progressionManager.CalculateTargetScore(nextLevel);
+
+                PendingLevel = nextLevel;
+                PendingTargetScore = nextTarget;
+                ContinuingFromReward = true;
+
+                // Transition to reward scene
+                Debug.Log($"[BattleController] Target passed! Loading RewardScene. Next Level: {nextLevel}, Next Target: {nextTarget}");
+                SceneManager.LoadScene("RewardScene");
             }
-            else if (!passed)
+            else
             {
                 // Player failed - show game over message
                 UpdateFeedback(_uiPresenter.FormatGameOver());

@@ -41,12 +41,14 @@ public class RewardSceneManager : MonoBehaviour
         // Convert to a type identifier (e.g., "D8", "HeavyDice") to recreate later
         var typeId = _selectedDice.GetType().Name;
         PendingDiceTypeIds.Add(typeId);
-        Debug.Log($"[Reward] Confirmed selection: {_selectedDice.diceName} → TypeId='{typeId}'. Pending list size={PendingDiceTypeIds.Count}");
+        Debug.Log($"[RewardScene] ========================================");
+        Debug.Log($"[RewardScene] Reward confirmed!");
+        Debug.Log($"[RewardScene] Selected: {_selectedDice.diceName} ({_selectedDice.tier})");
+        Debug.Log($"[RewardScene] TypeId: '{typeId}'");
+        Debug.Log($"[RewardScene] Returning to Battle Scene for next level...");
+        Debug.Log($"[RewardScene] ========================================");
 
-        // TODO: If you prefer RunState, you can also persist here
-        // RunState.Instance?.AddDiceByTypeId(typeId);
-
-        // Go back to battle scene
+        // Go back to battle scene (BattleController will handle level progression)
         SceneManager.LoadScene("BattleScene");
     }
 

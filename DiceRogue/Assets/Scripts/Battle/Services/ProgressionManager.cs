@@ -82,6 +82,17 @@ namespace DiceGame
         }
 
         /// <summary>
+        /// Restore level state when returning from reward scene
+        /// </summary>
+        public void RestoreLevelState(int level, int targetScore)
+        {
+            _currentLevel = level;
+            _currentTargetScore = targetScore;
+            _totalScore = 0; // Reset score for new level
+            Debug.Log($"[ProgressionManager] Restored state - Level {_currentLevel}, Target: {_currentTargetScore}");
+        }
+
+        /// <summary>
         /// Calculate target score for a given level using progressive formula
         /// Progressive increase: +300, +400, +500, +600, +700, ...
         /// Formula: Base + sum of (300 + i*100) for i = 0 to level-2
