@@ -29,6 +29,7 @@ namespace DiceGame.Core
             public bool isMultiplier;       // true = multiplier, false = addition
             public object sourceObject;     // Reference to actual dice/relic object
             public string description;      // Human-readable description
+            public int order;               // Order for sorting (lower = earlier)
         }
 
         /// <summary>
@@ -96,17 +97,11 @@ namespace DiceGame.Core
             // Step 2: Calculate dice sum
             result.diceSum = submittedValues.Sum();
             
-            // Add dice sum as a step
-            result.steps.Add(new ScoreStep
-            {
-                source = "Dice Sum",
-                amount = result.diceSum,
-                isMultiplier = false,
-                sourceObject = null,
-                description = $"Sum of dice values"
-            });
+            // Do NOT add dice sum as a step here because the animator
+            // handles +diceSum explicitly as the first addition step.
             
             // Step 3: Calculate individual dice multipliers (from special dice)
+            // Order = 200 (dice multipliers come after combo multiplier)
             AddIndividualDiceMultiplierSteps(result, submittedDice, submittedValues);
             result.totalDiceMultiplier = _diceMultiplierCalculator.Calculate(submittedDice, submittedValues);
             
@@ -129,7 +124,7 @@ namespace DiceGame.Core
                     int baseBonus = scoringContext.additionalBase - beforeBase;
                     float multBonus = scoringContext.multiplier / beforeMult;
                     
-                    // Add step for base bonus
+                    // Add step for base bonus (order = 0, additions come first)
                     if (baseBonus != 0)
                     {
                         result.steps.Add(new ScoreStep
@@ -138,11 +133,12 @@ namespace DiceGame.Core
                             amount = baseBonus,
                             isMultiplier = false,
                             sourceObject = relic,
-                            description = relic.description
+                            description = relic.description,
+                            order = 0 // Additions always first
                         });
                     }
                     
-                    // Add step for multiplier bonus
+                    // Add step for multiplier bonus (order = 300, relic multipliers come last)
                     if (multBonus != 1f)
                     {
                         result.steps.Add(new ScoreStep
@@ -151,7 +147,8 @@ namespace DiceGame.Core
                             multiplier = multBonus,
                             isMultiplier = true,
                             sourceObject = relic,
-                            description = relic.description
+                            description = relic.description,
+                            order = 300 // Relic multipliers last
                         });
                     }
                 }
@@ -165,7 +162,7 @@ namespace DiceGame.Core
                 result.relicMultiplier = 1f;
             }
             
-            // Add combo multiplier as final step
+            // Add combo multiplier (order = 100, combo multiplier comes first among multipliers)
             if (result.comboMultiplier != 1f)
             {
                 result.steps.Add(new ScoreStep
@@ -174,11 +171,21 @@ namespace DiceGame.Core
                     multiplier = result.comboMultiplier,
                     isMultiplier = true,
                     sourceObject = null,
-                    description = result.comboName
+                    description = result.comboName,
+                    order = 100 // Combo multiplier first
                 });
             }
             
-            // Step 5: Calculate final score
+            // SORT STEPS: All additions first, then multipliers in order (Combo → Dice → Relics)
+            // Order values: additions=0, combo=100, dice=200, relics=300
+            result.steps = result.steps
+                .OrderBy(step => step.isMultiplier ? 1 : 0) // Additions (0) before multipliers (1)
+                .ThenBy(step => step.order) // Within each group, sort by order
+                .ToList();
+            
+            // Step 5: Calculate reference final score (for comparison/debugging)
+            // NOTE: The AUTHORITATIVE score is calculated by ScoreAnimator step-by-step during animation
+            // This finalScore is kept for reference/validation purposes only
             // Formula: (ComboBase + DiceSum + RelicBase) × ComboMult × DiceMult × RelicMult
             result.totalBase = result.comboBaseScore + result.diceSum + result.relicAdditionalBase;
             result.totalMultiplier = result.comboMultiplier * result.totalDiceMultiplier * result.relicMultiplier;
@@ -207,7 +214,8 @@ namespace DiceGame.Core
                         multiplier = multiplier,
                         isMultiplier = true,
                         sourceObject = dice,
-                        description = GetMultiplierDescription(dice, submittedValues)
+                        description = GetMultiplierDescription(dice, submittedValues),
+                        order = 200 // Dice multipliers come after combo, before relics
                     });
                 }
             }
@@ -396,7 +404,8 @@ namespace DiceGame.Core
         /// </summary>
         private void LogScoreBreakdown(ScoreResult result)
         {
-            Debug.Log("==================== SCORE BREAKDOWN ====================");
+            Debug.Log("==================== SCORE BREAKDOWN (REFERENCE) ====================");
+            Debug.Log("NOTE: Authoritative score is calculated by ScoreAnimator during animation");
             Debug.Log($"Combo: {result.comboName}");
             Debug.Log($"  Combo Base Score: {result.comboBaseScore}");
             Debug.Log($"  Dice Sum: {result.diceSum}");
@@ -423,8 +432,9 @@ namespace DiceGame.Core
             
             Debug.Log($"  → Total Multiplier: ×{result.totalMultiplier:F2}");
             Debug.Log("");
-            Debug.Log($"FINAL SCORE: {result.totalBase} × {result.totalMultiplier:F2} = {result.finalScore}");
-            Debug.Log("=========================================================");
+            Debug.Log($"REFERENCE FINAL SCORE: {result.totalBase} × {result.totalMultiplier:F2} = {result.finalScore}");
+            Debug.Log("(Actual score may differ due to step-by-step rounding in animation)");
+            Debug.Log("=====================================================================");
         }
 
         /// <summary>

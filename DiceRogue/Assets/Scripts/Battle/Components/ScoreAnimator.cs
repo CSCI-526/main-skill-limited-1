@@ -32,9 +32,22 @@ namespace DiceGame
         
         private int _currentTotalScore = 0;
         private Coroutine _animationCoroutine;
+        private int _lastCalculatedHandScore = 0; // Store the final calculated score from animation
+        private bool _isAnimating = false; // Track if animation is currently running
+        private bool _readyForUIRefresh = false; // Track if animation reached UI refresh point
         
         // References to dice views (set by BattleController)
         private List<DiceView> _diceViews = new List<DiceView>();
+        
+        /// <summary>
+        /// Check if score animation is currently playing
+        /// </summary>
+        public bool IsAnimating => _isAnimating;
+        
+        /// <summary>
+        /// Check if animation reached the point where UI should refresh (before total score update)
+        /// </summary>
+        public bool IsReadyForUIRefresh => _readyForUIRefresh;
 
         void Start()
         {
@@ -72,6 +85,9 @@ namespace DiceGame
 
         private IEnumerator AnimateScoreCoroutine(ScoreCalculator.ScoreResult scoreResult, List<BaseDice> submittedDice)
         {
+            _isAnimating = true; // Mark animation as started
+            _readyForUIRefresh = false; // Reset UI refresh flag
+            
             // Ensure text is visible
             if (comboScoreText != null)
             {
@@ -135,8 +151,14 @@ namespace DiceGame
                 }
             }
 
-            // Step 5: Show final hand score and update total with big pop
-            int handScore = scoreResult.finalScore;
+            // Step 5: The currentScore IS the final score (calculated step-by-step during animation)
+            // This is the authoritative score that will be added to total
+            int handScore = currentScore;
+            _lastCalculatedHandScore = handScore; // Store for BattleController to retrieve
+            
+            // SIGNAL: UI can refresh now (before total score update)
+            _readyForUIRefresh = true;
+            
             float finalIntensity = CalculateIntensity(handScore);
             
             yield return new WaitForSeconds(0.3f);
@@ -149,6 +171,8 @@ namespace DiceGame
 
             // Fade out combo text
             yield return StartCoroutine(FadeOutComboText());
+            
+            _isAnimating = false; // Mark animation as completed
         }
 
         /// <summary>
@@ -456,6 +480,15 @@ namespace DiceGame
         public int GetTotalScore()
         {
             return _currentTotalScore;
+        }
+
+        /// <summary>
+        /// Get the last calculated hand score from animation
+        /// This is the authoritative score calculated step-by-step
+        /// </summary>
+        public int GetLastHandScore()
+        {
+            return _lastCalculatedHandScore;
         }
 
         /// <summary>

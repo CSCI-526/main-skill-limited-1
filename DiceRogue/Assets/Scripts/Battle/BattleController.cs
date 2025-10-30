@@ -383,25 +383,28 @@ namespace DiceGame
                 // Create and populate ScoringContext for relics
                 var context = CreateScoringContext(submittedDice, submittedValues);
                 
-                // Calculate final score with complete breakdown
+                // Calculate score breakdown (but final score will come from animation)
                 // This handles: combo evaluation, dice multipliers, and relic effects
                 var scoreResult = _scoreCalculator.CalculateScore(submittedDice, submittedValues, _relicManager, context);
                 
-                // Trigger new animated score display with step-by-step breakdown
+                // Trigger animated score display - animation calculates the final score step-by-step
                 if (scoreAnimator != null)
                 {
                     scoreAnimator.AnimateScore(scoreResult, submittedDice);
+                    
+                    // Start coroutine to handle post-animation logic (UI refresh, score addition, next hand)
+                    StartCoroutine(AddScoreAfterAnimation(scoreResult.comboName, current + 1, submittedDice));
                 }
-                
-                // Add score to progression manager
-                _progressionManager.AddScore(scoreResult.finalScore);
-                
-                // Track analytics for hand completion and score combination
-                // Track player progression
-                UnityGameAnalytics.TrackPlayerProgression(_progressionManager.TotalScore, current + 1, _progressionManager.CurrentLevel);
-                
-                // Track score combination
-                UnityGameAnalytics.TrackScoreCombination(scoreResult.comboName);
+                else
+                {
+                    // Fallback if no animator: use calculator's final score and proceed immediately
+                    _progressionManager.AddScore(scoreResult.finalScore);
+                    UnityGameAnalytics.TrackPlayerProgression(_progressionManager.TotalScore, current + 1, _progressionManager.CurrentLevel);
+                    UnityGameAnalytics.TrackScoreCombination(scoreResult.comboName);
+                    
+                    // Complete hand and continue flow
+                    CompleteHandAndContinue(submittedDice);
+                }
             }
             else
             {
@@ -411,6 +414,80 @@ namespace DiceGame
             Debug.Log($"[BattleController] Submitted dice values: [{string.Join(", ", submittedValues)}]");
             Debug.Log("[BattleController] ============================");
             
+            // NOTE: Hand completion and UI refresh now happens AFTER animation in AddScoreAfterAnimation()
+        }
+
+        /// <summary>
+        /// Start a new hand after a brief delay
+        /// </summary>
+        private System.Collections.IEnumerator DelayedStartNewHand()
+        {
+            // Brief pause before starting new hand (animation already completed when this is called)
+            yield return new UnityEngine.WaitForSeconds(0.5f);
+            StartNewHand();
+        }
+
+        /// <summary>
+        /// Wait for score animation to complete, then refresh UI and add the calculated score to progression
+        /// </summary>
+        private System.Collections.IEnumerator AddScoreAfterAnimation(string comboName, int handNumber, List<BaseDice> submittedDice)
+        {
+            // Wait for animation to reach the UI refresh point (variable timing based on number of steps)
+            float timeout = 0f;
+            float maxTimeout = 15f; // Safety timeout
+            
+            while (!scoreAnimator.IsReadyForUIRefresh && timeout < maxTimeout)
+            {
+                yield return new WaitForSeconds(0.1f);
+                timeout += 0.1f;
+            }
+            
+            if (timeout >= maxTimeout)
+            {
+                Debug.LogWarning("[BattleController] Animation timeout - proceeding with UI refresh");
+            }
+            
+            // REFRESH UI: Dice, Deck, and Feedback (happens AFTER animation steps, BEFORE total score update)
+            Debug.Log("[BattleController] Refreshing UI after score animation...");
+            
+            // Clear dice views and refresh deck status
+            UpdateFeedback(_uiPresenter.FormatComboSubmitted(submittedDice, _handManager.RollsUsed, maxRollsPerHand) + "\n<color=#88FF88>Score calculated!</color>");
+            UpdateDeckStatus();
+            
+            // Get the final calculated score from the animator (already available at this point)
+            int finalScore = scoreAnimator.GetLastHandScore();
+            
+            // Add score to progression manager (this is the authoritative score from animation)
+            _progressionManager.AddScore(finalScore);
+            
+            // Track analytics
+            UnityGameAnalytics.TrackPlayerProgression(_progressionManager.TotalScore, handNumber, _progressionManager.CurrentLevel);
+            UnityGameAnalytics.TrackScoreCombination(comboName);
+            
+            Debug.Log($"[BattleController] Score added after animation: {finalScore}");
+            
+            // Wait for the entire animation to complete (total score update + fade out)
+            timeout = 0f;
+            while (scoreAnimator.IsAnimating && timeout < maxTimeout)
+            {
+                yield return new WaitForSeconds(0.1f);
+                timeout += 0.1f;
+            }
+            
+            if (timeout >= maxTimeout)
+            {
+                Debug.LogWarning("[BattleController] Animation completion timeout - proceeding anyway");
+            }
+            
+            // Complete hand and continue to next hand or evaluation
+            CompleteHandAndContinue(submittedDice);
+        }
+
+        /// <summary>
+        /// Complete the current hand and continue to next hand or evaluation
+        /// </summary>
+        private void CompleteHandAndContinue(List<BaseDice> submittedDice)
+        {
             // Complete the hand in cooldown system with submitted dice
             // Filter out NormalDice (temporary fillers) - only submit special dice from the pool
             var specialDiceOnly = submittedDice.Where(d => !(d is NormalDice)).ToList();
@@ -426,14 +503,11 @@ namespace DiceGame
             }
             _handManager.EndHand();
             
-            // Update deck status after submitting
-            UpdateDeckStatus();
-            
             // Check if we can start a new hand
             var (currentHand, handsRemaining) = cooldownSystem.GetHandCounter();
             if (handsRemaining > 0)
             {
-                // Start next hand after animation completes (brief delay)
+                // Start next hand after a brief delay
                 StartCoroutine(DelayedStartNewHand());
             }
             else
@@ -445,15 +519,6 @@ namespace DiceGame
                 // Trigger target score evaluation animation
                 StartCoroutine(EvaluateTargetScore());
             }
-        }
-
-        /// <summary>
-        /// Start a new hand after a brief delay
-        /// </summary>
-        private System.Collections.IEnumerator DelayedStartNewHand()
-        {
-            yield return new UnityEngine.WaitForSeconds(2.5f); // Wait for animation to complete
-            StartNewHand();
         }
 
         /// <summary>

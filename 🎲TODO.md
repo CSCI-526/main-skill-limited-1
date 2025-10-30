@@ -158,4 +158,5 @@
 > > Short, readable, and expandable — perfect for a 48-hour proof-of-concept.
 
 
-- [ ] Relic Score Caculation, multiple relics should be applied at the same time
+- [ ] Score text and real text is diff
+- [ ] Score should first add then multiply, now add and multiply is messy

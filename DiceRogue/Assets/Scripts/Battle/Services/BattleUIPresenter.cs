@@ -80,13 +80,6 @@ namespace DiceGame
         {
             var sb = new StringBuilder();
             sb.AppendLine($"<size=110%><b>Hand {handNumber}</b></size>\n");
-            sb.AppendLine($"<color={COLOR_GREEN}>Ready! {diceCount} dice prepared.</color>");
-            
-            if (specialCount < diceCount)
-            {
-                sb.AppendLine($"<color={COLOR_GRAY}>({specialCount} special + {normalCount} normal dice)</color>");
-            }
-            
             sb.AppendLine("\n<b>Instructions:</b>");
             sb.AppendLine("  • Roll the dice");
             sb.AppendLine("  • Click to lock dice you want to keep");
@@ -124,11 +117,6 @@ namespace DiceGame
             sb.AppendLine("<size=110%><b>COMBO SUBMITTED</b></size>\n");
             sb.AppendLine($"<color={COLOR_GRAY}>Rolls used: {rollsUsed}/{maxRolls}</color>");
             sb.AppendLine($"<color={COLOR_GRAY}>Submitted {submittedDice.Count} dice:</color>\n");
-            
-            foreach (var dice in submittedDice)
-            {
-                sb.AppendLine($"  • <b>{dice.diceName}:</b> {dice.lastRollValue} <color={COLOR_GOLD}>[SUBMITTED]</color>");
-            }
             
             return sb.ToString();
         }
