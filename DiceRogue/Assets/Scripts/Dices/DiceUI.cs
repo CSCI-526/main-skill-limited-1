@@ -1,80 +1,95 @@
 using UnityEngine;
-using UnityEngine.UI;
-using TMPro;
-using DiceGame.Core;
+using UnityEngine.EventSystems;
 
 namespace DiceGame.Core
 {
-    public class DiceUI : MonoBehaviour
+    /// <summary>
+    /// 每个骰子的UI逻辑：负责响应鼠标事件并显示Tooltip
+    /// </summary>
+    public class DiceUI : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
     {
-        [Header("Refs")]
-        public TMP_Text nameText;
-        public TMP_Text rarityText;
-        public TMP_Text costText;
-        public TMP_Text descriptionText;
-        public Image background;
+        public BaseDice boundDice;  // 绑定的骰子逻辑对象
 
-        public void SetData(BaseDice dice)
+        private void Awake()
         {
-            // Text
-            descriptionText.text = dice.description;
-            costText.text = $"Cost: {dice.cost}";
+            string prefabName = transform.parent != null
+                ? transform.parent.name.Replace("(Clone)", "").Trim()
+                : gameObject.name.Replace("(Clone)", "").Trim();
 
-            // Default
-            Color nameColor = Color.white;
-            Color rarityColor = Color.white;
-            string rarityTextContent = dice.tier.ToString();
-            string nameRich = dice.diceName;
+            boundDice = DiceFactory.CreateDiceByName(prefabName);
 
-            switch (dice.tier)
-            {
-                case DiceTier.Common:
-                    if (dice.cost == 0) // Normal Dice
-                    {
-                        nameColor = Color.white;
-                        rarityColor = new Color32(200, 200, 200, 255);
-                        if (background) background.color = new Color32(30, 55, 75, 200);
-                    }
-                    else
-                    {
-                        nameColor = new Color32(80, 180, 255, 255);   // Blue
-                        rarityColor = new Color32(80, 180, 255, 255);
-                        if (background) background.color = new Color32(25, 60, 90, 200);
-                    }
-                    break;
-
-                case DiceTier.Rare:
-                    nameColor = new Color32(180, 100, 255, 255);     // Purple
-                    rarityColor = new Color32(180, 100, 255, 255);
-                    if (background) background.color = new Color32(45, 25, 75, 200);
-                    break;
-
-                case DiceTier.Legendary:
-                    nameRich = Rainbowify(dice.diceName);
-                    rarityTextContent = Rainbowify("Legendary");
-                    if (background) background.color = new Color32(60, 35, 0, 200);
-                    break;
-            }
-
-            if (dice.tier == DiceTier.Legendary)
-                nameText.text = nameRich;
+            if (boundDice == null)
+                Debug.LogWarning($"[DiceUI] 无法为 {prefabName} 创建骰子实例！");
             else
-                nameText.text = $"<color=#{ColorUtility.ToHtmlStringRGB(nameColor)}>{dice.diceName}</color>";
-
-            rarityText.text = $"Rarity: <color=#{ColorUtility.ToHtmlStringRGB(rarityColor)}>{rarityTextContent}</color>";
+                Debug.Log($"[DiceUI] {prefabName} 成功绑定 {boundDice.GetType().Name}, diceName={boundDice.diceName}");
         }
 
-
-        private string Rainbowify(string text)
+        public void OnPointerEnter(PointerEventData eventData)
         {
-            string[] colors = { "#FFD700", "#FF8C00", "#FF4500", "#FF1493", "#9400D3", "#4B0082", "#1E90FF", "#00CED1", "#32CD32" };
-            var sb = new System.Text.StringBuilder();
-            for (int i = 0; i < text.Length; i++)
+            if (boundDice == null)
             {
-                string c = colors[i % colors.Length];
-                sb.Append($"<color={c}>{text[i]}</color>");
+                Debug.LogWarning($"[Hover] {gameObject.name} 没有绑定 BaseDice。");
+                return;
             }
-            return sb.ToString();
+            DiceTooltipManager.Instance.ShowTooltip(boundDice);
+        }
+
+        public void OnPointerExit(PointerEventData eventData)
+        {
+            DiceTooltipManager.Instance.HideTooltip();
+        }
+    }
+
+    // 工厂类：根据名字创建骰子
+    public static class DiceFactory
+    {
+        public static BaseDice CreateDiceByName(string name)
+        {
+            switch (name)
+            {
+                case "BigOne":
+                    return new BigOne();
+                case "BigSix":
+                    return new BigSix();
+                case "CounterDice":
+                    return new CounterDice();
+                case "EvenDice":
+                    return new EvenDice();
+                case "OddDice":
+                    return new OddDice();
+
+                case "HeavyDice":
+                    return new HeavyDice();
+                case "LightDice":
+                    return new LightDice();
+                case "MirrorDice":
+                    return new MirrorDice();
+
+                case "CollectorDice":
+                    return new CollectorDice();
+                case "LuckySix":
+                    return new LuckySix();
+                case "PlusOne":
+                    return new PlusOne();
+                case "SevenSevenSeven":
+                    return new SevenSevenSeven();
+
+                case "TwinBond":
+                    return new TwinBond();
+                case "WeightedEdge":
+                    return new WeightedEdge();
+                case "D8":
+                    return new D8();
+
+                case "GoldenDice":
+                    return new GoldenDice();
+                case "ZombieDice":
+                    return new ZombieDice();
+
+                default:
+                    Debug.LogWarning($"[DiceFactory] 未找到骰子：{name}，返回 NormalDice");
+                    return new NormalDice();
+            }
         }
     }
 }
