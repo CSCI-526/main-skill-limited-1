@@ -12,14 +12,6 @@ using UnityEngine.SceneManagement;
 
 namespace DiceGame
 {
-    /// <summary>
-    /// Battle scene controller: Orchestrates hand gameplay with cooldown system
-    /// Delegates responsibilities to specialized components:
-    /// - HandManager: hand state and roll counting
-    /// - DiceEffectHandler: special dice effects
-    /// - DiceMultiplierCalculator: damage multipliers
-    /// - DiceViewFactory: UI view management
-    /// </summary>
     public class BattleController : MonoBehaviour
     {
         // Static state for scene transitions
@@ -33,9 +25,12 @@ namespace DiceGame
         public Button resetRollButton;
         public Button submitComboButton;  // NEW: Submit current locked combo
         public Button continueButton;     // NEW: Continue to next level after evaluation
+        public Button openBackpackButton; // The main button to open the backpack
         public TMP_Text rollFeedbackText; // Shows dice status only
         public TMP_Text handCounterText;  // NEW: Display hand counter
-        public TMP_Text deckStatusText;   // NEW: Display dice pool/deck status
+        
+        [Header("Backpack")]
+        public BackpackManager backpackManager;
 
         [Header("Score Display")]
         public ScoreAnimator scoreAnimator; // Animated score display system
@@ -65,6 +60,7 @@ namespace DiceGame
         // Current hand state
         private readonly List<BaseDice> _dice = new();
         private readonly List<DiceView> _views = new();
+        private bool _isSelectionMode = false;
 
         void Start()
         {
@@ -100,6 +96,16 @@ namespace DiceGame
             if (scoreAnimator != null && relicDisplay != null)
             {
                 scoreAnimator.relicDisplay = relicDisplay;
+            }
+
+            // Initialize backpack manager
+            if (backpackManager != null)
+            {
+                backpackManager.Initialize(cooldownSystem, OnDiceSelectedFromBackpack);
+            }
+            else
+            {
+                Debug.LogError("[BattleController] BackpackManager not assigned!");
             }
 
             // Initialize core components first (needed for other initialization)
@@ -155,10 +161,24 @@ namespace DiceGame
             // Check if there are pending reward dice from reward scene
             IntegrateRewardDice();
             
-            // Start first hand
-            StartNewHand();
+            // Start first hand with a delay to ensure all systems are ready
+            StartCoroutine(DelayedStartFirstHand());
             
             Debug.Log("[BattleController] Battle scene initialized with decoupled components.");
+        }
+
+        private System.Collections.IEnumerator DelayedStartFirstHand()
+        {
+            yield return null; // Wait one frame
+            StartNewHand();
+        }
+        
+        public void OnBackpackButtonPressed()
+        {
+            if (!_isSelectionMode)
+            {
+                backpackManager.ShowBackpack(BackpackMode.ViewOnly);
+            }
         }
         
         /// <summary>
@@ -291,6 +311,8 @@ namespace DiceGame
     /// </summary>
     private void StartNewHand()
     {
+        _isSelectionMode = true;
+
         // Check if hands remain (safety check before pool refresh)
         var (handCount, handRemaining) = cooldownSystem.GetHandCounter();
         if (handRemaining <= 0 && handCount > 0) // Don't block the very first hand
@@ -311,24 +333,19 @@ namespace DiceGame
         _dice.Clear();
         _viewFactory.DestroyViews(_views);
 
-        // Display full dice pool with cooldown status
-        var allDice = cooldownSystem.GetAllDice();
-        var (currentHand, remainingHands) = cooldownSystem.GetHandCounter();
-        Debug.Log($"=== HAND {currentHand + 1} - DICE POOL STATUS ===");
-        Debug.Log($"Hand {currentHand + 1}/{currentHand + remainingHands} ({remainingHands} remaining)");
-        Debug.Log("Full Dice Pool:");
-        foreach (var dice in allDice)
-        {
-            string status = dice.cooldownRemain > 0 ? $"COOLDOWN({dice.cooldownRemain})" : "AVAILABLE";
-            Debug.Log($"  {dice.diceName}: {dice.tier}, cost={dice.cost}, {status}");
-        }
-        Debug.Log("========================================");
+        // Show backpack for dice selection
+        UpdateFeedback("Choose your dice for the next hand.");
+        backpackManager.ShowBackpack(BackpackMode.Selection);
+    }
 
-        // Get available dice from cooldown system (after advancing cooldowns)
-        var availableDice = cooldownSystem.GetAvailableDice();
-        
+    private void OnDiceSelectedFromBackpack(List<BaseDice> selectedDice)
+    {
+        _isSelectionMode = false;
+
         // Use HandCompositionService to compose the hand
-        var composedHand = _compositionService.ComposeHand(availableDice, diceCount, shuffle: true);
+        var composedHand = _compositionService.ComposeHandWithSelection(selectedDice, diceCount);
+        
+        _dice.Clear(); // Clear existing dice before adding the new selection
         _dice.AddRange(composedHand);
         
         // Separate special dice from normal dice for cooldown registration
@@ -368,13 +385,13 @@ namespace DiceGame
         
         // Get hand composition for feedback
         var (specialCount, normalCount) = _compositionService.GetHandComposition(_dice);
+        var (currentHand, remainingHands) = cooldownSystem.GetHandCounter();
         
         // Build feedback message using UI presenter
         string feedbackMsg = _uiPresenter.FormatHandReady(currentHand + 1, diceCount, specialCount, normalCount);
         
         UpdateFeedback(feedbackMsg);
         UpdateHandCounter(currentHand, remainingHands);
-        UpdateDeckStatus(); // Update deck display
         
         Debug.Log($"[BattleController] Started hand with {diceCount} dice total");
     }
@@ -426,9 +443,6 @@ namespace DiceGame
             // Refresh all views using factory
             _viewFactory.RefreshViews(_views);
             
-            // Update deck status after roll
-            UpdateDeckStatus();
-
             // Build feedback using UI presenter
             string feedbackMsg = _uiPresenter.FormatRollFeedback(_dice, rollNumber, maxRollsPerHand);
             UpdateFeedback(feedbackMsg);
@@ -545,7 +559,6 @@ namespace DiceGame
             
             // Clear dice views and refresh deck status
             UpdateFeedback(_uiPresenter.FormatComboSubmitted(submittedDice, _handManager.RollsUsed, maxRollsPerHand) + "\n<color=#88FF88>Score calculated!</color>");
-            UpdateDeckStatus();
             
             // Get the final calculated score from the animator (already available at this point)
             int finalScore = scoreAnimator.GetLastHandScore();
@@ -709,12 +722,7 @@ namespace DiceGame
         /// </summary>
         private void UpdateDeckStatus()
         {
-            if (deckStatusText == null) return;
-
-            var allDice = cooldownSystem.GetAllDice();
-            var selectedDiceNames = _dice.Where(d => !(d is NormalDice)).Select(d => d.diceName).ToHashSet();
-
-            deckStatusText.text = _uiPresenter.FormatDeckStatus(allDice, selectedDiceNames);
+            // This is now handled by the backpack system.
         }
 
         /// <summary>
@@ -822,7 +830,6 @@ namespace DiceGame
         {
             Debug.Log("[BattleController] Dice pool refreshed - starting new battle cycle!");
             UpdateFeedback(_uiPresenter.FormatDicePoolRefreshed());
-            UpdateDeckStatus(); // Update deck display
             
             // Start a new hand with refreshed dice
             StartNewHand();
@@ -843,9 +850,6 @@ namespace DiceGame
         private void OnAvailableDiceChanged(List<BaseDice> availableDice)
         {
             Debug.Log($"[BattleController] Available dice changed: {availableDice.Count} dice available");
-            
-            // Update deck status display
-            UpdateDeckStatus();
             
             // Log details
             var sb = new StringBuilder();

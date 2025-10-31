@@ -123,6 +123,23 @@ namespace DiceGame
             int specialCount = hand.Count - normalCount;
             return (specialCount, normalCount);
         }
+
+        /// <summary>
+        /// Composes a hand based on player's selection and fills the rest with normal dice.
+        /// </summary>
+        public List<BaseDice> ComposeHandWithSelection(List<BaseDice> playerSelection, int targetHandSize)
+        {
+            var hand = new List<BaseDice>(playerSelection);
+
+            // Fill remaining slots with normal dice
+            if (hand.Count < targetHandSize)
+            {
+                var normalDice = FillWithNormalDice(hand.Count, targetHandSize);
+                hand.AddRange(normalDice);
+            }
+
+            return hand.Take(targetHandSize).ToList(); // Ensure hand does not exceed target size
+        }
     }
 }
 
