@@ -35,6 +35,11 @@ namespace DiceGame
         {
             if (model == null) return;
             valueText.text = model.lastRollValue > 0 ? model.lastRollValue.ToString() : "-";
+            if (lockButton != null)
+            {
+                bool hasRolledValue = model.lastRollValue > 0 && model.tier != DiceTier.Filler;
+                lockButton.interactable = hasRolledValue;
+            }
             if (lockIndicator != null)
                 lockIndicator.enabled = model.isLocked;
         }
@@ -46,6 +51,11 @@ namespace DiceGame
         {
             if (valueText != null)
                 valueText.text = value;
+            if (lockButton != null)
+            {
+                bool hasRolledValue = model != null && model.lastRollValue > 0 && model.tier != DiceTier.Filler;
+                lockButton.interactable = hasRolledValue;
+            }
         }
 
         void OnToggleLock()
