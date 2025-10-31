@@ -6,10 +6,11 @@ using Unity.Services.Core;
 namespace DiceGame.Analytics
 {
     /// <summary>
-    /// Simplified Unity Analytics system for tracking 3 core metrics:
+    /// Simplified Unity Analytics system for tracking 4 core metrics:
     /// 1. Player rounds/score progression
     /// 2. Dice usage frequency  
     /// 3. Score combination frequency
+    /// 4. Relic frequency
     /// </summary>
     public class UnityGameAnalytics : MonoBehaviour
     {
@@ -170,6 +171,47 @@ namespace DiceGame.Analytics
             }
             
             Debug.Log($"[UnityAnalytics] score_combination: {comboName}");
+        }
+        
+        /// <summary>
+        /// Track relic frequency (when relics are obtained)
+        /// </summary>
+        public static void TrackRelicFrequency(string relicName)
+        {
+            if (instance == null)
+            {
+                Debug.LogWarning("[UnityAnalytics] Instance not created yet, skipping relic_frequency event");
+                return;
+            }
+            
+            if (!instance.isInitialized)
+            {
+                Debug.LogWarning("[UnityAnalytics] Unity Services not initialized, skipping relic_frequency event");
+                return;
+            }
+            
+            var parameters = new Dictionary<string, object>
+            {
+                {"relic_name", relicName}
+            };
+            
+            // Send to Unity Analytics
+            try
+            {
+                var customEvent = new CustomEvent("relic_frequency");
+                foreach (var param in parameters)
+                {
+                    customEvent.Add(param.Key, param.Value);
+                }
+                AnalyticsService.Instance.RecordEvent(customEvent);
+                Debug.Log($"[UnityAnalytics] Sent to Unity Analytics: relic_frequency");
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogWarning($"[UnityAnalytics] Failed to send relic_frequency: {e.Message}");
+            }
+            
+            Debug.Log($"[UnityAnalytics] relic_frequency: {relicName}");
         }
         
     }

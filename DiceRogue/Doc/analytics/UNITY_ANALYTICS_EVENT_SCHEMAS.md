@@ -4,6 +4,7 @@
 1. **Player rounds/score progression** - How far players get and their scores
 2. **Dice usage frequency** - Which dice are used most often
 3. **Score combination frequency** - Which combinations players achieve
+4. **Relic frequency** - Which relics are obtained most often
 
 ## How to Set Up Event Schemas
 
@@ -11,7 +12,7 @@
    - In Unity Editor: `Window > Services > Analytics > Event Manager`
    - Or visit: https://dashboard.unity3d.com → Your Project → Analytics → Event Manager
 
-2. **Create these 3 simple event schemas:**
+2. **Create these 4 simple event schemas:**
 
 ## Event Schema Definitions
 
@@ -35,17 +36,23 @@
 **Parameters:**
 - `combo_name` (String) - Name of the combination (e.g., "Three of a Kind", "Full House")
 
+### 4. relic_frequency
+**Description:** Tracks relic frequency (which relics are obtained)
+
+**Parameters:**
+- `relic_name` (String) - Name of the relic obtained
+
 ## Steps to Create Each Event
 
 1. Click "Create Event" in the Event Manager
 2. Enter the event name (e.g., "player_progression")
 3. Add the parameters with correct types (Integer, String)
 4. Save the event schema
-5. Repeat for all 3 events
+5. Repeat for all 4 events
 
 ## After Creating Schemas
 
-Once you've created the 3 event schemas:
+Once you've created the 4 event schemas:
 1. Play your game in Unity Editor
 2. Check the Analytics Debug Panel - events should now show as "Valid Events"
 3. Check the Unity Dashboard - events should appear in the "Valid Events" tab
