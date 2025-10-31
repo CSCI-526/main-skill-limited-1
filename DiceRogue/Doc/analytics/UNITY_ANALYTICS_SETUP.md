@@ -14,6 +14,9 @@
 ### **3. Score Combination Frequency**
 - **`score_combination`** - Frequency of "Three of a Kind", "Full House", etc.
 
+### **4. Relic Frequency**
+- **`relic_frequency`** - Frequency of relic acquisitions
+
 ## 🔧 **Setup Steps**
 
 ### **1. Unity Analytics is Already Installed**
@@ -48,6 +51,7 @@
 - **Events > hand_completed** - Player progression
 - **Events > dice_used** - Most popular dice
 - **Events > score_combination** - Combo frequency
+- **Events > relic_frequency** - Most popular relics
 
 ## 🎮 **Testing the Analytics**
 
@@ -64,6 +68,7 @@ In the Unity Console, you should see:
 [UnityAnalytics] dice_used: Golden Dice (Legendary) in hand 1
 [UnityAnalytics] hand_completed: Hand 1, Score: 150, Total: 150, Combo: Three of a Kind
 [UnityAnalytics] score_combination: Three of a Kind = 150 points in hand 1
+[UnityAnalytics] relic_frequency: Collector's Seal
 ```
 
 ## 🚀 **Advantages of Unity Analytics**
