@@ -12,6 +12,7 @@ namespace DiceRogue.Boot
         [Header("Scene Names")]
         public string mainSceneName = "MainScene";
         public string battleSceneName = "BattleScene";
+        public string tutorialSceneName = "TutorialScene";
 
         [Header("Fader")]
         public ScreenWipeFader wipeFader;   // assign if you want, else we auto-find
@@ -47,7 +48,12 @@ namespace DiceRogue.Boot
             StartCoroutine(LoadSceneWithWipe(battleSceneName));
         }
 
-        IEnumerator LoadSceneWithWipe(string sceneName)
+        public void StartTutorial()
+        {
+            StartCoroutine(LoadSceneWithWipe(tutorialSceneName));
+        }
+
+        public IEnumerator LoadSceneWithWipe(string sceneName)
         {
             EnsureFader();
             if (wipeFader != null) yield return wipeFader.FadeOut();
