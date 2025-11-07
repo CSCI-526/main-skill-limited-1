@@ -20,6 +20,19 @@ namespace DiceRogue.Main
             DiceRogue.Boot.RunLoader.Instance.StartRun();
         }
 
+        public void OnClickTutorial()
+        {
+            // Stop both dice animations instantly
+            if (animatedDice != null)
+            {
+                foreach (var d in animatedDice)
+                    if (d != null) d.Pause();
+            }
+
+            // Kick off the tutorial
+            DiceRogue.Boot.RunLoader.Instance.StartTutorial();
+        }
+
         public void OnClickQuit()
         {
 #if UNITY_EDITOR
