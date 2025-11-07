@@ -69,15 +69,16 @@ This will be similar to BattleController but with tutorial-specific logic.
    - Color: White
    - Word Wrapping: Enabled
 
-### 4.3: Create Continue/Skip Button
+### 4.3: Create "Next" Button
 1. Under `TutorialPromptPanel`:
    - Right-click **TutorialPromptPanel** > **UI > Button - TextMeshPro**
    - Name it: `ContinueButton`
-   - Position: Bottom center
-   - Text: "Continue" or "Next"
-   - Size: Appropriate (e.g., 200x50)
+   - Position: Bottom center (anchor to lower middle)
+   - Text: "Next"
+   - Size: Around 200x60 works well
 
-### 4.4: Create Skip Tutorial Button
+### 4.4: (Optional) Skip Tutorial Button
+If you want to let players skip the tutorial later, you can add a button for it. The default script hides it, so feel free to skip this for now.
 1. Under Canvas (not in TutorialPromptPanel):
    - Right-click **Canvas** > **UI > Button - TextMeshPro**
    - Name it: `SkipTutorialButton`
@@ -133,305 +134,25 @@ public void OnClickTutorial()
 
 ---
 
-## Step 6: Create TutorialController Script
+## Step 6: Hook Up `TutorialController`
 
-**Create new file:** `Assets/Scripts/Tutorial/TutorialController.cs`
+The script at `Assets/Scripts/Tutorial/TutorialController.cs` is already action-driven. You only need to wire the references in the TutorialScene Inspector—no code edits required.
 
-### Basic Structure:
-```csharp
-using System.Collections;
-using System.Collections.Generic;
-using UnityEngine;
-using UnityEngine.UI;
-using TMPro;
-using DiceGame.Core;
-using DiceGame.Analytics;
-using DiceGame.Relics;
-using DiceGame.UI;
-using UnityEngine.SceneManagement;
+### Inspector fields to assign
+- **Backpack References**: `backpackManager`, `diceSelectionUI`
+- **Dice / Score**: `diceRowParent` (the hand container) and `scoreAnimator`
+- **Gameplay Buttons**: `openBackpackButton`, `rollButton`, `submitComboButton`
+- **Prompt UI**: `tutorialPromptPanel`, `tutorialText`, `tutorialContinueButton`
+  - `skipTutorialButton` can stay empty (it is hidden by default)
 
-namespace DiceGame.Tutorial
-{
-    public class TutorialController : MonoBehaviour
-    {
-        // Copy all the same references from BattleController
-        [Header("UI")]
-        public Transform diceRowParent;
-        public GameObject diceViewPrefab;
-        public Button rollButton;
-        public Button resetRollButton;
-        public Button submitComboButton;
-        public Button continueButton;
-        public Button openBackpackButton;
-        public TMP_Text rollFeedbackText;
-        public TMP_Text handCounterText;
-        
-        [Header("Tutorial UI")]
-        public GameObject tutorialPromptPanel;  // The overlay panel
-        public TMP_Text tutorialText;           // Instruction text
-        public Button tutorialContinueButton;   // Continue button
-        public Button skipTutorialButton;       // Skip button
-        
-        [Header("Backpack")]
-        public BackpackManager backpackManager;
-        
-        [Header("Score Display")]
-        public ScoreAnimator scoreAnimator;
-        public TMP_Text targetScoreText;
-        
-        [Header("Relic Display")]
-        public RelicDisplay relicDisplay;
-        
-        [Header("Config")]
-        public int diceCount = 5;
-        public int maxRollsPerHand = 2;
-        public int baseTargetScore = 300;
-        
-        [Header("Cooldown System")]
-        public CooldownSystem cooldownSystem;
-        
-        // Tutorial state
-        private int currentTutorialStep = 0;
-        private bool isTutorialActive = true;
-        
-        // Core components (same as BattleController)
-        private HandManager _handManager;
-        private DiceEffectHandler _effectHandler;
-        private DiceViewFactory _viewFactory;
-        private RelicManager _relicManager;
-        private ScoreCalculator _scoreCalculator;
-        private ProgressionManager _progressionManager;
-        private BattleUIPresenter _uiPresenter;
-        private HandCompositionService _compositionService;
-        
-        // Current hand state
-        private readonly List<BaseDice> _dice = new();
-        private readonly List<DiceView> _views = new();
-        private bool _isSelectionMode = false;
-        
-        // Tutorial steps
-        private readonly List<TutorialStep> tutorialSteps = new();
-        
-        void Start()
-        {
-            InitializeTutorial();
-            InitializeGameSystems();
-            StartTutorialStep(0);
-        }
-        
-        void InitializeTutorial()
-        {
-            // Hide tutorial UI initially
-            if (tutorialPromptPanel != null)
-                tutorialPromptPanel.SetActive(false);
-            
-            // Set up tutorial steps
-            SetupTutorialSteps();
-            
-            // Set up skip button
-            if (skipTutorialButton != null)
-                skipTutorialButton.onClick.AddListener(OnSkipTutorial);
-        }
-        
-        void InitializeGameSystems()
-        {
-            // Copy initialization from BattleController
-            // This reuses all the same game logic
-            // ... (same as BattleController.Start())
-        }
-        
-        void SetupTutorialSteps()
-        {
-            tutorialSteps.Add(new TutorialStep
-            {
-                title = "Welcome to Dice Roguelike!",
-                message = "This tutorial will teach you the basics of the game.",
-                highlightElement = null, // No specific element to highlight
-                waitForAction = false
-            });
-            
-            tutorialSteps.Add(new TutorialStep
-            {
-                title = "Select Your Dice",
-                message = "Click on dice from your backpack to build your hand. You need 5 dice per hand.",
-                highlightElement = openBackpackButton?.gameObject,
-                waitForAction = true,
-                requiredAction = TutorialAction.OpenBackpack
-            });
-            
-            tutorialSteps.Add(new TutorialStep
-            {
-                title = "Roll Your Dice",
-                message = "Once you've selected 5 dice, click the Roll button to roll them.",
-                highlightElement = rollButton?.gameObject,
-                waitForAction = true,
-                requiredAction = TutorialAction.Roll
-            });
-            
-            tutorialSteps.Add(new TutorialStep
-            {
-                title = "Select Dice to Keep",
-                message = "Click on dice you want to keep. Selected dice will be locked for your final score.",
-                highlightElement = null,
-                waitForAction = true,
-                requiredAction = TutorialAction.SelectDice
-            });
-            
-            tutorialSteps.Add(new TutorialStep
-            {
-                title = "Submit Your Hand",
-                message = "Click Submit to lock in your dice and calculate your score.",
-                highlightElement = submitComboButton?.gameObject,
-                waitForAction = true,
-                requiredAction = TutorialAction.Submit
-            });
-            
-            tutorialSteps.Add(new TutorialStep
-            {
-                title = "Score Combinations",
-                message = "Your score is based on combinations like Three of a Kind, Full House, etc.",
-                highlightElement = scoreAnimator?.gameObject,
-                waitForAction = false
-            });
-            
-            tutorialSteps.Add(new TutorialStep
-            {
-                title = "Tutorial Complete!",
-                message = "You're ready to play! This tutorial will be marked as completed.",
-                highlightElement = null,
-                waitForAction = false
-            });
-        }
-        
-        void StartTutorialStep(int stepIndex)
-        {
-            if (stepIndex >= tutorialSteps.Count)
-            {
-                CompleteTutorial();
-                return;
-            }
-            
-            currentTutorialStep = stepIndex;
-            var step = tutorialSteps[stepIndex];
-            
-            // Show tutorial prompt
-            ShowTutorialPrompt(step.title, step.message, step.highlightElement);
-            
-            // If step waits for action, disable other interactions
-            if (step.waitForAction)
-            {
-                DisableNonTutorialInteractions(step.requiredAction);
-            }
-        }
-        
-        void ShowTutorialPrompt(string title, string message, GameObject highlightElement)
-        {
-            if (tutorialPromptPanel != null)
-                tutorialPromptPanel.SetActive(true);
-            
-            if (tutorialText != null)
-                tutorialText.text = $"<b>{title}</b>\n\n{message}";
-            
-            // Highlight specific element if provided
-            if (highlightElement != null)
-            {
-                // Add highlight effect (e.g., outline, glow, or pointer)
-                HighlightElement(highlightElement);
-            }
-        }
-        
-        void HighlightElement(GameObject element)
-        {
-            // Simple highlight: add outline component or change color
-            // You can implement this based on your UI system
-        }
-        
-        void DisableNonTutorialInteractions(TutorialAction requiredAction)
-        {
-            // Disable buttons that aren't part of current step
-            // Enable only the button/element needed for current step
-        }
-        
-        void OnTutorialContinue()
-        {
-            // Hide prompt
-            if (tutorialPromptPanel != null)
-                tutorialPromptPanel.SetActive(false);
-            
-            // Move to next step
-            StartTutorialStep(currentTutorialStep + 1);
-        }
-        
-        void OnSkipTutorial()
-        {
-            CompleteTutorial();
-        }
-        
-        void CompleteTutorial()
-        {
-            // Mark tutorial as completed
-            PlayerPrefs.SetInt("HasCompletedTutorial", 1);
-            PlayerPrefs.Save();
-            
-            // Hide tutorial UI
-            if (tutorialPromptPanel != null)
-                tutorialPromptPanel.SetActive(false);
-            
-            isTutorialActive = false;
-            
-            // Return to main menu or start a normal game
-            // Option 1: Return to main menu
-            DiceRogue.Boot.RunLoader.Instance.StartCoroutine(
-                DiceRogue.Boot.RunLoader.Instance.LoadSceneWithWipe("MainScene")
-            );
-            
-            // Option 2: Start a normal game
-            // DiceRogue.Boot.RunLoader.Instance.StartRun();
-        }
-        
-        // Hook into game actions to track tutorial progress
-        public void OnBackpackOpened()
-        {
-            if (isTutorialActive && currentTutorialStep == 1) // Step for opening backpack
-            {
-                OnTutorialContinue();
-            }
-        }
-        
-        public void OnRollButtonClicked()
-        {
-            if (isTutorialActive && currentTutorialStep == 2) // Step for rolling
-            {
-                OnTutorialContinue();
-            }
-            // Also call actual roll logic
-        }
-        
-        // ... (other action hooks)
-    }
-    
-    // Tutorial step data structure
-    [System.Serializable]
-    public class TutorialStep
-    {
-        public string title;
-        public string message;
-        public GameObject highlightElement;
-        public bool waitForAction;
-        public TutorialAction requiredAction;
-    }
-    
-    public enum TutorialAction
-    {
-        None,
-        OpenBackpack,
-        SelectDice,
-        Roll,
-        Submit,
-        Continue
-    }
-}
-```
+### How the flow works now
+1. **Intro** – prompt shows in the centre with a `Next` button.
+2. **Build Your Hand** – prompt auto-hides after a short delay and waits for the backpack “Confirm” click (from `DiceSelectionUI.submitButton`).
+3. **Roll / Lock / Submit** – the controller listens to the roll button, dice lock buttons, and submit button so the tutorial only advances after the player performs each action.
+4. **Score Animation** – the next step waits until `ScoreAnimator` finishes animating before continuing.
+5. **Outro** – prompt reappears with the final `Next` button and returns to `MainScene` through `RunLoader`.
+
+Only the intro and outro use the `Next` button; everything else advances automatically when the action is completed.
 
 ---
 
@@ -449,10 +170,10 @@ namespace DiceGame.Tutorial
 3. **Assign Tutorial UI references:**
    - Tutorial Prompt Panel → `tutorialPromptPanel`
    - Tutorial Text → `tutorialText`
-\\   - Continue Button → `tutorialContinueButton`
-\\   - Skip Button → `skipTutorialButton`
+   - Continue Button → `tutorialContinueButton`
+   - (Optional) Skip Button → `skipTutorialButton`
 
-\\4. **Connect Continue Button:**
+4. **Connect Continue Button:**
    - In TutorialController Inspector, find `tutorialContinueButton`
    - In Button component, add OnClick event
    - Drag TutorialController to the object field

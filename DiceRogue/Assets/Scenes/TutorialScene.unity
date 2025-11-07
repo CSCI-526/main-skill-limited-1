@@ -4333,7 +4333,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 0, y: 0}
+  m_AnchoredPosition: {x: 200, y: 0}
   m_SizeDelta: {x: 160, y: 30}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &994451305
@@ -4659,15 +4659,15 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 32
-  m_fontSizeBase: 32
+  m_fontSize: 24
+  m_fontSizeBase: 24
   m_fontWeight: 400
   m_enableAutoSizing: 0
   m_fontSizeMin: 18
   m_fontSizeMax: 72
   m_fontStyle: 0
-  m_HorizontalAlignment: 1
-  m_VerticalAlignment: 256
+  m_HorizontalAlignment: 2
+  m_VerticalAlignment: 512
   m_textAlignment: 65535
   m_characterSpacing: 0
   m_wordSpacing: 0
@@ -6631,27 +6631,21 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 191e1d9e8cd265842bea0b9da975d197, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  backpackManager: {fileID: 100662591}
+  diceSelectionUI: {fileID: 0}
   diceRowParent: {fileID: 1876933402}
-  diceViewPrefab: {fileID: 3723193620872241820, guid: 8fbb8a04df5e44e01afaa7fc2581e717, type: 3}
-  rollButton: {fileID: 1946682078}
-  resetRollButton: {fileID: 134014603}
-  submitComboButton: {fileID: 1968590362}
-  continueButton: {fileID: 67246248}
+  scoreAnimator: {fileID: 167713614}
   openBackpackButton: {fileID: 0}
-  rollFeedbackText: {fileID: 517847884}
-  handCounterText: {fileID: 552224328}
+  rollButton: {fileID: 1946682078}
+  submitComboButton: {fileID: 1968590362}
   tutorialPromptPanel: {fileID: 1973425375}
   tutorialText: {fileID: 1164804570}
   tutorialContinueButton: {fileID: 994451305}
   skipTutorialButton: {fileID: 0}
-  backpackManager: {fileID: 100662591}
-  scoreAnimator: {fileID: 167713614}
-  targetScoreText: {fileID: 59637293}
-  relicDisplay: {fileID: 364804}
-  diceCount: 5
-  maxRollsPerHand: 2
-  baseTargetScore: 100
-  cooldownSystem: {fileID: 1175860346}
+  configurePromptLayout: 1
+  promptSize: {x: 680, y: 220}
+  promptOffset: {x: 0, y: 0}
+  actionPromptDisplaySeconds: 1.5
 --- !u!114 &1914846754
 MonoBehaviour:
   m_ObjectHideFlags: 0
