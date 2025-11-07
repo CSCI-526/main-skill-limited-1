@@ -7,6 +7,7 @@ using TMPro;
 using UnityEngine.SceneManagement;
 using DiceGame.UI;
 using DiceGame;
+using DiceRogue.Boot;
 
 namespace DiceGame.Tutorial
 {
@@ -38,7 +39,22 @@ namespace DiceGame.Tutorial
         public bool configurePromptLayout = true;
         public Vector2 promptSize = new Vector2(640f, 240f);
         public Vector2 promptOffset = Vector2.zero;
-        public float actionPromptDisplaySeconds = 1.5f;
+        public Vector2 promptAnchor = new Vector2(0.5f, 0.5f);
+        public Vector2 promptPivot = new Vector2(0.5f, 0.5f);
+
+        [Header("Action Prompt Layout (left side)")]
+        public Vector2 actionPromptSize = new Vector2(360f, 200f);
+        public Vector2 actionPromptOffset = new Vector2(40f, -40f);
+        public Vector2 actionPromptAnchor = new Vector2(0.05f, 0.65f);
+        public Vector2 actionPromptPivot = new Vector2(0f, 0.5f);
+
+        public Vector2 introPromptSize = new Vector2(640f, 240f);
+        public Vector2 introPromptOffset = Vector2.zero;
+        public Vector2 introPromptAnchor = new Vector2(0.5f, 0.5f);
+        public Vector2 introPromptPivot = new Vector2(0.5f, 0.5f);
+
+        public Vector2 textPadding = new Vector2(24f, 24f);
+        public float textRightPaddingWithButton = 150f;
 
         private readonly List<TutorialStep> tutorialSteps = new();
         private readonly List<(Button button, UnityAction handler)> buttonHandlers = new();
@@ -47,9 +63,13 @@ namespace DiceGame.Tutorial
         private int currentStepIndex = -1;
         private bool isTutorialActive = true;
         private TutorialAction currentRequiredAction = TutorialAction.None;
-        private Coroutine autoHideRoutine;
         private Coroutine waitForScoreRoutine;
         private bool lockStepCompleted;
+
+        private RectTransform promptRect;
+        private RectTransform textRect;
+        private RectTransform nextButtonRect;
+        private TextMeshProUGUI nextButtonLabel;
 
         void Start()
         {
@@ -121,18 +141,16 @@ namespace DiceGame.Tutorial
                 message = "This tutorial will teach you the basics of the game.",
                 useNextButton = true,
                 waitForAction = false,
-                autoHidePrompt = false,
                 requiredAction = TutorialAction.None
             });
 
             tutorialSteps.Add(new TutorialStep
             {
                 title = "Build Your Hand",
-                message = "Open the backpack and select five dice.", 
+                message = "Open the backpack and select upto five dice.",
                 highlightElement = openBackpackButton != null ? openBackpackButton.gameObject : null,
                 useNextButton = false,
                 waitForAction = true,
-                autoHidePrompt = true,
                 requiredAction = TutorialAction.ConfirmHand
             });
 
@@ -143,7 +161,6 @@ namespace DiceGame.Tutorial
                 highlightElement = rollButton != null ? rollButton.gameObject : null,
                 useNextButton = false,
                 waitForAction = true,
-                autoHidePrompt = true,
                 requiredAction = TutorialAction.RollDice
             });
 
@@ -153,7 +170,6 @@ namespace DiceGame.Tutorial
                 message = "Click the dice you want to keep.",
                 useNextButton = false,
                 waitForAction = true,
-                autoHidePrompt = true,
                 requiredAction = TutorialAction.LockDice
             });
 
@@ -164,7 +180,6 @@ namespace DiceGame.Tutorial
                 highlightElement = submitComboButton != null ? submitComboButton.gameObject : null,
                 useNextButton = false,
                 waitForAction = true,
-                autoHidePrompt = true,
                 requiredAction = TutorialAction.SubmitHand
             });
 
@@ -174,7 +189,6 @@ namespace DiceGame.Tutorial
                 message = "Watch how the combo is scored.",
                 useNextButton = false,
                 waitForAction = true,
-                autoHidePrompt = false,
                 requiredAction = TutorialAction.ScoreAnimationComplete
             });
 
@@ -184,7 +198,6 @@ namespace DiceGame.Tutorial
                 message = "You’re ready to play. Click Next to return to the main menu.",
                 useNextButton = true,
                 waitForAction = false,
-                autoHidePrompt = false,
                 requiredAction = TutorialAction.None
             });
         }
@@ -194,11 +207,22 @@ namespace DiceGame.Tutorial
             if (tutorialPromptPanel != null)
             {
                 tutorialPromptPanel.SetActive(false);
+                promptRect = tutorialPromptPanel.GetComponent<RectTransform>();
+            }
+
+            if (tutorialText != null)
+            {
+                textRect = tutorialText.GetComponent<RectTransform>();
+                NormalizeTextRect();
+                tutorialText.enableWordWrapping = true;
+                tutorialText.overflowMode = TextOverflowModes.Overflow;
             }
 
             if (tutorialContinueButton != null)
             {
                 tutorialContinueButton.onClick.AddListener(OnTutorialContinue);
+                nextButtonRect = tutorialContinueButton.GetComponent<RectTransform>();
+                nextButtonLabel = tutorialContinueButton.GetComponentInChildren<TextMeshProUGUI>();
             }
 
             if (skipTutorialButton != null)
@@ -211,24 +235,29 @@ namespace DiceGame.Tutorial
         {
             if (!configurePromptLayout || tutorialPromptPanel == null) return;
 
-            RectTransform rect = tutorialPromptPanel.GetComponent<RectTransform>();
-            if (rect != null)
+            if (promptRect == null) promptRect = tutorialPromptPanel.GetComponent<RectTransform>();
+            if (promptRect != null)
             {
-                rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0.5f, 0.5f);
-                rect.sizeDelta = promptSize;
-                rect.anchoredPosition = promptOffset;
+                promptRect.anchorMin = promptRect.anchorMax = promptAnchor;
+                promptRect.pivot = promptPivot;
+                promptRect.sizeDelta = promptSize;
+                promptRect.anchoredPosition = promptOffset;
             }
 
-            if (tutorialContinueButton != null)
+            if (tutorialText != null)
             {
-                RectTransform buttonRect = tutorialContinueButton.GetComponent<RectTransform>();
-                if (buttonRect != null)
-                {
-                    buttonRect.anchorMin = buttonRect.anchorMax = new Vector2(0.5f, 0f);
-                    buttonRect.pivot = new Vector2(0.5f, 0f);
-                    buttonRect.anchoredPosition = new Vector2(0f, 30f);
-                }
+                textRect = tutorialText.GetComponent<RectTransform>();
+                NormalizeTextRect();
             }
+
+            if (nextButtonRect != null)
+            {
+                nextButtonRect.anchorMin = nextButtonRect.anchorMax = new Vector2(1f, 0.5f);
+                nextButtonRect.pivot = new Vector2(0f, 0.5f);
+                nextButtonRect.anchoredPosition = new Vector2(20f, 0f);
+            }
+
+            UpdateTextPadding(true);
         }
 
         void HookGlobalListeners()
@@ -291,20 +320,10 @@ namespace DiceGame.Tutorial
             currentStepIndex = stepIndex;
             var step = tutorialSteps[stepIndex];
 
+            ApplyLayoutForStep(step);
             ShowPrompt(step.title, step.message);
             HighlightElement(step.highlightElement);
             SetNextButtonVisible(step.useNextButton);
-
-            if (autoHideRoutine != null)
-            {
-                StopCoroutine(autoHideRoutine);
-                autoHideRoutine = null;
-            }
-
-            if (step.autoHidePrompt)
-            {
-                autoHideRoutine = StartCoroutine(AutoHidePromptAfterDelay(actionPromptDisplaySeconds));
-            }
 
             if (step.waitForAction)
             {
@@ -353,13 +372,6 @@ namespace DiceGame.Tutorial
             }
         }
 
-        IEnumerator AutoHidePromptAfterDelay(float seconds)
-        {
-            yield return new WaitForSeconds(seconds);
-            HidePrompt();
-            autoHideRoutine = null;
-        }
-
         void HidePrompt()
         {
             if (tutorialPromptPanel != null)
@@ -373,6 +385,54 @@ namespace DiceGame.Tutorial
             if (tutorialContinueButton == null) return;
             tutorialContinueButton.gameObject.SetActive(visible);
             tutorialContinueButton.interactable = visible;
+            UpdateTextPadding(visible);
+            if (nextButtonLabel != null)
+            {
+                nextButtonLabel.text = "Next";
+            }
+        }
+
+        void UpdateTextPadding(bool hasNextButton)
+        {
+            if (textRect == null) return;
+            float rightPadding = hasNextButton ? textRightPaddingWithButton : textPadding.x;
+            textRect.offsetMin = new Vector2(textPadding.x, textPadding.y);
+            textRect.offsetMax = new Vector2(-rightPadding, -textPadding.y);
+        }
+
+        void NormalizeTextRect()
+        {
+            if (textRect == null) return;
+            textRect.anchorMin = Vector2.zero;
+            textRect.anchorMax = Vector2.one;
+            textRect.pivot = new Vector2(0f, 1f);
+            textRect.offsetMin = new Vector2(textPadding.x, textPadding.y);
+            textRect.offsetMax = new Vector2(-textPadding.x, -textPadding.y);
+        }
+
+        void ApplyLayoutForStep(TutorialStep step)
+        {
+            if (promptRect == null) return;
+
+            if (step.useNextButton)
+            {
+                promptRect.anchorMin = promptRect.anchorMax = introPromptAnchor;
+                promptRect.pivot = introPromptPivot;
+                promptRect.sizeDelta = introPromptSize;
+                promptRect.anchoredPosition = introPromptOffset;
+                if (tutorialText != null) tutorialText.alignment = TextAlignmentOptions.Center;
+            }
+            else
+            {
+                promptRect.anchorMin = promptRect.anchorMax = actionPromptAnchor;
+                promptRect.pivot = actionPromptPivot;
+                promptRect.sizeDelta = actionPromptSize;
+                promptRect.anchoredPosition = actionPromptOffset;
+                if (tutorialText != null)
+                {
+                    tutorialText.alignment = TextAlignmentOptions.TopLeft;
+                }
+            }
         }
 
         void HighlightElement(GameObject element)
@@ -542,9 +602,13 @@ namespace DiceGame.Tutorial
             PlayerPrefs.SetInt("HasCompletedTutorial", 1);
             PlayerPrefs.Save();
 
-            if (DiceRogue.Boot.RunLoader.Instance != null)
+            if (RunLoader.Instance != null)
             {
-                StartCoroutine(ReturnToMainMenu());
+                RunLoader.Instance.StartRun();
+            }
+            else
+            {
+                SceneManager.LoadScene("BattleScene");
             }
         }
 
@@ -564,7 +628,6 @@ namespace DiceGame.Tutorial
         public GameObject highlightElement;
         public bool useNextButton;
         public bool waitForAction;
-        public bool autoHidePrompt;
         public TutorialAction requiredAction;
     }
 

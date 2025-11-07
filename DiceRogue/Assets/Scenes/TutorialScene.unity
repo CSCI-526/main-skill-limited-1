@@ -5940,7 +5940,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!114 &1625029596
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -6631,6 +6631,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 191e1d9e8cd265842bea0b9da975d197, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  battleController: {fileID: 1625029596}
   backpackManager: {fileID: 100662591}
   diceSelectionUI: {fileID: 0}
   diceRowParent: {fileID: 1876933402}
@@ -6776,7 +6777,7 @@ MonoBehaviour:
   m_TargetGraphic: {fileID: 461374829}
   m_HandleRect: {fileID: 461374828}
   m_Direction: 0
-  m_Value: 1
+  m_Value: 0
   m_Size: 1
   m_NumberOfSteps: 0
   m_OnValueChanged:

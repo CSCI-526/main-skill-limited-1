@@ -145,14 +145,18 @@ The script at `Assets/Scripts/Tutorial/TutorialController.cs` is already action-
 - **Prompt UI**: `tutorialPromptPanel`, `tutorialText`, `tutorialContinueButton`
   - `skipTutorialButton` can stay empty (it is hidden by default)
 
-### How the flow works now
-1. **Intro** – prompt shows in the centre with a `Next` button.
-2. **Build Your Hand** – prompt auto-hides after a short delay and waits for the backpack “Confirm” click (from `DiceSelectionUI.submitButton`).
-3. **Roll / Lock / Submit** – the controller listens to the roll button, dice lock buttons, and submit button so the tutorial only advances after the player performs each action.
-4. **Score Animation** – the next step waits until `ScoreAnimator` finishes animating before continuing.
-5. **Outro** – prompt reappears with the final `Next` button and returns to `MainScene` through `RunLoader`.
+Everything else is optional. The controller will automatically fall back to the components already wired on `BattleController` if any of the above are left blank.
 
-Only the intro and outro use the `Next` button; everything else advances automatically when the action is completed.
+### Layout behaviour
+- Intro/outro steps keep the prompt in the centre, show the `Next` button on the right side of the text, and use the `introPrompt*` settings.
+- Action steps pin the prompt under the Combo Preference area on the left, stay visible while the player performs the action, and use the `actionPrompt*` settings (anchor/pivot/offset/size) for fine tuning.
+- You can tweak sizes, offsets, and anchors via the exposed fields on `TutorialController` if you want to move the prompts elsewhere.
+
+### Flow summary
+1. **Intro** – prompt in the centre; click `Next` to begin.
+2. **Build Hand / Roll / Lock / Submit** – prompt stays on-screen (right side) until each action is completed.
+3. **Score Breakdown** – waits for the score animation to finish before continuing.
+4. **Tutorial Complete** – final `Next` calls `RunLoader` to load `BattleScene` so the real run begins immediately.
 
 ---
 
