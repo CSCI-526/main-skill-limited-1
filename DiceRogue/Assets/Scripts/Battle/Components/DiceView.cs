@@ -3,6 +3,7 @@ using UnityEngine.UI;
 using TMPro;
 using UnityEngine.EventSystems; 
 using DiceGame.Core;
+using System.Collections;
 
 namespace DiceGame
 {
@@ -16,12 +17,19 @@ namespace DiceGame
         public Button lockButton;
         public Image lockIndicator; // 可选高亮
 
+        [Header("Dice Visuals")]
+        public DiceOrnamentAnimator ornamentAnimator;
+
         [HideInInspector] public BaseDice model;
 
         void Awake()
         {
             if (lockButton != null)
                 lockButton.onClick.AddListener(OnToggleLock);
+
+            if (ornamentAnimator == null)
+                ornamentAnimator = GetComponentInChildren<DiceOrnamentAnimator>(true);
+
             Refresh();
         }
 
@@ -35,6 +43,11 @@ namespace DiceGame
         {
             if (model == null) return;
             valueText.text = model.lastRollValue > 0 ? model.lastRollValue.ToString() : "-";
+            if (ornamentAnimator != null)
+            {
+                int face = Mathf.Clamp(model.lastRollValue, 1, 6);
+                ornamentAnimator.SetFace(face);
+            }
             if (lockButton != null)
             {
                 bool hasRolledValue = model.lastRollValue > 0 && model.tier != DiceTier.Filler;
@@ -142,5 +155,73 @@ namespace DiceGame
             
             transform.localScale = originalScale;
         }
+        /// <summary>
+        /// 播放掷骰动画：在固定显示最终点数前快速闪动随机数值
+        /// </summary>
+        public void PlayRollAnimation(int finalValue, float duration = 0.5f)
+        {
+            StopAllCoroutines();
+            StartCoroutine(RollAnimationCoroutine(finalValue, duration));
+        }
+
+        private System.Collections.IEnumerator RollAnimationCoroutine(int finalValue, float duration)
+        {
+            if (ornamentAnimator == null)
+            {
+                // 如果没挂动画器则退化为数字闪烁
+                float elapsed = 0f;
+                while (elapsed < duration)
+                {
+                    int r = Random.Range(1, 7);
+                    valueText.text = r.ToString();
+                    elapsed += Time.deltaTime;
+                    yield return null;
+                }
+                valueText.text = finalValue.ToString();
+                yield break;
+            }
+
+            float elapsedTime = 0f;
+            while (elapsedTime < duration)
+            {
+                int randomFace = Random.Range(1, 7);
+                ornamentAnimator.SetFace(randomFace);
+                elapsedTime += 0.05f; // 每 0.05 秒切换一次点阵
+                yield return new WaitForSeconds(0.05f);
+            }
+
+            // 最终固定显示真实点数
+            ornamentAnimator.SetFace(finalValue);
+            model.lastRollValue = finalValue;
+        }
+        //{
+        //    Vector3 originalScale = transform.localScale;
+        //    float elapsed = 0f;
+
+        //    // 🎲 动画开始：快速随机点数 + 缩放效果
+        //    while (elapsed < duration)
+        //    {
+        //        elapsed += Time.deltaTime;
+
+        //        // 随机闪烁 1-6
+        //        int randomValue = Random.Range(1, 7);
+        //        valueText.text = randomValue.ToString();
+
+        //        // 加入轻微抖动/缩放动画让感觉更真实
+        //        float scaleFactor = 1f + Mathf.Sin(elapsed * 30f) * 0.05f;
+        //        transform.localScale = originalScale * scaleFactor;
+
+        //        yield return null;
+        //    }
+
+        //    // 🎯 动画结束：显示最终结果
+        //    valueText.text = finalValue.ToString();
+
+        //    // 回复原始大小
+        //    transform.localScale = originalScale;
+
+        //    // 可选：轻微弹跳效果（沿用你原来的 PopEffect）
+        //    yield return StartCoroutine(PopEffectCoroutine(1f));
+        //}
     }
 }

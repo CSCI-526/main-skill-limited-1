@@ -423,13 +423,18 @@ namespace DiceGame
             for (int i = 0; i < _dice.Count; i++)
             {
                 var d = _dice[i];
-                if (!d.isLocked && d.tier != DiceTier.Filler) // Don't roll placeholder dice
+                var v = _views[i]; 
+
+                if (!d.isLocked && d.tier != DiceTier.Filler)
                 {
-                    // Setup PlusOne dice context before rolling
                     _effectHandler.SetupPlusOneDice(d, i, _dice);
 
                     int result = d.Roll();
                     Debug.Log($"  - {d.diceName} rolled: {result}");
+
+                    // play animation
+                    if (v != null)
+                        v.PlayRollAnimation(result, 0.5f); // second parameter is lasting time
                 }
                 else if (d.isLocked)
                 {
