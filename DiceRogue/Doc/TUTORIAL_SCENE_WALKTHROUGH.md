@@ -449,10 +449,10 @@ namespace DiceGame.Tutorial
 3. **Assign Tutorial UI references:**
    - Tutorial Prompt Panel → `tutorialPromptPanel`
    - Tutorial Text → `tutorialText`
-   - Continue Button → `tutorialContinueButton`
-   - Skip Button → `skipTutorialButton`
+\\   - Continue Button → `tutorialContinueButton`
+\\   - Skip Button → `skipTutorialButton`
 
-4. **Connect Continue Button:**
+\\4. **Connect Continue Button:**
    - In TutorialController Inspector, find `tutorialContinueButton`
    - In Button component, add OnClick event
    - Drag TutorialController to the object field
