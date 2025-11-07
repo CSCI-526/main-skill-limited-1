@@ -185,7 +185,7 @@ namespace DiceGame
             // Set text
             if (isMultiplier)
             {
-                bonusText.text = $"<b>×{multiplier:F1}</b>";
+                bonusText.text = $"<b>×{FormatMultiplier(multiplier)}</b>";
             }
             else
             {
@@ -458,6 +458,15 @@ namespace DiceGame
             {
                 totalScoreText.text = $"<size=80%>Total Score</size>\n<size=150%><b>{score}</b></size>";
             }
+        }
+
+        /// <summary>
+        /// Format multiplier values to avoid rounding 0.95 → 1.0 in UI
+        /// </summary>
+        private string FormatMultiplier(float multiplier)
+        {
+            // Show up to two decimals, but trim trailing zeros (Unity's "0.##")
+            return multiplier.ToString("0.##");
         }
 
         /// <summary>
