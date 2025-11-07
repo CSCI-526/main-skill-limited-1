@@ -43,7 +43,7 @@ namespace DiceGame.Tutorial
         public Vector2 promptPivot = new Vector2(0.5f, 0.5f);
 
         [Header("Action Prompt Layout (left side)")]
-        public Vector2 actionPromptSize = new Vector2(360f, 200f);
+        public Vector2 actionPromptSize = new Vector2(360f, 220f);
         public Vector2 actionPromptOffset = new Vector2(40f, -40f);
         public Vector2 actionPromptAnchor = new Vector2(0.05f, 0.65f);
         public Vector2 actionPromptPivot = new Vector2(0f, 0.5f);
@@ -56,6 +56,12 @@ namespace DiceGame.Tutorial
         public Vector2 textPadding = new Vector2(24f, 24f);
         public float textRightPaddingWithButton = 150f;
 
+        [Header("Combo Prompt Layout (under dice)")]
+        public Vector2 comboPromptSize = new Vector2(520f, 160f);
+        public Vector2 comboPromptOffset = new Vector2(0f, -190f);
+        public Vector2 comboPromptAnchor = new Vector2(0.5f, 0.5f);
+        public Vector2 comboPromptPivot = new Vector2(0.5f, 0.5f);
+
         private readonly List<TutorialStep> tutorialSteps = new();
         private readonly List<(Button button, UnityAction handler)> buttonHandlers = new();
         private readonly List<(Button button, UnityAction handler)> diceLockHandlers = new();
@@ -65,6 +71,7 @@ namespace DiceGame.Tutorial
         private TutorialAction currentRequiredAction = TutorialAction.None;
         private Coroutine waitForScoreRoutine;
         private bool lockStepCompleted;
+        private bool awaitingSecondRoll;
 
         private RectTransform promptRect;
         private RectTransform textRect;
@@ -137,20 +144,22 @@ namespace DiceGame.Tutorial
             tutorialSteps.Clear();
             tutorialSteps.Add(new TutorialStep
             {
-                title = "Welcome to Dice Roguelike!",
+                title = "Welcome to Straight or Bust!",
                 message = "This tutorial will teach you the basics of the game.",
                 useNextButton = true,
                 waitForAction = false,
+                layout = StepLayout.IntroCenter,
                 requiredAction = TutorialAction.None
             });
 
             tutorialSteps.Add(new TutorialStep
             {
                 title = "Build Your Hand",
-                message = "Open the backpack and select upto five dice.",
+                message = "Open the backpack and select up to five dice.",
                 highlightElement = openBackpackButton != null ? openBackpackButton.gameObject : null,
                 useNextButton = false,
                 waitForAction = true,
+                layout = StepLayout.ActionLeft,
                 requiredAction = TutorialAction.ConfirmHand
             });
 
@@ -161,16 +170,38 @@ namespace DiceGame.Tutorial
                 highlightElement = rollButton != null ? rollButton.gameObject : null,
                 useNextButton = false,
                 waitForAction = true,
+                layout = StepLayout.ActionLeft,
                 requiredAction = TutorialAction.RollDice
             });
 
             tutorialSteps.Add(new TutorialStep
             {
                 title = "Lock Dice",
-                message = "Click the dice you want to keep.",
+                message = "Click the dice you want to keep, up to five dice can be locked.",
                 useNextButton = false,
                 waitForAction = true,
+                layout = StepLayout.ActionLeft,
                 requiredAction = TutorialAction.LockDice
+            });
+
+            tutorialSteps.Add(new TutorialStep
+            {
+                title = "Check Combo Preference",
+                message = "Review the Combo Preference panel to see which combinations are valuable.",
+                useNextButton = true,
+                waitForAction = false,
+                layout = StepLayout.ComboInfo,
+                requiredAction = TutorialAction.None
+            });
+
+            tutorialSteps.Add(new TutorialStep
+            {
+                title = "Roll Again",
+                message = "You can roll again. Locked dice stay at their current values.",
+                useNextButton = false,
+                waitForAction = true,
+                layout = StepLayout.ActionLeft,
+                requiredAction = TutorialAction.SecondRoll
             });
 
             tutorialSteps.Add(new TutorialStep
@@ -180,6 +211,7 @@ namespace DiceGame.Tutorial
                 highlightElement = submitComboButton != null ? submitComboButton.gameObject : null,
                 useNextButton = false,
                 waitForAction = true,
+                layout = StepLayout.ActionLeft,
                 requiredAction = TutorialAction.SubmitHand
             });
 
@@ -189,6 +221,7 @@ namespace DiceGame.Tutorial
                 message = "Watch how the combo is scored.",
                 useNextButton = false,
                 waitForAction = true,
+                layout = StepLayout.CenterBelow,
                 requiredAction = TutorialAction.ScoreAnimationComplete
             });
 
@@ -198,6 +231,7 @@ namespace DiceGame.Tutorial
                 message = "You’re ready to play. Click Next to return to the main menu.",
                 useNextButton = true,
                 waitForAction = false,
+                layout = StepLayout.IntroCenter,
                 requiredAction = TutorialAction.None
             });
         }
@@ -238,7 +272,8 @@ namespace DiceGame.Tutorial
             if (promptRect == null) promptRect = tutorialPromptPanel.GetComponent<RectTransform>();
             if (promptRect != null)
             {
-                promptRect.anchorMin = promptRect.anchorMax = promptAnchor;
+                promptRect.anchorMin = promptAnchor;
+                promptRect.anchorMax = promptAnchor;
                 promptRect.pivot = promptPivot;
                 promptRect.sizeDelta = promptSize;
                 promptRect.anchoredPosition = promptOffset;
@@ -253,8 +288,8 @@ namespace DiceGame.Tutorial
             if (nextButtonRect != null)
             {
                 nextButtonRect.anchorMin = nextButtonRect.anchorMax = new Vector2(1f, 0.5f);
-                nextButtonRect.pivot = new Vector2(0f, 0.5f);
-                nextButtonRect.anchoredPosition = new Vector2(20f, 0f);
+                nextButtonRect.pivot = new Vector2(1f, 0.5f);
+                nextButtonRect.anchoredPosition = new Vector2(-textPadding.x, 0f);
             }
 
             UpdateTextPadding(true);
@@ -338,6 +373,10 @@ namespace DiceGame.Tutorial
                 {
                     StartScoreWatcher();
                 }
+                else if (step.requiredAction == TutorialAction.SecondRoll)
+                {
+                    awaitingSecondRoll = true;
+                }
             }
             else
             {
@@ -414,24 +453,40 @@ namespace DiceGame.Tutorial
         {
             if (promptRect == null) return;
 
-            if (step.useNextButton)
+            switch (step.layout)
             {
-                promptRect.anchorMin = promptRect.anchorMax = introPromptAnchor;
-                promptRect.pivot = introPromptPivot;
-                promptRect.sizeDelta = introPromptSize;
-                promptRect.anchoredPosition = introPromptOffset;
-                if (tutorialText != null) tutorialText.alignment = TextAlignmentOptions.Center;
-            }
-            else
-            {
-                promptRect.anchorMin = promptRect.anchorMax = actionPromptAnchor;
-                promptRect.pivot = actionPromptPivot;
-                promptRect.sizeDelta = actionPromptSize;
-                promptRect.anchoredPosition = actionPromptOffset;
-                if (tutorialText != null)
-                {
-                    tutorialText.alignment = TextAlignmentOptions.TopLeft;
-                }
+                case StepLayout.ActionLeft:
+                    promptRect.anchorMin = promptRect.anchorMax = actionPromptAnchor;
+                    promptRect.pivot = actionPromptPivot;
+                    promptRect.sizeDelta = actionPromptSize;
+                    promptRect.anchoredPosition = actionPromptOffset;
+                    if (tutorialText != null) tutorialText.alignment = TextAlignmentOptions.TopLeft;
+                    break;
+
+                case StepLayout.ComboInfo:
+                    promptRect.anchorMin = promptRect.anchorMax = comboPromptAnchor;
+                    promptRect.pivot = comboPromptPivot;
+                    promptRect.sizeDelta = comboPromptSize;
+                    promptRect.anchoredPosition = comboPromptOffset;
+                    if (tutorialText != null) tutorialText.alignment = TextAlignmentOptions.Center;
+                    break;
+
+                case StepLayout.CenterBelow:
+                    promptRect.anchorMin = promptRect.anchorMax = new Vector2(0.5f, 0.5f);
+                    promptRect.pivot = new Vector2(0.5f, 0.5f);
+                    promptRect.sizeDelta = new Vector2(520f, 160f);
+                    promptRect.anchoredPosition = new Vector2(0f, -140f);
+                    if (tutorialText != null) tutorialText.alignment = TextAlignmentOptions.Center;
+                    break;
+
+                case StepLayout.IntroCenter:
+                default:
+                    promptRect.anchorMin = promptRect.anchorMax = introPromptAnchor;
+                    promptRect.pivot = introPromptPivot;
+                    promptRect.sizeDelta = introPromptSize;
+                    promptRect.anchoredPosition = introPromptOffset;
+                    if (tutorialText != null) tutorialText.alignment = TextAlignmentOptions.Center;
+                    break;
             }
         }
 
@@ -460,7 +515,15 @@ namespace DiceGame.Tutorial
 
         void OnRollClicked()
         {
-            RegisterActionCompletion(TutorialAction.RollDice);
+            if (currentRequiredAction == TutorialAction.RollDice)
+            {
+                RegisterActionCompletion(TutorialAction.RollDice);
+            }
+            else if (currentRequiredAction == TutorialAction.SecondRoll && awaitingSecondRoll)
+            {
+                awaitingSecondRoll = false;
+                RegisterActionCompletion(TutorialAction.SecondRoll);
+            }
         }
 
         void OnSubmitClicked()
@@ -628,6 +691,7 @@ namespace DiceGame.Tutorial
         public GameObject highlightElement;
         public bool useNextButton;
         public bool waitForAction;
+        public StepLayout layout = StepLayout.ActionLeft;
         public TutorialAction requiredAction;
     }
 
@@ -637,8 +701,17 @@ namespace DiceGame.Tutorial
         ConfirmHand,
         RollDice,
         LockDice,
+        SecondRoll,
         SubmitHand,
         ScoreAnimationComplete
+    }
+
+    public enum StepLayout
+    {
+        IntroCenter,
+        ActionLeft,
+        ComboInfo,
+        CenterBelow
     }
 }
 

@@ -4334,7 +4334,7 @@ RectTransform:
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
   m_AnchoredPosition: {x: 200, y: 0}
-  m_SizeDelta: {x: 160, y: 30}
+  m_SizeDelta: {x: 120, y: 40}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &994451305
 MonoBehaviour:
@@ -6646,7 +6646,22 @@ MonoBehaviour:
   configurePromptLayout: 1
   promptSize: {x: 680, y: 220}
   promptOffset: {x: 0, y: 0}
-  actionPromptDisplaySeconds: 1.5
+  promptAnchor: {x: 0.5, y: 0.5}
+  promptPivot: {x: 0.5, y: 0.5}
+  actionPromptSize: {x: 360, y: 220}
+  actionPromptOffset: {x: 40, y: -40}
+  actionPromptAnchor: {x: 0.05, y: 0.65}
+  actionPromptPivot: {x: 0, y: 0.5}
+  introPromptSize: {x: 640, y: 240}
+  introPromptOffset: {x: 0, y: 0}
+  introPromptAnchor: {x: 0.5, y: 0.5}
+  introPromptPivot: {x: 0.5, y: 0.5}
+  textPadding: {x: 24, y: 24}
+  textRightPaddingWithButton: 150
+  comboPromptSize: {x: 520, y: 160}
+  comboPromptOffset: {x: 0, y: -190}
+  comboPromptAnchor: {x: 0.5, y: 0.5}
+  comboPromptPivot: {x: 0.5, y: 0.5}
 --- !u!114 &1914846754
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -6777,7 +6792,7 @@ MonoBehaviour:
   m_TargetGraphic: {fileID: 461374829}
   m_HandleRect: {fileID: 461374828}
   m_Direction: 0
-  m_Value: 0
+  m_Value: 1
   m_Size: 1
   m_NumberOfSteps: 0
   m_OnValueChanged:
