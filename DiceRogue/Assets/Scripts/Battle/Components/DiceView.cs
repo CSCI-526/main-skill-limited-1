@@ -80,7 +80,20 @@ namespace DiceGame
             Debug.Log($"[DiceView] {model.diceName} is now {status} (value: {model.lastRollValue})");
             
             Refresh();
+            
+            // Notify BattleController to update combo preview
+            // This is a simple static callback - BattleController will subscribe in Start()
+            if (OnDiceLockChanged != null)
+            {
+                OnDiceLockChanged();
+            }
         }
+        
+        /// <summary>
+        /// Static event for notifying when dice lock state changes
+        /// BattleController subscribes to this to update combo preview
+        /// </summary>
+        public static System.Action OnDiceLockChanged;
         public void OnPointerEnter(PointerEventData eventData)
         {
             if (model != null && DiceTooltipManager.Instance != null)

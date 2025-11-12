@@ -9,21 +9,40 @@ namespace DiceGame
     /// </summary>
     public class HandManager
     {
-        private int _rollsUsed = 0;
-        private int _maxRollsPerHand = 3;
+        private int _rollsUsedTotal = 0;
+        private int _rollsUsedThisHand = 0;
+        private int _totalRollBudget = 3;
         private bool _isHandActive = false;
 
-        public int RollsUsed => _rollsUsed;
-        public int MaxRollsPerHand => _maxRollsPerHand;
-        public bool IsHandActive => _isHandActive;
-        public bool CanRoll => _isHandActive && _rollsUsed < _maxRollsPerHand;
+        /// <summary>
+        /// Rolls consumed during the current hand.
+        /// </summary>
+        public int RollsUsed => _rollsUsedThisHand;
 
         /// <summary>
-        /// Set maximum rolls per hand (default: 3)
+        /// Total rolls consumed across all hands in the current battle.
+        /// </summary>
+        public int TotalRollsUsed => _rollsUsedTotal;
+
+        /// <summary>
+        /// Total roll budget shared across all hands in the current battle.
+        /// </summary>
+        public int TotalRollBudget => _totalRollBudget;
+
+        /// <summary>
+        /// Rolls remaining for the current battle.
+        /// </summary>
+        public int RollsRemaining => Mathf.Max(0, _totalRollBudget - _rollsUsedTotal);
+
+        public bool IsHandActive => _isHandActive;
+        public bool CanRoll => _isHandActive && _rollsUsedTotal < _totalRollBudget;
+
+        /// <summary>
+        /// Set total roll budget shared across all hands (default: 3)
         /// </summary>
         public void SetMaxRolls(int maxRolls)
         {
-            _maxRollsPerHand = maxRolls;
+            _totalRollBudget = Mathf.Max(0, maxRolls);
         }
 
         /// <summary>
@@ -31,9 +50,9 @@ namespace DiceGame
         /// </summary>
         public void StartHand()
         {
-            _rollsUsed = 0;
+            _rollsUsedThisHand = 0;
             _isHandActive = true;
-            Debug.Log($"[HandManager] New hand started - {_maxRollsPerHand} rolls available");
+            Debug.Log($"[HandManager] New hand started - {RollsRemaining}/{_totalRollBudget} rolls remaining");
         }
 
         /// <summary>
@@ -43,13 +62,14 @@ namespace DiceGame
         {
             if (!CanRoll)
             {
-                Debug.LogWarning("[HandManager] Cannot roll - max rolls reached or hand not active");
-                return _rollsUsed;
+                Debug.LogWarning("[HandManager] Cannot roll - roll budget exhausted or hand not active");
+                return _rollsUsedThisHand;
             }
 
-            _rollsUsed++;
-            Debug.Log($"[HandManager] Roll {_rollsUsed}/{_maxRollsPerHand}");
-            return _rollsUsed;
+            _rollsUsedTotal++;
+            _rollsUsedThisHand++;
+            Debug.Log($"[HandManager] Roll {_rollsUsedThisHand} this hand ({_rollsUsedTotal}/{_totalRollBudget} total)");
+            return _rollsUsedThisHand;
         }
 
         /// <summary>
@@ -58,7 +78,7 @@ namespace DiceGame
         public void EndHand()
         {
             _isHandActive = false;
-            Debug.Log($"[HandManager] Hand ended after {_rollsUsed} rolls");
+            Debug.Log($"[HandManager] Hand ended after {_rollsUsedThisHand} rolls (total {_rollsUsedTotal}/{_totalRollBudget})");
         }
 
         /// <summary>
@@ -66,9 +86,10 @@ namespace DiceGame
         /// </summary>
         public void Reset()
         {
-            _rollsUsed = 0;
+            _rollsUsedTotal = 0;
+            _rollsUsedThisHand = 0;
             _isHandActive = false;
-            Debug.Log("[HandManager] Hand state reset");
+            Debug.Log("[HandManager] Hand state reset (total roll budget restored)");
         }
 
         /// <summary>

@@ -64,22 +64,22 @@ namespace DiceGame
         }
 
         /// <summary>
-        /// Format target score display
+        /// Format target score display (number only, no labels)
         /// </summary>
         public string FormatTargetScore(int targetScore, int currentLevel)
         {
-            return $"<size=70%>Target Score</size>\n" +
-                   $"<size=150%><b>{targetScore}</b></size>\n" +
-                   $"<size=80%><color={COLOR_GRAY}>Level {currentLevel}</color></size>";
+            // Just show the number - no labels
+            return $"<size=150%><b><color=#2A2A2A>{targetScore}</color></b></size>";
         }
 
         /// <summary>
         /// Format initial hand ready message
         /// </summary>
-        public string FormatHandReady(int handNumber, int diceCount, int specialCount, int normalCount)
+        public string FormatHandReady(int handNumber, int diceCount, int specialCount, int normalCount, int totalRollsRemaining, int totalRollBudget)
         {
             var sb = new StringBuilder();
             sb.AppendLine($"<size=110%><b>Hand {handNumber}</b></size>\n");
+            sb.AppendLine($"<color={COLOR_GREEN}>Rolls remaining: {totalRollsRemaining}/{totalRollBudget}</color>\n");
             sb.AppendLine("\n<b>Instructions:</b>");
             sb.AppendLine("  • Roll the dice");
             sb.AppendLine("  • Click to lock dice you want to keep");
@@ -91,14 +91,16 @@ namespace DiceGame
         /// <summary>
         /// Format roll result feedback
         /// </summary>
-        public string FormatRollFeedback(List<BaseDice> dice, int rollNumber, int maxRolls)
+        public string FormatRollFeedback(List<BaseDice> dice, int rollsUsedThisHand, int totalRollsUsed, int totalRollBudget)
         {
             var sb = new StringBuilder();
-            sb.AppendLine($"<size=110%><b>Roll {rollNumber}/{maxRolls}</b></size>\n");
+            sb.AppendLine($"<size=110%><b>Total Rolls {totalRollsUsed}/{totalRollBudget}</b></size>");
+            sb.AppendLine($"<size=90%><color={COLOR_GRAY}>This hand rolls: {rollsUsedThisHand}</color></size>\n");
             
-            if (rollNumber < maxRolls)
+            if (totalRollsUsed < totalRollBudget)
             {
                 sb.AppendLine($"<color={COLOR_GREEN}>Click dice to lock/unlock, then Roll again or Submit.</color>");
+                sb.AppendLine($"<color={COLOR_GRAY}>Rolls remaining overall: {totalRollBudget - totalRollsUsed}</color>");
             }
             else
             {
@@ -111,14 +113,25 @@ namespace DiceGame
         /// <summary>
         /// Format combo submitted message
         /// </summary>
-        public string FormatComboSubmitted(List<BaseDice> submittedDice, int rollsUsed, int maxRolls)
+        public string FormatComboSubmitted(List<BaseDice> submittedDice, int rollsUsedThisHand, int totalRollsUsed, int totalRollBudget)
         {
             var sb = new StringBuilder();
             sb.AppendLine("<size=110%><b>COMBO SUBMITTED</b></size>\n");
-            sb.AppendLine($"<color={COLOR_GRAY}>Rolls used: {rollsUsed}/{maxRolls}</color>");
+            sb.AppendLine($"<color={COLOR_GRAY}>This hand rolls: {rollsUsedThisHand}</color>");
+            sb.AppendLine($"<color={COLOR_GRAY}>Total rolls used: {totalRollsUsed}/{totalRollBudget}</color>");
             sb.AppendLine($"<color={COLOR_GRAY}>Submitted {submittedDice.Count} dice:</color>\n");
             
             return sb.ToString();
+        }
+
+        /// <summary>
+        /// Format message when no rolls remain in the shared budget.
+        /// </summary>
+        public string FormatNoRollsRemaining(int totalRollsUsed, int totalRollBudget)
+        {
+            return $"<color={COLOR_BRIGHT_RED}><b>No rolls remaining!</b></color>\n\n" +
+                   $"Total rolls used: {totalRollsUsed}/{totalRollBudget}\n" +
+                   $"<color={COLOR_GRAY}>Submit your combo to continue.</color>";
         }
 
         /// <summary>

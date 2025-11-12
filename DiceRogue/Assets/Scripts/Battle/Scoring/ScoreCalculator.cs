@@ -259,6 +259,21 @@ namespace DiceGame.Core
         }
 
         /// <summary>
+        /// Preview combo for UI display (default values only, no dice/relic effects).
+        /// Returns combo name, base score, and combo multiplier.
+        /// </summary>
+        public (string comboName, int baseScore, float multiplier) PreviewCombo(List<int> values)
+        {
+            if (values == null || values.Count == 0)
+            {
+                return ("No Combo", 0, 1.0f);
+            }
+            
+            string comboName = EvaluateCombo(values, out int baseScore, out float multiplier);
+            return (comboName, baseScore, multiplier);
+        }
+
+        /// <summary>
         /// Evaluate combo and return combo name, base score, and combo multiplier.
         /// This is extracted from DiceHandEvaluator to avoid premature score calculation.
         /// </summary>

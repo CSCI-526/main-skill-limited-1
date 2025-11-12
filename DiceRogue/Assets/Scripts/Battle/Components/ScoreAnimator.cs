@@ -17,7 +17,7 @@ namespace DiceGame
     {
         [Header("UI References")]
         public TMP_Text comboScoreText;     // Shows combo name and animated score
-        public TMP_Text totalScoreText;     // Shows total accumulated score
+        public TMP_Text totalScoreText;     // Shows current accumulated score (displays number only)
         public TMP_Text bonusText;          // Floating bonus text (e.g., "+15")
         
         [Header("Component References")]
@@ -53,7 +53,13 @@ namespace DiceGame
         {
             // Initialize displays
             if (comboScoreText != null)
-                comboScoreText.text = "<color=#AAAAAA>Submit a combo to see score</color>";
+            {
+                comboScoreText.text = "<color=#FFFFFF>Roll or Lock Dice</color>";
+                // Ensure text is fully visible
+                var color = comboScoreText.color;
+                color.a = 1f;
+                comboScoreText.color = color;
+            }
             
             UpdateTotalScore(0);
             
@@ -172,7 +178,21 @@ namespace DiceGame
             // Fade out combo text
             yield return StartCoroutine(FadeOutComboText());
             
-            _isAnimating = false; // Mark animation as completed
+            // Reset to idle message after fade out
+            // Note: BattleController will call UpdateFeedback after this coroutine completes
+            // to ensure the message shows up properly
+            
+            _isAnimating = false; // Mark animation as completed FIRST
+            
+            // Then set idle message
+            if (comboScoreText != null)
+            {
+                comboScoreText.text = "<color=#FFFFFF>Roll or Lock Dice</color>";
+                // Ensure text is fully visible
+                var color = comboScoreText.color;
+                color.a = 1f;
+                comboScoreText.color = color;
+            }
         }
 
         /// <summary>
@@ -450,13 +470,15 @@ namespace DiceGame
         }
 
         /// <summary>
-        /// Update total score display
+        /// Update current score display (number only, no labels)
+        /// Displays the player's current accumulated score
         /// </summary>
         private void UpdateTotalScore(int score)
         {
             if (totalScoreText != null)
             {
-                totalScoreText.text = $"<size=80%>Total Score</size>\n<size=150%><b>{score}</b></size>";
+                // Just show the number - no labels (this is the "Current Score")
+                totalScoreText.text = $"<size=150%><b><color=#2A2A2A>{score}</color></b></size>";
             }
         }
 
@@ -479,7 +501,11 @@ namespace DiceGame
             
             if (comboScoreText != null)
             {
-                comboScoreText.text = "<color=#AAAAAA>Submit a combo to see score</color>";
+                comboScoreText.text = "<color=#FFFFFF>Roll or Lock Dice</color>";
+                // Ensure text is fully visible
+                var color = comboScoreText.color;
+                color.a = 1f;
+                comboScoreText.color = color;
             }
         }
 
@@ -523,8 +549,9 @@ namespace DiceGame
                 yield return null;
             }
 
+            // Reset alpha to 1f after fade out so next message is visible
             Color finalColor = comboScoreText.color;
-            finalColor.a = 0f;
+            finalColor.a = 1f;
             comboScoreText.color = finalColor;
         }
 
