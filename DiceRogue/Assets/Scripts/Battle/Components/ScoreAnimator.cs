@@ -35,6 +35,7 @@ namespace DiceGame
         private int _lastCalculatedHandScore = 0; // Store the final calculated score from animation
         private bool _isAnimating = false; // Track if animation is currently running
         private bool _readyForUIRefresh = false; // Track if animation reached UI refresh point
+        private bool _skipIdleMessage = false; // Flag to skip idle message (e.g., when win is detected)
         
         // References to dice views (set by BattleController)
         private List<DiceView> _diceViews = new List<DiceView>();
@@ -86,7 +87,16 @@ namespace DiceGame
                 StopCoroutine(_animationCoroutine);
             }
 
+            _skipIdleMessage = false; // Reset flag
             _animationCoroutine = StartCoroutine(AnimateScoreCoroutine(scoreResult, submittedDice));
+        }
+        
+        /// <summary>
+        /// Skip idle message at end of animation (used when win is detected)
+        /// </summary>
+        public void SkipIdleMessage()
+        {
+            _skipIdleMessage = true;
         }
 
         private IEnumerator AnimateScoreCoroutine(ScoreCalculator.ScoreResult scoreResult, List<BaseDice> submittedDice)
@@ -178,14 +188,10 @@ namespace DiceGame
             // Fade out combo text
             yield return StartCoroutine(FadeOutComboText());
             
-            // Reset to idle message after fade out
-            // Note: BattleController will call UpdateFeedback after this coroutine completes
-            // to ensure the message shows up properly
-            
             _isAnimating = false; // Mark animation as completed FIRST
             
-            // Then set idle message
-            if (comboScoreText != null)
+            // Only set idle message if not skipping (e.g., win detected)
+            if (!_skipIdleMessage && comboScoreText != null)
             {
                 comboScoreText.text = "<color=#FFFFFF>Roll or Lock Dice</color>";
                 // Ensure text is fully visible
@@ -193,6 +199,14 @@ namespace DiceGame
                 color.a = 1f;
                 comboScoreText.color = color;
             }
+            else if (_skipIdleMessage && comboScoreText != null)
+            {
+                // Clear text completely when skipping idle message (for win detection)
+                comboScoreText.text = "";
+            }
+            
+            // Reset flag for next animation
+            _skipIdleMessage = false;
         }
 
         /// <summary>
@@ -577,32 +591,65 @@ namespace DiceGame
             color.a = 1f;
             comboScoreText.color = color;
 
-            // Show "Evaluating..."
-            comboScoreText.text = "<size=180%><b>EVALUATING...</b></size>";
-            yield return new WaitForSeconds(1.0f);
-
-            // Show final vs target
-            comboScoreText.text = $"<size=120%>Final Score</size>\n<size=200%><color=#FFD700><b>{finalScore}</b></color></size>\n\n";
-            comboScoreText.text += $"<size=120%>Target</size>\n<size=200%><color=#88CCFF><b>{targetScore}</b></color></size>";
-            yield return StartCoroutine(PopScoreText(2.0f));
-            yield return new WaitForSeconds(1.5f);
-
-            // Result
             if (passed)
             {
-                comboScoreText.text = "<size=250%><color=#00FF00><b>PASSED!</b></color></size>\n\n";
-                comboScoreText.text += $"<color=#88FF88>+{finalScore - targetScore} over target!</color>";
-                yield return StartCoroutine(PopScoreText(3.0f));
-                yield return StartCoroutine(PopScoreText(3.0f));
+                // Pop the current total score text immediately (like when adding score)
+                if (totalScoreText != null)
+                {
+                    // Trigger pop effect on total score text (same as AnimateTotalScoreUpdate)
+                    Vector3 originalScale = totalScoreText.transform.localScale;
+                    float intensity = 2.5f;
+                    float scaleMultiplier = 1.0f + (0.15f * Mathf.Min(intensity, 3f));
+                    Vector3 targetScale = originalScale * scaleMultiplier;
+                    
+                    float duration = 0.1f;
+                    float elapsed = 0f;
+                    
+                    // Scale up
+                    while (elapsed < duration)
+                    {
+                        elapsed += Time.deltaTime;
+                        float t = elapsed / duration;
+                        totalScoreText.transform.localScale = Vector3.Lerp(originalScale, targetScale, t);
+                        yield return null;
+                    }
+                    
+                    elapsed = 0f;
+                    // Scale down
+                    while (elapsed < duration)
+                    {
+                        elapsed += Time.deltaTime;
+                        float t = elapsed / duration;
+                        totalScoreText.transform.localScale = Vector3.Lerp(targetScale, originalScale, t);
+                        yield return null;
+                    }
+                    
+                    totalScoreText.transform.localScale = originalScale;
+                }
+                
+                // Show concise success message immediately (no lag, instant text change)
+                comboScoreText.text = "<size=200%><color=#00FF00><b>Success!</b></color></size>";
+                yield return StartCoroutine(PopScoreText(2.5f));
+                yield return new WaitForSeconds(1.5f);
             }
             else
             {
-                comboScoreText.text = "<size=250%><color=#FF3333><b>FAILED!</b></color></size>\n\n";
-                comboScoreText.text += $"<color=#FF8888>{targetScore - finalScore} short of target</color>";
-                yield return StartCoroutine(ShakeText());
-            }
+                // Show "Evaluating..." briefly
+                comboScoreText.text = "<size=150%><b>Evaluating...</b></size>";
+                yield return new WaitForSeconds(0.8f);
 
-            yield return new WaitForSeconds(3.5f);
+                // Show final vs target
+                comboScoreText.text = $"<size=120%>Final Score</size>\n<size=200%><color=#FFD700><b>{finalScore}</b></color></size>\n\n";
+                comboScoreText.text += $"<size=120%>Target</size>\n<size=200%><color=#88CCFF><b>{targetScore}</b></color></size>";
+                yield return StartCoroutine(PopScoreText(2.0f));
+                yield return new WaitForSeconds(1.0f);
+
+                // Show failure message
+                comboScoreText.text = "<size=200%><color=#FF3333><b>Failed!</b></color></size>\n\n";
+                comboScoreText.text += $"<color=#FF8888>{targetScore - finalScore} short</color>";
+                yield return StartCoroutine(ShakeText());
+                yield return new WaitForSeconds(2.0f);
+            }
         }
 
         /// <summary>

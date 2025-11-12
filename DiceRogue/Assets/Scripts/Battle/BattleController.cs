@@ -26,6 +26,15 @@ namespace DiceGame
         public Button submitComboButton;
         public Button continueButton;
         public Button openBackpackButton;
+        public Button settingsButton;        // Settings button
+        
+        [Header("UI - Settings Panel")]
+        public GameObject settingsPanel;     // Settings panel (window + overlay)
+        public GameObject settingsOverlay;   // Shaded background overlay
+        public GameObject settingsWindow;   // Settings window (middle of screen)
+        public Button settingsResetButton;   // Reset button in settings
+        public Button settingsQuitButton;    // Quit button in settings
+        public Button settingsCloseButton;   // Close button (optional - can click overlay to close)
         
         [Header("UI - Right Panel")]
         public TMP_Text levelInfoText;      // Level display
@@ -165,6 +174,66 @@ namespace DiceGame
             rollButton.onClick.AddListener(OnRollOnce);
             resetRollButton.onClick.AddListener(ResetForNewHand);
             submitComboButton.onClick.AddListener(OnSubmitCombo);
+            
+            // Set up settings panel
+            if (settingsButton != null)
+            {
+                settingsButton.onClick.AddListener(OnSettingsButtonClicked);
+            }
+            
+            // Initialize settings panel (hidden by default)
+            if (settingsPanel != null)
+            {
+                settingsPanel.SetActive(false);
+            }
+            
+            // Set up settings panel buttons
+            if (settingsResetButton != null)
+            {
+                settingsResetButton.onClick.AddListener(OnSettingsResetClicked);
+            }
+            
+            if (settingsQuitButton != null)
+            {
+                settingsQuitButton.onClick.AddListener(OnSettingsQuitClicked);
+            }
+            
+            // Setup overlay (just visual, not clickable)
+            if (settingsOverlay != null)
+            {
+                // Ensure overlay has Image component
+                Image overlayImage = settingsOverlay.GetComponent<Image>();
+                if (overlayImage == null)
+                {
+                    overlayImage = settingsOverlay.AddComponent<Image>();
+                }
+                // Disable raycast target so overlay is not clickable
+                overlayImage.raycastTarget = false;
+                
+                // Remove Button component if it exists (we don't want overlay to be clickable)
+                Button overlayButton = settingsOverlay.GetComponent<Button>();
+                if (overlayButton != null)
+                {
+                    DestroyImmediate(overlayButton);
+                }
+            }
+            
+            // Ensure settings window blocks raycasts
+            if (settingsWindow != null)
+            {
+                Image windowImage = settingsWindow.GetComponent<Image>();
+                if (windowImage == null)
+                {
+                    windowImage = settingsWindow.AddComponent<Image>();
+                }
+                windowImage.raycastTarget = true; // This blocks raycasts
+            }
+            
+            // Setup close button if provided
+            if (settingsCloseButton != null)
+            {
+                settingsCloseButton.onClick.AddListener(CloseSettingsPanel);
+            }
             
             // Subscribe to dice lock changes for combo preview updates
             DiceView.OnDiceLockChanged += UpdateComboPreview;
@@ -405,7 +474,49 @@ namespace DiceGame
         UpdateRollAndCastCount();
         
         Debug.Log($"[BattleController] Started hand with {diceCount} dice total");
+        
+        // Auto-roll all dice once (free roll - doesn't count toward roll budget)
+        PerformAutoRoll();
     }
+
+        /// <summary>
+        /// Perform auto-roll when hand starts (free roll - doesn't count toward budget)
+        /// </summary>
+        private void PerformAutoRoll()
+        {
+            Debug.Log("[BattleController] Performing auto-initial roll (free roll)");
+            
+            // Roll all dice (they start unlocked)
+            for (int i = 0; i < _dice.Count; i++)
+            {
+                var d = _dice[i];
+                var v = _views[i]; 
+
+                if (d.tier != DiceTier.Filler)
+                {
+                    _effectHandler.SetupPlusOneDice(d, i, _dice);
+
+                    int result = d.Roll();
+                    Debug.Log($"  - {d.diceName} auto-rolled: {result}");
+
+                    // Play roll animation
+                    if (v != null)
+                        v.PlayRollAnimation(result, 0.5f);
+                }
+            }
+
+            // Apply all special dice effects using effect handler
+            _effectHandler.ApplyRollEffects(_dice);
+
+            // Refresh all views using factory
+            _viewFactory.RefreshViews(_views);
+            
+            // Update combo preview after rolling
+            UpdateComboPreview();
+            
+            // Note: Don't update roll count - this is a free roll
+            // Note: Don't update feedback - keep "Roll or Lock Dice" message
+        }
 
         void OnRollOnce()
         {
@@ -592,6 +703,49 @@ namespace DiceGame
             
             Debug.Log($"[BattleController] Score added after animation: {finalScore}");
             
+            // EARLY WIN DETECTION: Check immediately if target score reached
+            if (_progressionManager.TotalScore >= _progressionManager.TargetScore)
+            {
+                Debug.Log($"[BattleController] Early win detected! Total: {_progressionManager.TotalScore}, Target: {_progressionManager.TargetScore}");
+                
+                // Skip idle message in ScoreAnimator
+                if (scoreAnimator != null)
+                {
+                    scoreAnimator.SkipIdleMessage();
+                }
+                
+                // Wait for animation to complete INCLUDING fade out (but skip idle message)
+                timeout = 0f;
+                while (scoreAnimator.IsAnimating && timeout < maxTimeout)
+                {
+                    yield return new WaitForSeconds(0.1f);
+                    timeout += 0.1f;
+                }
+                
+                // Wait for fade out to completely finish (fade duration is 0.3s, plus hold time 0.8s)
+                // Animation completes after fade, so we just need a small buffer to ensure text is cleared
+                yield return new WaitForSeconds(0.1f);
+                
+                // Complete the hand first (apply cooldowns)
+                var specialDiceOnly = submittedDice.Where(d => !(d is NormalDice)).ToList();
+                if (specialDiceOnly.Count > 0)
+                {
+                    cooldownSystem.CompleteHand(specialDiceOnly);
+                }
+                else
+                {
+                    cooldownSystem.CompleteHand(new List<BaseDice>());
+                }
+                _handManager.EndHand();
+                
+                // Update UI
+                UpdateRollAndCastCount();
+                
+                // Trigger win evaluation after fade out completes (skip remaining casts)
+                StartCoroutine(EvaluateTargetScore());
+                yield break; // Exit coroutine - don't continue to next hand
+            }
+            
             // Wait for the entire animation to complete (total score update + fade out)
             timeout = 0f;
             while (scoreAnimator.IsAnimating && timeout < maxTimeout)
@@ -605,7 +759,7 @@ namespace DiceGame
                 Debug.LogWarning("[BattleController] Animation completion timeout - proceeding anyway");
             }
             
-            // Show idle message after animation completes
+            // Show idle message after animation completes (only if not win)
             UpdateFeedback("Roll or Lock Dice");
             
             // Complete hand and continue to next hand or evaluation
@@ -806,6 +960,102 @@ namespace DiceGame
         }
 
         /// <summary>
+        /// Open settings panel
+        /// </summary>
+        private void OnSettingsButtonClicked()
+        {
+            if (settingsPanel != null)
+            {
+                settingsPanel.SetActive(true);
+                Debug.Log("[BattleController] Settings panel opened");
+            }
+        }
+        
+        /// <summary>
+        /// Close settings panel
+        /// </summary>
+        private void CloseSettingsPanel()
+        {
+            if (settingsPanel != null)
+            {
+                settingsPanel.SetActive(false);
+                Debug.Log("[BattleController] Settings panel closed");
+            }
+        }
+        
+        /// <summary>
+        /// Reset game to initial state (from settings panel)
+        /// </summary>
+        private void OnSettingsResetClicked()
+        {
+            Debug.Log("[BattleController] Resetting game to initial state...");
+            
+            // Close settings panel
+            CloseSettingsPanel();
+            
+            // Reset progression to level 1
+            _progressionManager.ResetToLevelOne();
+            
+            // Reset hand manager roll budget
+            _handManager.Reset();
+            _handManager.SetMaxRolls(maxRollsPerHand);
+            
+            // Reset score animator
+            if (scoreAnimator != null)
+            {
+                scoreAnimator.ResetTotalScore();
+            }
+            
+            // Clear current dice and views
+            _dice.Clear();
+            _viewFactory.DestroyViews(_views);
+            
+            // Reset static state
+            ContinuingFromReward = false;
+            PendingLevel = 1;
+            PendingTargetScore = baseTargetScore;
+            
+            // Refresh dice pool and hand counter
+            cooldownSystem.RefreshDicePool();
+            
+            // Hide continue button if visible
+            if (continueButton != null)
+            {
+                continueButton.gameObject.SetActive(false);
+            }
+            
+            // Update displays
+            UpdateLevelInfo();
+            UpdateTargetScoreDisplay();
+            UpdateRollAndCastCount();
+            UpdateFeedback("Roll or Lock Dice");
+            
+            // Start a new hand
+            StartNewHand();
+            
+            Debug.Log("[BattleController] Game reset complete");
+        }
+        
+        /// <summary>
+        /// Quit game (from settings panel)
+        /// </summary>
+        private void OnSettingsQuitClicked()
+        {
+            Debug.Log("[BattleController] Quitting game...");
+            
+            // Close settings panel
+            CloseSettingsPanel();
+            
+            // Quit application (works in builds)
+            // In editor, this will stop play mode
+            #if UNITY_EDITOR
+                UnityEditor.EditorApplication.isPlaying = false;
+            #else
+                Application.Quit();
+            #endif
+        }
+        
+        /// <summary>
         /// Update combo preview display based on currently locked dice
         /// Shows default combo values only (no dice/relic effects)
         /// </summary>
@@ -885,8 +1135,7 @@ namespace DiceGame
         /// </summary>
         private System.Collections.IEnumerator EvaluateTargetScore()
         {
-            // Wait for score animation to finish
-            yield return new UnityEngine.WaitForSeconds(3f);
+            // No wait needed - animation already completed before this is called
 
             int finalScore = scoreAnimator != null ? scoreAnimator.GetTotalScore() : _progressionManager.TotalScore;
             bool passed = _progressionManager.EvaluateTargetScore();
