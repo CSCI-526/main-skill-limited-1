@@ -219,15 +219,19 @@ namespace DiceGame
         /// <param name="submittedDice">List of dice that were locked and submitted</param>
         public void CompleteHand(List<BaseDice> submittedDice = null)
         {
+            // Always update hand counter, even if no dice were selected
+            // This ensures the cast count decreases properly
             if (_selectedDice.Count == 0)
             {
-                Debug.LogWarning("[CooldownSystem] No dice selected to complete hand");
-                return;
+                Debug.LogWarning("[CooldownSystem] No dice selected to complete hand, but completing hand anyway to update counter");
             }
-
-            Debug.Log($"[CooldownSystem] Completing hand with {_selectedDice.Count} dice");
+            else
+            {
+                Debug.Log($"[CooldownSystem] Completing hand with {_selectedDice.Count} dice");
+            }
             
-            // Apply cooldown only to submitted dice (locked and submitted)
+            // Apply cooldown ONLY to submitted dice (locked and submitted)
+            // Dice that were selected but not submitted should NOT go on cooldown
             if (submittedDice != null && submittedDice.Count > 0)
             {
                 Debug.Log($"[CooldownSystem] Applying cooldown to {submittedDice.Count} submitted dice:");
@@ -239,19 +243,13 @@ namespace DiceGame
             }
             else
             {
-                Debug.Log("[CooldownSystem] No submitted dice provided, applying cooldown to all selected dice");
-                // Fallback: apply cooldown to all selected dice if no submitted dice provided
-                foreach (var dice in _selectedDice)
-                {
-                    dice.cooldownRemain = dice.cooldownAfterUse + 1; // Set to 2 turns (1 + 1)
-                    Debug.Log($"  - {dice.diceName} on cooldown for {dice.cooldownRemain} turns");
-                }
+                Debug.Log("[CooldownSystem] No dice were submitted - no cooldowns applied. Dice remain available for next hand.");
             }
             
             // Clear selection
             _selectedDice.Clear();
             
-            // Update hand counter
+            // Update hand counter - ALWAYS update, even if no dice were selected
             currentHandCount++;
             handsRemaining = maxHands - currentHandCount;
             
