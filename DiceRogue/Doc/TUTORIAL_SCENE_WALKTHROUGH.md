@@ -20,14 +20,15 @@ The tutorial scene reuses the existing `BattleScene` gameplay setup and layers a
 
 ## Tutorial Flow
 1. **Welcome** – centred prompt; click `Next` to begin.
-2. **Build Your Hand** – select up to five dice in the backpack (prompt on the left).
-3. **Roll Your Dice** – press `Roll` (left prompt).
-4. **Lock Dice** – click dice to keep them (left prompt).
-5. **Check Combo Preference** – prompt under the dice; click `Next` after reviewing the combo panel.
-6. **Roll Again** – left prompt explains locked dice stay fixed; waits for a second roll.
-7. **Submit Your Hand** – left prompt waits for `Submit`.
-8. **Score Breakdown** – centred prompt waits for the score animation to finish.
-9. **Tutorial Complete** – centred prompt; `Next` jumps to `BattleScene`.
+2. **Build Your Hand** – select up to five dice from the backpack (left prompt, waits for confirmation).
+3. **Lock Dice** – click dice to keep them locked; locked dice won't change when rolling (left prompt, waits for dice lock action).
+4. **Roll Your Dice** – press `Roll` to throw your selected dice (left prompt, waits for roll action).
+5. **Check Combo Preference** – prompt centred below the dice; review the combo panel and click `Next` to continue.
+6. **Roll Again** – left prompt explains that you can roll again and that locked dice stay fixed; the number of rolls and casts left can be seen on the right panel (waits for second roll action).
+7. **Submit Your Hand** – lock the dice you want to use and press `Cast` to score the hand (left prompt, waits for cast action).
+8. **Score Breakdown** – prompt centred below the dice; watch how the combo is scored (basic combo + dice effect + relic effect). Waits for score animation to complete, then displays for 3 seconds so players can read the message.
+9. **Cooldown System** – left prompt explains that dice selected and casted need one round to cooldown before reuse; backpack is shown with dice in cooldown. Click `Next` to continue.
+10. **Tutorial Complete** – centred prompt; click `Next` to start your first run in `BattleScene`.
 
 That’s it—place the controller, ensure the panel/text/button exist, and the tutorial will run end-to-end. 🎲
 
