@@ -579,12 +579,17 @@ namespace DiceGame
                 StopCoroutine(_animationCoroutine);
             }
 
+            _isAnimating = true; // Set animation flag
             _animationCoroutine = StartCoroutine(AnimateTargetEvaluationCoroutine(finalScore, targetScore, passed));
         }
 
         private IEnumerator AnimateTargetEvaluationCoroutine(int finalScore, int targetScore, bool passed)
         {
-            if (comboScoreText == null) yield break;
+            if (comboScoreText == null)
+            {
+                _isAnimating = false;
+                yield break;
+            }
 
             // Make visible
             var color = comboScoreText.color;
@@ -650,6 +655,9 @@ namespace DiceGame
                 yield return StartCoroutine(ShakeText());
                 yield return new WaitForSeconds(2.0f);
             }
+            
+            // Animation complete
+            _isAnimating = false;
         }
 
         /// <summary>

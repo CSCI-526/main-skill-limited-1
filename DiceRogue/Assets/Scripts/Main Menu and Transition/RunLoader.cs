@@ -1,6 +1,7 @@
 using System.Collections;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using System.IO;
 
 namespace DiceRogue.Boot
 {
@@ -13,6 +14,7 @@ namespace DiceRogue.Boot
         public string mainSceneName = "MainScene";
         public string battleSceneName = "BattleScene";
         public string tutorialSceneName = "TutorialScene";
+        public string gameOverSceneName = "GameOverScene";
 
         [Header("Fader")]
         public ScreenWipeFader wipeFader;   // assign if you want, else we auto-find
@@ -53,16 +55,86 @@ namespace DiceRogue.Boot
             StartCoroutine(LoadSceneWithWipe(tutorialSceneName));
         }
 
+        public void LoadGameOverScene()
+        {
+            StartCoroutine(LoadSceneWithWipe(gameOverSceneName));
+        }
+
         public IEnumerator LoadSceneWithWipe(string sceneName)
         {
+            Debug.Log($"[RunLoader] LoadSceneWithWipe called for scene: '{sceneName}'");
+            
+            // Validate scene name
+            if (string.IsNullOrEmpty(sceneName))
+            {
+                Debug.LogError("[RunLoader] Scene name is null or empty! Cannot load scene.");
+                yield break;
+            }
+            
+            // Check if scene exists in build settings
+            bool sceneExists = false;
+            for (int i = 0; i < SceneManager.sceneCountInBuildSettings; i++)
+            {
+                string scenePath = SceneUtility.GetScenePathByBuildIndex(i);
+                string sceneNameFromPath = Path.GetFileNameWithoutExtension(scenePath);
+                if (sceneNameFromPath == sceneName)
+                {
+                    sceneExists = true;
+                    Debug.Log($"[RunLoader] Scene '{sceneName}' found in build settings at index {i}");
+                    break;
+                }
+            }
+            
+            if (!sceneExists)
+            {
+                Debug.LogError($"[RunLoader] Scene '{sceneName}' not found in build settings! Attempting direct load anyway...");
+                // Try to load anyway - sometimes scenes exist but aren't in build settings
+            }
+            
+            // Ensure fader exists
             EnsureFader();
-            if (wipeFader != null) yield return wipeFader.FadeOut();
+            if (wipeFader == null)
+            {
+                Debug.LogWarning("[RunLoader] No fader found - skipping fade animation, loading scene directly");
+            }
+            else
+            {
+                Debug.Log("[RunLoader] Fader found - starting fade out");
+                yield return wipeFader.FadeOut();
+            }
 
-            yield return SceneManager.LoadSceneAsync(sceneName);
+            // Load scene
+            Debug.Log($"[RunLoader] Loading scene '{sceneName}'...");
+            AsyncOperation asyncLoad = SceneManager.LoadSceneAsync(sceneName);
+            
+            if (asyncLoad == null)
+            {
+                Debug.LogError($"[RunLoader] Failed to start loading scene '{sceneName}'! AsyncOperation is null.");
+                yield break;
+            }
+            
+            // Wait for scene to load
+            while (!asyncLoad.isDone)
+            {
+                Debug.Log($"[RunLoader] Loading scene '{sceneName}'... {asyncLoad.progress * 100:F0}%");
+                yield return null;
+            }
+            
+            Debug.Log($"[RunLoader] Scene '{sceneName}' loaded successfully!");
 
             // Scene changed; fader may be under the persistent loader or scene—regrab it
             EnsureFader();
-            if (wipeFader != null) yield return wipeFader.FadeIn();
+            if (wipeFader != null)
+            {
+                Debug.Log("[RunLoader] Fading in...");
+                yield return wipeFader.FadeIn();
+            }
+            else
+            {
+                Debug.LogWarning("[RunLoader] No fader found after scene load - skipping fade in");
+            }
+            
+            Debug.Log($"[RunLoader] LoadSceneWithWipe completed for '{sceneName}'");
         }
 
         void EnsureFader()

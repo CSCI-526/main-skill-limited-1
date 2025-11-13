@@ -18,6 +18,10 @@ namespace DiceGame
         public static bool ContinuingFromReward = false;
         public static int PendingLevel = 1;
         public static int PendingTargetScore = 300;
+        
+        // Static state for game over scene
+        public static int GameOverFinalScore = 0;
+        public static int GameOverTargetScore = 0;
         [Header("UI - Main Game")]
         public Transform diceRowParent;      // Container for DiceView
         public GameObject diceViewPrefab;  // Prefab (with DiceView component)
@@ -76,6 +80,7 @@ namespace DiceGame
         private readonly List<BaseDice> _dice = new();
         private readonly List<DiceView> _views = new();
         private bool _isSelectionMode = false;
+        private bool _isSubmitting = false; // Guard to prevent multiple submissions
 
         void Start()
         {
@@ -585,8 +590,12 @@ namespace DiceGame
 
         void OnSubmitCombo()
         {
-            if (DiceTooltipManager.Instance != null)
-                DiceTooltipManager.Instance.HideTooltip();
+            // Prevent multiple submissions during animation
+            if (_isSubmitting)
+            {
+                Debug.LogWarning("[BattleController] Already submitting - ignoring duplicate submission");
+                return;
+            }
 
             // Check if hands remain
             var (current, remaining) = cooldownSystem.GetHandCounter();
@@ -602,6 +611,13 @@ namespace DiceGame
             {
                 UpdateFeedback("Select at least one dice!", isWarning: true);
                 return;
+            }
+
+            // Set submission flag and disable button
+            _isSubmitting = true;
+            if (submitComboButton != null)
+            {
+                submitComboButton.interactable = false;
             }
 
             // Update cast count (shows remaining casts)
@@ -732,6 +748,13 @@ namespace DiceGame
                 // Animation completes after fade, so we just need a small buffer to ensure text is cleared
                 yield return new WaitForSeconds(0.1f);
                 
+                // Clear submission flag and re-enable button
+                _isSubmitting = false;
+                if (submitComboButton != null)
+                {
+                    submitComboButton.interactable = true;
+                }
+
                 // Complete the hand first (apply cooldowns)
                 var specialDiceOnly = submittedDice.Where(d => !(d is NormalDice)).ToList();
                 if (specialDiceOnly.Count > 0)
@@ -777,6 +800,13 @@ namespace DiceGame
         /// </summary>
         private void CompleteHandAndContinue(List<BaseDice> submittedDice)
         {
+            // Clear submission flag and re-enable button
+            _isSubmitting = false;
+            if (submitComboButton != null)
+            {
+                submitComboButton.interactable = true;
+            }
+
             // Complete the hand in cooldown system with submitted dice
             // Filter out NormalDice (temporary fillers) - only submit special dice from the pool
             var specialDiceOnly = submittedDice.Where(d => !(d is NormalDice)).ToList();
@@ -1153,15 +1183,27 @@ namespace DiceGame
             if (scoreAnimator != null)
             {
                 scoreAnimator.AnimateTargetEvaluation(finalScore, _progressionManager.TargetScore, passed);
+                
+                // Wait for evaluation animation to complete (with timeout safety)
+                float timeout = 0f;
+                float maxTimeout = 10f; // Safety timeout to prevent infinite wait
+                while (scoreAnimator.IsAnimating && timeout < maxTimeout)
+                {
+                    yield return new UnityEngine.WaitForSeconds(0.1f);
+                    timeout += 0.1f;
+                }
+                
+                if (timeout >= maxTimeout)
+                {
+                    Debug.LogWarning("[BattleController] Animation completion timeout - proceeding anyway");
+                }
             }
             else
             {
                 // Fallback if no animator - show idle message
                 UpdateFeedback("Roll or Lock Dice");
+                yield return new UnityEngine.WaitForSeconds(1.0f); // Brief delay for fallback
             }
-
-            // Wait for evaluation animation to complete, then show Continue button ONLY if passed
-            yield return new UnityEngine.WaitForSeconds(4.5f);
             
             if (passed)
             {
@@ -1179,8 +1221,66 @@ namespace DiceGame
             }
             else
             {
-                // Player failed - show game over message
-                UpdateFeedback(_uiPresenter.FormatGameOver());
+                // Player failed - store score data and transition to game over scene
+                GameOverFinalScore = finalScore;
+                GameOverTargetScore = _progressionManager.TargetScore;
+                
+                Debug.Log($"[BattleController] ========== GAME OVER ==========");
+                Debug.Log($"[BattleController] Target failed! Final: {finalScore}, Target: {_progressionManager.TargetScore}");
+                Debug.Log($"[BattleController] Stored scores - Final: {GameOverFinalScore}, Target: {GameOverTargetScore}");
+                
+                // Transition to game over scene with wipe animation
+                bool transitionStarted = false;
+                
+                if (DiceRogue.Boot.RunLoader.Instance != null)
+                {
+                    Debug.Log("[BattleController] RunLoader.Instance found - calling LoadGameOverScene()");
+                    string sceneName = DiceRogue.Boot.RunLoader.Instance.gameOverSceneName;
+                    Debug.Log($"[BattleController] GameOver scene name: '{sceneName}'");
+                    
+                    if (!string.IsNullOrEmpty(sceneName))
+                    {
+                        DiceRogue.Boot.RunLoader.Instance.LoadGameOverScene();
+                        Debug.Log("[BattleController] LoadGameOverScene() called successfully - transition should start now");
+                        transitionStarted = true;
+                        
+                        // Wait a few frames to ensure the transition coroutine starts and begins loading
+                        yield return new UnityEngine.WaitForSeconds(0.1f);
+                        
+                        // Check if we're still in BattleScene (transition might have failed)
+                        string currentScene = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name;
+                        if (currentScene == "BattleScene")
+                        {
+                            Debug.LogWarning("[BattleController] Still in BattleScene after transition attempt - waiting longer...");
+                            yield return new UnityEngine.WaitForSeconds(0.5f);
+                            
+                            // Check again
+                            currentScene = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name;
+                            if (currentScene == "BattleScene")
+                            {
+                                Debug.LogError("[BattleController] Transition failed! Using direct scene load as fallback.");
+                                transitionStarted = false;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        Debug.LogError("[BattleController] GameOver scene name is null or empty!");
+                        transitionStarted = false;
+                    }
+                }
+                else
+                {
+                    Debug.LogError("[BattleController] RunLoader.Instance is NULL! Cannot use wipe transition.");
+                    transitionStarted = false;
+                }
+                
+                // Fallback: Direct scene load if transition didn't work
+                if (!transitionStarted)
+                {
+                    Debug.LogWarning("[BattleController] Using fallback: Direct SceneManager.LoadScene");
+                    UnityEngine.SceneManagement.SceneManager.LoadScene("GameOverScene");
+                }
             }
         }
 
