@@ -4458,6 +4458,13 @@ MonoBehaviour:
   submitComboButton: {fileID: 1374099275}
   continueButton: {fileID: 1682715253}
   openBackpackButton: {fileID: 0}
+  settingsButton: {fileID: 0}
+  settingsPanel: {fileID: 0}
+  settingsOverlay: {fileID: 0}
+  settingsWindow: {fileID: 0}
+  settingsResetButton: {fileID: 0}
+  settingsQuitButton: {fileID: 0}
+  settingsCloseButton: {fileID: 0}
   levelInfoText: {fileID: 581384308}
   targetScoreText: {fileID: 466088119}
   comboNameText: {fileID: 629636850}
@@ -9194,9 +9201,9 @@ RectTransform:
   - {fileID: 915512910}
   - {fileID: 641603549}
   - {fileID: 1682715252}
-  - {fileID: 534472679}
   - {fileID: 1534619219}
   - {fileID: 431756898}
+  - {fileID: 534472679}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
