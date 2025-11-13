@@ -43,7 +43,7 @@ namespace DiceGame.Tutorial
         public Vector2 promptPivot = new Vector2(0.5f, 0.5f);
 
         [Header("Action Prompt Layout (left side)")]
-        public Vector2 actionPromptSize = new Vector2(360f, 220f);
+        public Vector2 actionPromptSize = new Vector2(500f, 340f);
         public Vector2 actionPromptOffset = new Vector2(40f, -40f);
         public Vector2 actionPromptAnchor = new Vector2(0.05f, 0.65f);
         public Vector2 actionPromptPivot = new Vector2(0f, 0.5f);
@@ -57,7 +57,7 @@ namespace DiceGame.Tutorial
         public float textRightPaddingWithButton = 150f;
 
         [Header("Combo Prompt Layout (under dice)")]
-        public Vector2 comboPromptSize = new Vector2(520f, 160f);
+        public Vector2 comboPromptSize = new Vector2(700f, 240f);
         public Vector2 comboPromptOffset = new Vector2(0f, -190f);
         public Vector2 comboPromptAnchor = new Vector2(0.5f, 0.5f);
         public Vector2 comboPromptPivot = new Vector2(0.5f, 0.5f);
@@ -72,6 +72,7 @@ namespace DiceGame.Tutorial
         private Coroutine waitForScoreRoutine;
         private bool lockStepCompleted;
         private bool awaitingSecondRoll;
+        private System.Action diceLockChangedHandler;
 
         private RectTransform promptRect;
         private RectTransform textRect;
@@ -92,6 +93,7 @@ namespace DiceGame.Tutorial
         {
             UnhookGlobalListeners();
             CleanupDiceViewListeners();
+            UnhookDiceLockEvent();
         }
 
         #region Setup
@@ -115,6 +117,16 @@ namespace DiceGame.Tutorial
                 if (openBackpackButton == null) openBackpackButton = battleController.openBackpackButton;
                 if (rollButton == null) rollButton = battleController.rollButton;
                 if (submitComboButton == null) submitComboButton = battleController.submitComboButton;
+            }
+
+            // Fallback: try to find DiceRow by name if not found through BattleController
+            if (diceRowParent == null)
+            {
+                GameObject diceRowGO = GameObject.Find("DiceRow");
+                if (diceRowGO != null)
+                {
+                    diceRowParent = diceRowGO.transform;
+                }
             }
 
             if (backpackManager != null)
@@ -155,12 +167,22 @@ namespace DiceGame.Tutorial
             tutorialSteps.Add(new TutorialStep
             {
                 title = "Build Your Hand",
-                message = "Open the backpack and select up to five dice.",
+                message = "Select up to five dices from backpack",
                 highlightElement = openBackpackButton != null ? openBackpackButton.gameObject : null,
                 useNextButton = false,
                 waitForAction = true,
                 layout = StepLayout.ActionLeft,
                 requiredAction = TutorialAction.ConfirmHand
+            });
+
+            tutorialSteps.Add(new TutorialStep
+            {
+                title = "Lock Dice",
+                message = "Click the dice you want to keep, so that roll dices won't change their value, up to five dices can be locked.",
+                useNextButton = false,
+                waitForAction = true,
+                layout = StepLayout.ActionLeft,
+                requiredAction = TutorialAction.LockDice
             });
 
             tutorialSteps.Add(new TutorialStep
@@ -176,18 +198,8 @@ namespace DiceGame.Tutorial
 
             tutorialSteps.Add(new TutorialStep
             {
-                title = "Lock Dice",
-                message = "Click the dice you want to keep, up to five dice can be locked.",
-                useNextButton = false,
-                waitForAction = true,
-                layout = StepLayout.ActionLeft,
-                requiredAction = TutorialAction.LockDice
-            });
-
-            tutorialSteps.Add(new TutorialStep
-            {
                 title = "Check Combo Preference",
-                message = "Review the Combo Preference panel to see which combinations are valuable.",
+                message = "Review the Combo Preference panel to see which combinations are valuable",
                 useNextButton = true,
                 waitForAction = false,
                 layout = StepLayout.ComboInfo,
@@ -197,7 +209,7 @@ namespace DiceGame.Tutorial
             tutorialSteps.Add(new TutorialStep
             {
                 title = "Roll Again",
-                message = "You can roll again. Locked dice stay at their current values.",
+                message = "You can roll again. The # of roll and cast left can be seen on the right panel.",
                 useNextButton = false,
                 waitForAction = true,
                 layout = StepLayout.ActionLeft,
@@ -207,7 +219,7 @@ namespace DiceGame.Tutorial
             tutorialSteps.Add(new TutorialStep
             {
                 title = "Submit Your Hand",
-                message = "Press Submit to score the hand.",
+                message = "Lock the dice you want to use and press Cast to score the hand.",
                 highlightElement = submitComboButton != null ? submitComboButton.gameObject : null,
                 useNextButton = false,
                 waitForAction = true,
@@ -218,7 +230,7 @@ namespace DiceGame.Tutorial
             tutorialSteps.Add(new TutorialStep
             {
                 title = "Score Breakdown",
-                message = "Watch how the combo is scored.",
+                message = "Watch how the combo is scored(basic combo + dice effect + relic effect).",
                 useNextButton = false,
                 waitForAction = true,
                 layout = StepLayout.CenterBelow,
@@ -227,8 +239,19 @@ namespace DiceGame.Tutorial
 
             tutorialSteps.Add(new TutorialStep
             {
+                title = "Cooldown System",
+                message = "Dice selected and casted need one round to cooldown before reuse.",
+                highlightElement = openBackpackButton != null ? openBackpackButton.gameObject : null,
+                useNextButton = true,
+                waitForAction = false,
+                layout = StepLayout.ActionLeft,
+                requiredAction = TutorialAction.None
+            });
+
+            tutorialSteps.Add(new TutorialStep
+            {
                 title = "Tutorial Complete!",
-                message = "You’re ready to play. Click Next to return to the main menu.",
+                message = "You're ready to play. Click Next to return to the main menu.",
                 useNextButton = true,
                 waitForAction = false,
                 layout = StepLayout.IntroCenter,
@@ -297,18 +320,120 @@ namespace DiceGame.Tutorial
 
         void HookGlobalListeners()
         {
-            if (diceSelectionUI != null && diceSelectionUI.submitButton != null)
+            EnsureDiceSelectionButtonHooked();
+            EnsureRollButtonHooked();
+            EnsureSubmitButtonHooked();
+        }
+
+        void EnsureSubmitButtonHooked()
+        {
+            // Check if already hooked
+            foreach (var entry in buttonHandlers)
             {
-                UnityAction handler = OnDiceSelectionConfirmed;
-                diceSelectionUI.submitButton.onClick.AddListener(handler);
-                buttonHandlers.Add((diceSelectionUI.submitButton, handler));
+                if (entry.button != null && entry.handler == OnSubmitClicked)
+                {
+                    return; // Already hooked
+                }
             }
-            else if (backpackManager != null && backpackManager.diceSelectionUI != null && backpackManager.diceSelectionUI.submitButton != null)
+
+            ResolveReferences();
+
+            // Try to find submitComboButton if still null
+            if (submitComboButton == null && battleController != null)
             {
-                diceSelectionUI = backpackManager.diceSelectionUI;
-                UnityAction handler = OnDiceSelectionConfirmed;
-                diceSelectionUI.submitButton.onClick.AddListener(handler);
-                buttonHandlers.Add((diceSelectionUI.submitButton, handler));
+                submitComboButton = battleController.submitComboButton;
+            }
+
+            // Fallback: try to find CastComboButton by name
+            if (submitComboButton == null)
+            {
+                GameObject castButtonGO = GameObject.Find("CastComboButton");
+                if (castButtonGO == null)
+                {
+                    // Try to find by searching all buttons for "Cast" text
+                    Button[] allButtons = FindObjectsOfType<Button>(true);
+                    foreach (var btn in allButtons)
+                    {
+                        if (btn == null) continue;
+                        
+                        if (btn.name.ToUpper().Contains("CAST") || btn.name.ToUpper().Contains("SUBMIT"))
+                        {
+                            submitComboButton = btn;
+                            break;
+                        }
+                        
+                        var text = btn.GetComponentInChildren<TMPro.TMP_Text>();
+                        if (text != null && (text.text.ToUpper().Contains("CAST") || text.text.ToUpper().Contains("SUBMIT")))
+                        {
+                            submitComboButton = btn;
+                            break;
+                        }
+                    }
+                }
+                else
+                {
+                    submitComboButton = castButtonGO.GetComponent<Button>();
+                }
+            }
+
+            // Hook the submit button
+            if (submitComboButton != null)
+            {
+                UnityAction handler = OnSubmitClicked;
+                submitComboButton.onClick.AddListener(handler);
+                buttonHandlers.Add((submitComboButton, handler));
+            }
+        }
+
+        bool IsRollButtonHooked()
+        {
+            foreach (var entry in buttonHandlers)
+            {
+                if (entry.button != null && entry.handler == OnRollClicked)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        void EnsureRollButtonHooked()
+        {
+            if (IsRollButtonHooked()) return;
+
+            ResolveReferences();
+
+            if (rollButton == null && battleController != null)
+            {
+                rollButton = battleController.rollButton;
+            }
+
+            if (rollButton == null)
+            {
+                GameObject rollButtonGO = GameObject.Find("Roll");
+                if (rollButtonGO == null)
+                {
+                    Button[] allButtons = FindObjectsOfType<Button>(true);
+                    foreach (var btn in allButtons)
+                    {
+                        if (btn == null) continue;
+                        if (btn.name.ToUpper().Contains("ROLL"))
+                        {
+                            rollButton = btn;
+                            break;
+                        }
+                        var text = btn.GetComponentInChildren<TMPro.TMP_Text>();
+                        if (text != null && text.text.ToUpper().Contains("ROLL"))
+                        {
+                            rollButton = btn;
+                            break;
+                        }
+                    }
+                }
+                else
+                {
+                    rollButton = rollButtonGO.GetComponent<Button>();
+                }
             }
 
             if (rollButton != null)
@@ -317,12 +442,89 @@ namespace DiceGame.Tutorial
                 rollButton.onClick.AddListener(handler);
                 buttonHandlers.Add((rollButton, handler));
             }
+        }
 
-            if (submitComboButton != null)
+        bool IsDiceSelectionButtonHooked()
+        {
+            foreach (var entry in buttonHandlers)
             {
-                UnityAction handler = OnSubmitClicked;
-                submitComboButton.onClick.AddListener(handler);
-                buttonHandlers.Add((submitComboButton, handler));
+                if (entry.button != null && entry.handler == OnDiceSelectionConfirmed)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        void EnsureDiceSelectionButtonHooked()
+        {
+            // Check if already hooked
+            if (IsDiceSelectionButtonHooked())
+            {
+                return; // Already hooked
+            }
+
+            // Try to resolve references
+            ResolveReferences();
+
+            // Try to resolve diceSelectionUI if not set
+            if (diceSelectionUI == null && backpackManager != null)
+            {
+                diceSelectionUI = backpackManager.diceSelectionUI;
+            }
+
+            // Try to find diceSelectionUI if still null
+            if (diceSelectionUI == null)
+            {
+                diceSelectionUI = FindObjectOfType<DiceSelectionUI>();
+            }
+
+            // Try to hook the submit button
+            if (diceSelectionUI != null)
+            {
+                if (diceSelectionUI.submitButton == null)
+                {
+                    Button[] buttons = diceSelectionUI.GetComponentsInChildren<Button>(true);
+                    foreach (var btn in buttons)
+                    {
+                        var text = btn.GetComponentInChildren<TMPro.TMP_Text>();
+                        if (text != null && (text.text.ToUpper().Contains("CONFIRM") || text.text.ToUpper().Contains("SUBMIT")))
+                        {
+                            diceSelectionUI.submitButton = btn;
+                            break;
+                        }
+                    }
+                }
+
+                if (diceSelectionUI.submitButton != null)
+                {
+                    UnityAction handler = OnDiceSelectionConfirmed;
+                    diceSelectionUI.submitButton.onClick.AddListener(handler);
+                    buttonHandlers.Add((diceSelectionUI.submitButton, handler));
+                }
+            }
+        }
+
+        IEnumerator RetryHookDiceSelectionButton()
+        {
+            float timeout = 10f;
+            while (timeout > 0f && !IsDiceSelectionButtonHooked() && currentRequiredAction == TutorialAction.ConfirmHand)
+            {
+                ResolveReferences();
+                EnsureDiceSelectionButtonHooked();
+                
+                if (IsDiceSelectionButtonHooked())
+                {
+                    yield break;
+                }
+                
+                timeout -= Time.deltaTime;
+                yield return null;
+            }
+
+            if (!IsDiceSelectionButtonHooked())
+            {
+                Debug.LogError("[Tutorial] Failed to hook dice selection button after retries.");
             }
         }
 
@@ -356,18 +558,48 @@ namespace DiceGame.Tutorial
             var step = tutorialSteps[stepIndex];
 
             ApplyLayoutForStep(step);
+            SetNextButtonVisible(step.useNextButton);
             ShowPrompt(step.title, step.message);
             HighlightElement(step.highlightElement);
-            SetNextButtonVisible(step.useNextButton);
+            
+            // Force text update after all layout changes
+            if (tutorialText != null)
+            {
+                // Wait one frame for layout to settle, then update text
+                StartCoroutine(UpdateTextAfterLayout());
+            }
 
             if (step.waitForAction)
             {
                 currentRequiredAction = step.requiredAction;
 
-                if (step.requiredAction == TutorialAction.LockDice)
+                if (step.requiredAction == TutorialAction.ConfirmHand)
+                {
+                    // Ensure submit button is hooked when this step starts
+                    EnsureDiceSelectionButtonHooked();
+                    // If still not hooked, start a coroutine to retry
+                    if (!IsDiceSelectionButtonHooked())
+                    {
+                        StartCoroutine(RetryHookDiceSelectionButton());
+                    }
+                }
+                else if (step.requiredAction == TutorialAction.RollDice)
+                {
+                    // Ensure roll button is hooked and active
+                    EnsureRollButtonHooked();
+                    // If still not hooked, start a coroutine to retry
+                    if (!IsRollButtonHooked())
+                    {
+                        StartCoroutine(RetryHookRollButton());
+                    }
+                }
+                else if (step.requiredAction == TutorialAction.LockDice)
                 {
                     lockStepCompleted = false;
-                    StartCoroutine(WaitForDiceViewsAndAttach());
+                    // Subscribe to dice lock changed event
+                    HookDiceLockEvent();
+                    // Wait for dice views to be ready (rolled and interactable)
+                    StartCoroutine(WaitForDiceViewsReadyAndAttach());
                 }
                 else if (step.requiredAction == TutorialAction.ScoreAnimationComplete)
                 {
@@ -381,6 +613,13 @@ namespace DiceGame.Tutorial
             else
             {
                 currentRequiredAction = TutorialAction.None;
+                
+                // Special handling for cooldown step - show backpack
+                if (step.title == "Cooldown System")
+                {
+                    ShowBackpackForCooldownExplanation();
+                }
+                
                 if (!step.useNextButton)
                 {
                     // Auto-advance if there is no action and no button (not used in current flow)
@@ -408,6 +647,8 @@ namespace DiceGame.Tutorial
             if (tutorialText != null)
             {
                 tutorialText.text = $"<b>{title}</b>\n\n{message}";
+                tutorialText.enableWordWrapping = true;
+                tutorialText.overflowMode = TextOverflowModes.Overflow;
             }
         }
 
@@ -435,8 +676,18 @@ namespace DiceGame.Tutorial
         {
             if (textRect == null) return;
             float rightPadding = hasNextButton ? textRightPaddingWithButton : textPadding.x;
-            textRect.offsetMin = new Vector2(textPadding.x, textPadding.y);
-            textRect.offsetMax = new Vector2(-rightPadding, -textPadding.y);
+            float leftPadding = textPadding.x;
+            float topPadding = textPadding.y;
+            float bottomPadding = textPadding.y;
+            
+            textRect.offsetMin = new Vector2(leftPadding, bottomPadding);
+            textRect.offsetMax = new Vector2(-rightPadding, -topPadding);
+            
+            // Force text to recalculate layout after padding change
+            if (tutorialText != null)
+            {
+                tutorialText.ForceMeshUpdate();
+            }
         }
 
         void NormalizeTextRect()
@@ -445,8 +696,9 @@ namespace DiceGame.Tutorial
             textRect.anchorMin = Vector2.zero;
             textRect.anchorMax = Vector2.one;
             textRect.pivot = new Vector2(0f, 1f);
-            textRect.offsetMin = new Vector2(textPadding.x, textPadding.y);
-            textRect.offsetMax = new Vector2(-textPadding.x, -textPadding.y);
+            // Leave padding to be set by UpdateTextPadding based on button state
+            textRect.offsetMin = Vector2.zero;
+            textRect.offsetMax = Vector2.zero;
         }
 
         void ApplyLayoutForStep(TutorialStep step)
@@ -460,7 +712,13 @@ namespace DiceGame.Tutorial
                     promptRect.pivot = actionPromptPivot;
                     promptRect.sizeDelta = actionPromptSize;
                     promptRect.anchoredPosition = actionPromptOffset;
-                    if (tutorialText != null) tutorialText.alignment = TextAlignmentOptions.TopLeft;
+                    if (tutorialText != null)
+                    {
+                        tutorialText.alignment = TextAlignmentOptions.TopLeft;
+                        tutorialText.enableWordWrapping = true;
+                        tutorialText.overflowMode = TextOverflowModes.Overflow;
+                    }
+                    UpdateTextRectForLayout();
                     break;
 
                 case StepLayout.ComboInfo:
@@ -468,15 +726,27 @@ namespace DiceGame.Tutorial
                     promptRect.pivot = comboPromptPivot;
                     promptRect.sizeDelta = comboPromptSize;
                     promptRect.anchoredPosition = comboPromptOffset;
-                    if (tutorialText != null) tutorialText.alignment = TextAlignmentOptions.Center;
+                    if (tutorialText != null)
+                    {
+                        tutorialText.alignment = TextAlignmentOptions.Center;
+                        tutorialText.enableWordWrapping = true;
+                        tutorialText.overflowMode = TextOverflowModes.Overflow;
+                    }
+                    UpdateTextRectForLayout();
                     break;
 
                 case StepLayout.CenterBelow:
                     promptRect.anchorMin = promptRect.anchorMax = new Vector2(0.5f, 0.5f);
                     promptRect.pivot = new Vector2(0.5f, 0.5f);
-                    promptRect.sizeDelta = new Vector2(520f, 160f);
+                    promptRect.sizeDelta = new Vector2(700f, 240f);
                     promptRect.anchoredPosition = new Vector2(0f, -140f);
-                    if (tutorialText != null) tutorialText.alignment = TextAlignmentOptions.Center;
+                    if (tutorialText != null)
+                    {
+                        tutorialText.alignment = TextAlignmentOptions.Center;
+                        tutorialText.enableWordWrapping = true;
+                        tutorialText.overflowMode = TextOverflowModes.Overflow;
+                    }
+                    UpdateTextRectForLayout();
                     break;
 
                 case StepLayout.IntroCenter:
@@ -485,16 +755,53 @@ namespace DiceGame.Tutorial
                     promptRect.pivot = introPromptPivot;
                     promptRect.sizeDelta = introPromptSize;
                     promptRect.anchoredPosition = introPromptOffset;
-                    if (tutorialText != null) tutorialText.alignment = TextAlignmentOptions.Center;
+                    if (tutorialText != null)
+                    {
+                        tutorialText.alignment = TextAlignmentOptions.Center;
+                        tutorialText.enableWordWrapping = true;
+                        tutorialText.overflowMode = TextOverflowModes.Overflow;
+                    }
+                    UpdateTextRectForLayout();
                     break;
+            }
+            
+            // Force text to recalculate after layout change
+            if (tutorialText != null)
+            {
+                tutorialText.ForceMeshUpdate();
+            }
+        }
+
+        void UpdateTextRectForLayout()
+        {
+            if (textRect == null) return;
+            // Ensure text rect fills the panel properly
+            textRect.anchorMin = Vector2.zero;
+            textRect.anchorMax = Vector2.one;
+            textRect.pivot = new Vector2(0f, 1f);
+        }
+        
+        IEnumerator UpdateTextAfterLayout()
+        {
+            yield return null; // Wait one frame for layout to settle
+            if (tutorialText != null)
+            {
+                tutorialText.ForceMeshUpdate();
             }
         }
 
         void HighlightElement(GameObject element)
         {
-            if (element == null) return;
-            // Placeholder: log highlight. You can add visual effects (pulse, outline) here later.
-            Debug.Log($"[Tutorial] Highlight {element.name}");
+            // Placeholder: add visual effects (pulse, outline) here later
+        }
+
+        void ShowBackpackForCooldownExplanation()
+        {
+            // Show backpack in view-only mode to display cooldown dice
+            if (backpackManager != null)
+            {
+                backpackManager.ShowBackpack(BackpackMode.ViewOnly);
+            }
         }
 
         void OnTutorialContinue()
@@ -509,12 +816,17 @@ namespace DiceGame.Tutorial
 
         void OnDiceSelectionConfirmed()
         {
-            RegisterActionCompletion(TutorialAction.ConfirmHand);
-            StartCoroutine(WaitForDiceViewsAndAttach());
+            if (currentRequiredAction == TutorialAction.ConfirmHand)
+            {
+                RegisterActionCompletion(TutorialAction.ConfirmHand);
+                StartCoroutine(WaitForDiceViewsAndAttach());
+            }
         }
 
         void OnRollClicked()
         {
+            if (!isTutorialActive) return;
+            
             if (currentRequiredAction == TutorialAction.RollDice)
             {
                 RegisterActionCompletion(TutorialAction.RollDice);
@@ -523,6 +835,29 @@ namespace DiceGame.Tutorial
             {
                 awaitingSecondRoll = false;
                 RegisterActionCompletion(TutorialAction.SecondRoll);
+            }
+        }
+
+        IEnumerator RetryHookRollButton()
+        {
+            float timeout = 5f;
+            while (timeout > 0f && !IsRollButtonHooked() && currentRequiredAction == TutorialAction.RollDice)
+            {
+                ResolveReferences();
+                EnsureRollButtonHooked();
+                
+                if (IsRollButtonHooked())
+                {
+                    yield break;
+                }
+                
+                timeout -= Time.deltaTime;
+                yield return null;
+            }
+
+            if (!IsRollButtonHooked())
+            {
+                Debug.LogError("[Tutorial] Failed to hook roll button after retries.");
             }
         }
 
@@ -541,36 +876,186 @@ namespace DiceGame.Tutorial
                 diceSelectionUI = backpackManager.diceSelectionUI;
             }
 
-            // Wait until dice views exist or timeout after 3 seconds
-            float timeout = 3f;
+            // Wait until dice views exist or timeout after 5 seconds
+            float timeout = 5f;
             while (timeout > 0f && !HasDiceViews())
             {
                 timeout -= Time.deltaTime;
                 yield return null;
             }
 
-            AttachDiceViewListeners();
+            if (HasDiceViews())
+            {
+                AttachDiceViewListeners();
+            }
+            else
+            {
+                Debug.LogError("[Tutorial] WaitForDiceViewsAndAttach: Timeout - no dice views found!");
+            }
+        }
+
+        IEnumerator WaitForDiceViewsReadyAndAttach()
+        {
+            // Wait for auto-roll animation to complete (0.5s + buffer)
+            yield return new WaitForSeconds(0.7f);
+
+            // Wait until dice views exist and are ready (have rolled values)
+            float timeout = 5f;
+            while (timeout > 0f)
+            {
+                if (HasDiceViews() && AreDiceViewsReady())
+                {
+                    AttachDiceViewListeners();
+                    yield break;
+                }
+                timeout -= Time.deltaTime;
+                yield return null;
+            }
+
+            if (HasDiceViews())
+            {
+                AttachDiceViewListeners();
+            }
+            else
+            {
+                Debug.LogError("[Tutorial] WaitForDiceViewsReadyAndAttach: Timeout - no dice views found!");
+            }
+        }
+
+        bool AreDiceViewsReady()
+        {
+            // Find all DiceView objects
+            DiceView[] views = null;
+            
+            if (diceRowParent != null)
+            {
+                views = diceRowParent.GetComponentsInChildren<DiceView>(true);
+            }
+            
+            // Fallback: find all DiceView objects in the scene
+            if (views == null || views.Length == 0)
+            {
+                views = FindObjectsOfType<DiceView>(true);
+            }
+            
+            if (views == null || views.Length == 0) return false;
+            
+            // Check if at least one non-filler dice has been rolled
+            foreach (var view in views)
+            {
+                if (view != null && view.model != null && view.model.tier != DiceTier.Filler)
+                {
+                    if (view.model.lastRollValue > 0)
+                    {
+                        return true; // At least one dice is rolled
+                    }
+                }
+            }
+            
+            return false;
         }
 
         bool HasDiceViews()
         {
-            if (diceRowParent == null) return false;
-            return diceRowParent.GetComponentsInChildren<DiceView>(true).Length > 0;
+            // Try to resolve diceRowParent if null
+            if (diceRowParent == null)
+            {
+                ResolveReferences();
+            }
+            
+            if (diceRowParent != null)
+            {
+                DiceView[] views = diceRowParent.GetComponentsInChildren<DiceView>(true);
+                if (views.Length > 0) return true;
+            }
+            
+            DiceView[] allViews = FindObjectsOfType<DiceView>(true);
+            return allViews.Length > 0;
         }
 
         void AttachDiceViewListeners()
         {
             CleanupDiceViewListeners();
-            if (diceRowParent == null) return;
-
-            DiceView[] views = diceRowParent.GetComponentsInChildren<DiceView>(true);
+            
+            // Find all DiceView objects (try multiple methods)
+            DiceView[] views = null;
+            
+            if (diceRowParent != null)
+            {
+                views = diceRowParent.GetComponentsInChildren<DiceView>(true);
+            }
+            
+            // Fallback: find all DiceView objects in the scene
+            if (views == null || views.Length == 0)
+            {
+                views = FindObjectsOfType<DiceView>(true);
+            }
+            
+            if (views == null || views.Length == 0) return;
+            
             foreach (var view in views)
             {
-                if (view != null && view.lockButton != null)
+                if (view == null || (view.model != null && view.model.tier == DiceTier.Filler)) continue;
+                
+                Button diceButton = view.GetComponent<Button>();
+                if (diceButton != null)
+                {
+                    UnityAction handler = () => OnDiceLockClicked(view);
+                    diceButton.onClick.AddListener(handler);
+                    diceLockHandlers.Add((diceButton, handler));
+                }
+                else if (view.lockButton != null)
                 {
                     UnityAction handler = () => OnDiceLockClicked(view);
                     view.lockButton.onClick.AddListener(handler);
                     diceLockHandlers.Add((view.lockButton, handler));
+                }
+            }
+        }
+
+        void HookDiceLockEvent()
+        {
+            UnhookDiceLockEvent();
+            diceLockChangedHandler = OnDiceLockStateChanged;
+            DiceView.OnDiceLockChanged += diceLockChangedHandler;
+        }
+
+        void UnhookDiceLockEvent()
+        {
+            if (diceLockChangedHandler != null)
+            {
+                DiceView.OnDiceLockChanged -= diceLockChangedHandler;
+                diceLockChangedHandler = null;
+            }
+        }
+
+        void OnDiceLockStateChanged()
+        {
+            if (!isTutorialActive || lockStepCompleted) return;
+            if (currentRequiredAction != TutorialAction.LockDice) return;
+            
+            DiceView[] views = null;
+            if (diceRowParent != null)
+            {
+                views = diceRowParent.GetComponentsInChildren<DiceView>(true);
+            }
+            
+            if (views == null || views.Length == 0)
+            {
+                views = FindObjectsOfType<DiceView>(true);
+            }
+            
+            if (views != null && views.Length > 0)
+            {
+                foreach (var view in views)
+                {
+                    if (view != null && view.model != null && view.model.isLocked && view.model.tier != DiceTier.Filler)
+                    {
+                        lockStepCompleted = true;
+                        RegisterActionCompletion(TutorialAction.LockDice);
+                        UnhookDiceLockEvent();
+                        return;
+                    }
                 }
             }
         }
@@ -590,13 +1075,18 @@ namespace DiceGame.Tutorial
         void OnDiceLockClicked(DiceView view)
         {
             if (!isTutorialActive || lockStepCompleted) return;
+            if (currentRequiredAction != TutorialAction.LockDice) return;
+            
             StartCoroutine(CheckLockStateNextFrame(view));
         }
 
         IEnumerator CheckLockStateNextFrame(DiceView view)
         {
-            yield return null; // wait one frame so DiceView updates
-            if (view != null && view.model != null && view.model.isLocked)
+            yield return null;
+            
+            if (view == null || view.model == null) yield break;
+            
+            if (view.model.isLocked)
             {
                 lockStepCompleted = true;
                 RegisterActionCompletion(TutorialAction.LockDice);
@@ -615,29 +1105,40 @@ namespace DiceGame.Tutorial
 
         IEnumerator WaitForScoreAnimationComplete()
         {
-            if (scoreAnimator == null)
+            // The prompt should be visible when this step started
+            // Strategy: Wait for animation to complete (if running), then wait 3 seconds for reading
+            
+            // Step 1: Wait for animation to start (if not already running)
+            if (scoreAnimator != null && !scoreAnimator.IsAnimating)
             {
-                yield return new WaitForSeconds(1f);
-                RegisterActionCompletion(TutorialAction.ScoreAnimationComplete);
-                yield break;
+                // Give animation a chance to start (up to 2 seconds)
+                float startCheckTime = 0f;
+                float startCheckMax = 2f;
+                while (!scoreAnimator.IsAnimating && startCheckTime < startCheckMax)
+                {
+                    startCheckTime += Time.deltaTime;
+                    yield return null;
+                }
             }
-
-            // Wait until animation starts (timeout to avoid getting stuck)
-            float timeout = 10f;
-            while (!scoreAnimator.IsAnimating && timeout > 0f)
+            
+            // Step 2: Wait for animation to complete (if it's running)
+            if (scoreAnimator != null && scoreAnimator.IsAnimating)
             {
-                timeout -= Time.deltaTime;
-                yield return null;
+                float animationWaitTime = 0f;
+                float animationMaxWait = 25f; // Safety timeout
+                while (scoreAnimator.IsAnimating && animationWaitTime < animationMaxWait)
+                {
+                    animationWaitTime += Time.deltaTime;
+                    yield return null;
+                }
             }
-
-            // Then wait for it to finish
-            timeout = 15f;
-            while (scoreAnimator.IsAnimating && timeout > 0f)
-            {
-                timeout -= Time.deltaTime;
-                yield return null;
-            }
-
+            
+            // Step 3: Animation is complete (or was never running)
+            // Wait exactly 3 seconds so player can read the score breakdown message
+            // The prompt should still be visible at this point
+            yield return new WaitForSeconds(3f);
+            
+            // Step 4: Now advance to next step (this will hide the prompt)
             RegisterActionCompletion(TutorialAction.ScoreAnimationComplete);
         }
 
@@ -653,6 +1154,22 @@ namespace DiceGame.Tutorial
 
             currentRequiredAction = TutorialAction.None;
             HidePrompt();
+            
+            // Special handling: Wait a bit after score animation before showing cooldown step
+            if (action == TutorialAction.ScoreAnimationComplete)
+            {
+                StartCoroutine(DelayedAdvanceToCooldownStep());
+            }
+            else
+            {
+                StartTutorialStep(currentStepIndex + 1);
+            }
+        }
+
+        IEnumerator DelayedAdvanceToCooldownStep()
+        {
+            // Wait for score to be fully added and UI to update, plus extra time to view the score
+            yield return new WaitForSeconds(2f);
             StartTutorialStep(currentStepIndex + 1);
         }
 
