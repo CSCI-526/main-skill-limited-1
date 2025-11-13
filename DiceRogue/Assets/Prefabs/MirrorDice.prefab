@@ -1,6 +1,6 @@
 %YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
---- !u!1001 &8464192571167995154
+--- !u!1001 &5283717866580880631
 PrefabInstance:
   m_ObjectHideFlags: 0
   serializedVersion: 2
@@ -10,11 +10,11 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: 3798981389503390463, guid: 6de3897ca5c9f4f7e8e42e4a47679271, type: 3}
       propertyPath: m_Name
-      value: CounterDice
+      value: MirrorDice
       objectReference: {fileID: 0}
     - target: {fileID: 3969819433340230743, guid: 6de3897ca5c9f4f7e8e42e4a47679271, type: 3}
       propertyPath: m_text
-      value: Counter
+      value: Mirror
       objectReference: {fileID: 0}
     - target: {fileID: 3969819433340230743, guid: 6de3897ca5c9f4f7e8e42e4a47679271, type: 3}
       propertyPath: m_fontColor.b

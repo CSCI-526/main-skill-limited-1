@@ -420,6 +420,9 @@ namespace DiceGame
 
         // Show backpack for dice selection
         UpdateFeedback("Roll or Lock Dice");
+        if (DiceTooltipManager.Instance != null)
+            DiceTooltipManager.Instance.HideTooltip();
+
         backpackManager.ShowBackpack(BackpackMode.Selection);
     }
 
@@ -1168,6 +1171,9 @@ namespace DiceGame
         /// </summary>
         private System.Collections.IEnumerator EvaluateTargetScore()
         {
+            if (DiceTooltipManager.Instance != null)
+                DiceTooltipManager.Instance.HideTooltip();
+
             // No wait needed - animation already completed before this is called
 
             int finalScore = scoreAnimator != null ? scoreAnimator.GetTotalScore() : _progressionManager.TotalScore;
