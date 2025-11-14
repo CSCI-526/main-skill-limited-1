@@ -184,7 +184,7 @@ namespace DiceGame
             // Only initialize if global pool hasn't been set up yet
             if (_relicManager.GlobalRelicPool == null || _relicManager.GlobalRelicPool.Count == 0)
             {
-                bool isNewGame = !ContinuingFromReward && (_relicManager.BackpackRelics == null || _relicManager.BackpackRelics.Count == 0);
+                bool isNewGame = !ContinuingFromReward && (_relicManager.PlayerBackpack == null || _relicManager.PlayerBackpack.Count == 0);
                 InitializeRelicSystem(giveStartingRelic: isNewGame);
             }
         }
@@ -643,8 +643,25 @@ namespace DiceGame
 
     private void OnDiceSelectedFromBackpack(List<BaseDice> selectedDice)
     {
-        // Use HandCompositionService to compose the hand
-        var composedHand = _compositionService.ComposeHandWithSelection(selectedDice, diceCount);
+        // Debug: Log what was selected
+        Debug.Log($"[BattleController] OnDiceSelectedFromBackpack called with {selectedDice.Count} dice:");
+        foreach (var d in selectedDice)
+        {
+            Debug.Log($"  - {d.diceName} ({(d is NormalDice ? "NormalDice" : d.GetType().Name)})");
+        }
+        
+        // Filter out any NormalDice that might have been accidentally included in selection
+        var specialDiceOnly = selectedDice.Where(d => !(d is NormalDice)).ToList();
+        Debug.Log($"[BattleController] Filtered to {specialDiceOnly.Count} special dice (removed {selectedDice.Count - specialDiceOnly.Count} NormalDice)");
+        
+        // Use HandCompositionService to compose the hand (only with special dice)
+        var composedHand = _compositionService.ComposeHandWithSelection(specialDiceOnly, diceCount);
+        
+        Debug.Log($"[BattleController] Composed hand has {composedHand.Count} dice:");
+        foreach (var d in composedHand)
+        {
+            Debug.Log($"  - {d.diceName} ({(d is NormalDice ? "NormalDice" : d.GetType().Name)})");
+        }
         
         _dice.Clear(); // Clear existing dice before adding the new selection
         _dice.AddRange(composedHand);
@@ -671,6 +688,9 @@ namespace DiceGame
         // Reset dice state for new hand
         _compositionService.ResetHandDice(_dice);
 
+        // Clear existing views before creating new ones (important with DontDestroyOnLoad)
+        _viewFactory.DestroyViews(_views);
+        
         // Create views using factory (includes placeholders for empty slots)
         var newViews = _viewFactory.CreateViews(_dice, diceCount);
         _views.AddRange(newViews);
