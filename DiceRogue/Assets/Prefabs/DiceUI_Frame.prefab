@@ -147,7 +147,6 @@ GameObject:
   - component: {fileID: 8113776913722717154}
   - component: {fileID: 3580145054089062562}
   - component: {fileID: 7932904449647690386}
-  - component: {fileID: 5110786499917223417}
   m_Layer: 5
   m_Name: DiceUI_Base
   m_TagString: Untagged
@@ -237,20 +236,6 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 37336180b13f1462da5f6a719a281919, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  nameText: {fileID: 6516376656843061586}
-  background: {fileID: 8113776913722717154}
---- !u!114 &5110786499917223417
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 5708663151116869908}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 3d70454d3c76a44e2b95f673139ec9e7, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
 --- !u!1 &6467664689949280250
