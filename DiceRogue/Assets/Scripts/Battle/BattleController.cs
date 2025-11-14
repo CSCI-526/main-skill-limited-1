@@ -120,6 +120,12 @@ namespace DiceGame
             {
                 scoreAnimator.relicDisplay = relicDisplay;
             }
+            
+            // Link money text to score animator for money animation
+            if (scoreAnimator != null && moneyText != null)
+            {
+                scoreAnimator.moneyText = moneyText;
+            }
 
             // Initialize backpack manager
             if (backpackManager != null)
@@ -1314,7 +1320,7 @@ namespace DiceGame
             {
                 scoreAnimator.AnimateTargetEvaluation(finalScore, _progressionManager.TargetScore, passed);
                 
-                // Wait for evaluation animation to complete (with timeout safety)
+                // Wait for "You pass!" message to complete
                 float timeout = 0f;
                 float maxTimeout = 10f; // Safety timeout to prevent infinite wait
                 while (scoreAnimator.IsAnimating && timeout < maxTimeout)
@@ -1340,9 +1346,36 @@ namespace DiceGame
                 // Reward money: 5 + remaining casts
                 var (current, remaining) = cooldownSystem.GetHandCounter();
                 int rewardMoney = 5 + remaining;
-                _moneyManager.Add(rewardMoney);
-                SavedMoney = _moneyManager.Money; // Save money before scene transition
-                UpdateMoneyDisplay();
+                int currentMoney = _moneyManager.Money;
+                
+                // Show reward message
+                if (scoreAnimator != null && scoreAnimator.comboScoreText != null)
+                {
+                    scoreAnimator.comboScoreText.text = $"<size=150%><color=#FFD700>Level reward: 5+{remaining}</color></size>";
+                    yield return new WaitForSeconds(1.0f);
+                }
+                
+                // Animate money increase (similar to score animation)
+                if (scoreAnimator != null && scoreAnimator.moneyText != null)
+                {
+                    scoreAnimator.AnimateMoneyIncrease(rewardMoney, currentMoney, (money) =>
+                    {
+                        _moneyManager.Set(money);
+                        SavedMoney = money;
+                        UpdateMoneyDisplay();
+                    });
+                    
+                    // Wait for animation to complete before transitioning
+                    yield return new WaitForSeconds(scoreAnimator.countUpDuration + 0.3f);
+                }
+                else
+                {
+                    // Fallback: add money immediately if no animator
+                    _moneyManager.Add(rewardMoney);
+                    SavedMoney = _moneyManager.Money;
+                    UpdateMoneyDisplay();
+                }
+                
                 Debug.Log($"[BattleController] Level passed! Money reward: +{rewardMoney} (5 + {remaining} remaining casts), Total: {SavedMoney}");
 
                 // Prepare next level state for when we return from RewardScene

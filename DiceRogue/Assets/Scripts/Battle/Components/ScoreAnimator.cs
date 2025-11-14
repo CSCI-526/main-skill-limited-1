@@ -19,6 +19,7 @@ namespace DiceGame
         public TMP_Text comboScoreText;     // Shows combo name and animated score
         public TMP_Text totalScoreText;     // Shows current accumulated score (displays number only)
         public TMP_Text bonusText;          // Floating bonus text (e.g., "+15")
+        public TMP_Text moneyText;           // Money display (for animation)
         
         [Header("Component References")]
         public RelicDisplay relicDisplay;   // For triggering relic pop effects
@@ -524,6 +525,56 @@ namespace DiceGame
         }
 
         /// <summary>
+        /// Animate money increase with count-up effect (similar to score animation)
+        /// </summary>
+        public void AnimateMoneyIncrease(int rewardAmount, int currentMoney, System.Action<int> onUpdate)
+        {
+            StartCoroutine(AnimateMoneyIncreaseCoroutine(rewardAmount, currentMoney, onUpdate));
+        }
+
+        /// <summary>
+        /// Coroutine to animate money count-up
+        /// </summary>
+        private IEnumerator AnimateMoneyIncreaseCoroutine(int rewardAmount, int startMoney, System.Action<int> onUpdate)
+        {
+            int targetMoney = startMoney + rewardAmount;
+            float elapsed = 0f;
+            float duration = countUpDuration;
+
+            // Count up money with animation
+            while (elapsed < duration)
+            {
+                elapsed += Time.deltaTime;
+                float t = elapsed / duration;
+
+                // Ease out
+                float smoothT = 1f - Mathf.Pow(1f - t, 3f);
+                int money = Mathf.RoundToInt(Mathf.Lerp(startMoney, targetMoney, smoothT));
+
+                onUpdate?.Invoke(money);
+
+                // Pop effect on money text (scale animation - exaggerated)
+                if (moneyText != null)
+                {
+                    float popT = t;
+                    float scale = 1.0f + (0.8f * Mathf.Sin(popT * Mathf.PI));
+                    moneyText.transform.localScale = Vector3.one * scale;
+                }
+
+                yield return null;
+            }
+
+            // Final value
+            onUpdate?.Invoke(targetMoney);
+
+            // Reset scale
+            if (moneyText != null)
+            {
+                moneyText.transform.localScale = Vector3.one;
+            }
+        }
+
+        /// <summary>
         /// Get current total score
         /// </summary>
         public int GetTotalScore()
@@ -632,10 +683,10 @@ namespace DiceGame
                     totalScoreText.transform.localScale = originalScale;
                 }
                 
-                // Show concise success message immediately (no lag, instant text change)
-                comboScoreText.text = "<size=200%><color=#00FF00><b>Success!</b></color></size>";
+                // Show "You pass!" message
+                comboScoreText.text = "<size=200%><color=#00FF00><b>You pass!</b></color></size>";
                 yield return StartCoroutine(PopScoreText(2.5f));
-                yield return new WaitForSeconds(1.5f);
+                yield return new WaitForSeconds(1.0f);
             }
             else
             {
