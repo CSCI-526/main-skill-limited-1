@@ -2,6 +2,7 @@ using System.Collections;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using System.IO;
+using DiceGame;
 
 namespace DiceRogue.Boot
 {
@@ -47,12 +48,14 @@ namespace DiceRogue.Boot
 
         public void StartRun()
         {
+            BattleController.IsTutorialMode = false; // Ensure normal mode
             StartCoroutine(LoadSceneWithWipe(battleSceneName));
         }
 
         public void StartTutorial()
         {
-            StartCoroutine(LoadSceneWithWipe(tutorialSceneName));
+            BattleController.IsTutorialMode = true; // Set tutorial mode flag
+            StartCoroutine(LoadSceneWithWipe(battleSceneName)); // Load BattleScene, not TutorialScene
         }
 
         public void LoadGameOverScene()

@@ -20,6 +20,9 @@ namespace DiceGame
         public static int PendingTargetScore = 200;
         public static int SavedMoney = 0; // Persist money across scene transitions
         
+        // Static state for tutorial mode
+        public static bool IsTutorialMode = false; // Set by RunLoader when starting tutorial
+        
         // Static state for game over scene
         public static int GameOverFinalScore = 0;
         public static int GameOverTargetScore = 0;
@@ -161,6 +164,13 @@ namespace DiceGame
                 _progressionManager.RestoreLevelState(PendingLevel, PendingTargetScore);
                 ContinuingFromReward = false; // Reset flag
                 Debug.Log($"[BattleController] Continuing from Reward Scene - Level {PendingLevel}, Target: {PendingTargetScore}");
+            }
+            else if (IsTutorialMode)
+            {
+                // Tutorial mode: Level 0
+                _progressionManager = new ProgressionManager(baseTargetScore);
+                _progressionManager.InitializeTutorialMode();
+                Debug.Log("[BattleController] Initialized in Tutorial Mode (Level 0)");
             }
             else
             {
@@ -316,6 +326,21 @@ namespace DiceGame
             
             // Start first hand with a delay to ensure all systems are ready
             StartCoroutine(DelayedStartFirstHand());
+            
+            // Activate TutorialController if in tutorial mode
+            if (IsTutorialMode)
+            {
+                var tutorialController = FindObjectOfType<DiceGame.Tutorial.TutorialController>(true);
+                if (tutorialController != null)
+                {
+                    tutorialController.gameObject.SetActive(true);
+                    Debug.Log("[BattleController] TutorialController activated for tutorial mode");
+                }
+                else
+                {
+                    Debug.LogWarning("[BattleController] TutorialController not found - tutorial may not work!");
+                }
+            }
             
             Debug.Log("[BattleController] Battle scene initialized with decoupled components.");
         }
@@ -1159,7 +1184,71 @@ namespace DiceGame
         {
             if (levelInfoText != null && _progressionManager != null)
             {
-                levelInfoText.text = $"Level {_progressionManager.CurrentLevel}";
+                if (_progressionManager.IsTutorialMode)
+                {
+                    levelInfoText.text = "Tutorial";
+                }
+                else
+                {
+                    levelInfoText.text = $"Level {_progressionManager.CurrentLevel}";
+                }
+            }
+        }
+
+        /// <summary>
+        /// Transition from tutorial mode to normal game (called by TutorialController)
+        /// </summary>
+        public void CompleteTutorialAndStartLevel1()
+        {
+            if (_progressionManager != null && _progressionManager.IsTutorialMode)
+            {
+                _progressionManager.StartNormalGame();
+                IsTutorialMode = false;
+                
+                // Close backpack if open
+                if (backpackManager != null)
+                {
+                    backpackManager.HideBackpack();
+                }
+                
+                // Unlock all dice and reset their state
+                foreach (var d in _dice)
+                {
+                    if (d != null)
+                    {
+                        d.ResetLockAndValue();
+                    }
+                }
+                
+                // Refresh dice views to reflect unlocked state
+                if (_viewFactory != null)
+                {
+                    _viewFactory.RefreshViews(_views);
+                }
+                
+                // Reset hand manager
+                if (_handManager != null)
+                {
+                    _handManager.Reset();
+                    _handManager.SetMaxRolls(maxRollsPerHand);
+                }
+                
+                // Clear current dice and views to start fresh
+                _dice.Clear();
+                _viewFactory?.DestroyViews(_views);
+                _views.Clear();
+                
+                // Update UI
+                UpdateLevelInfo();
+                UpdateTargetScoreDisplay();
+                UpdateRollAndCastCount();
+                UpdateComboPreview();
+                UpdateFeedback("Roll or Lock Dice");
+                
+                // Start first hand of Level 1
+                StartNewHand();
+                
+                Debug.Log("[BattleController] Tutorial completed - started Level 1");
             }
         }
 
@@ -1375,6 +1464,13 @@ namespace DiceGame
         /// </summary>
         private System.Collections.IEnumerator EvaluateTargetScore()
         {
+            // Skip evaluation in tutorial mode
+            if (_progressionManager != null && _progressionManager.IsTutorialMode)
+            {
+                Debug.Log("[BattleController] Skipping target evaluation - tutorial mode");
+                yield break;
+            }
+            
             if (DiceTooltipManager.Instance != null)
                 DiceTooltipManager.Instance.HideTooltip();
 
