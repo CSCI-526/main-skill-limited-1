@@ -77,7 +77,8 @@ namespace DiceGame.Core
                 nameText.text = nameTextColored;
 
             descText.text = dice.description;
-            extraText.text = $"Rarity: <color=#{ColorUtility.ToHtmlStringRGB(rarityColor)}>{rarityText}</color>   Cost: {dice.cost}";
+            //extraText.text = $"Rarity: <color=#{ColorUtility.ToHtmlStringRGB(rarityColor)}>{rarityText}</color>   Cost: {dice.cost}";
+            extraText.text = $"Rarity: <color=#{ColorUtility.ToHtmlStringRGB(rarityColor)}>{rarityText}</color>";
 
             tooltipPanel.SetActive(true);
         }
