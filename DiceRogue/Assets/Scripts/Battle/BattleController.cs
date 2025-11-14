@@ -14,6 +14,9 @@ namespace DiceGame
 {
     public class BattleController : MonoBehaviour
     {
+        // Static instance for cross-scene access (e.g., shop scene)
+        public static BattleController Instance { get; private set; }
+        
         // Static state for scene transitions
         public static bool ContinuingFromReward = false;
         public static int PendingLevel = 1;
@@ -89,11 +92,108 @@ namespace DiceGame
         private readonly List<DiceView> _views = new();
         private bool _isSubmitting = false; // Guard to prevent multiple submissions
 
+        void Awake()
+        {
+            // Singleton pattern: ensure only one BattleController exists
+            if (Instance != null && Instance != this)
+            {
+                Debug.LogWarning("[BattleController] Duplicate BattleController detected. Destroying duplicate.");
+                Destroy(gameObject);
+                return;
+            }
+            
+            Instance = this;
+            DontDestroyOnLoad(gameObject);
+            
+            // Subscribe to scene loaded event to reinitialize UI when returning to BattleScene
+            SceneManager.sceneLoaded += OnSceneLoaded;
+            
+            Debug.Log("[BattleController] BattleController set to persist across scenes.");
+        }
+        
+        /// <summary>
+        /// Called when a scene is loaded - reinitialize UI if returning to BattleScene
+        /// </summary>
+        private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+        {
+            if (scene.name == "BattleScene")
+            {
+                Debug.Log("[BattleController] BattleScene loaded - reinitializing UI...");
+                // Reinitialize UI components when returning to BattleScene
+                InitializeBattleSceneUI();
+            }
+        }
+
         void Start()
         {
+            // Check if we're in BattleScene (for UI initialization)
+            bool isBattleScene = SceneManager.GetActiveScene().name == "BattleScene";
+            
             // Initialize analytics first
             InitializeAnalytics();
             
+            // Initialize core components (always needed, even in shop scene)
+            InitializeCoreComponents();
+            
+            // Only initialize UI and battle-specific systems in BattleScene
+            if (isBattleScene)
+            {
+                InitializeBattleSceneUI();
+            }
+            else
+            {
+                Debug.Log($"[BattleController] Not in BattleScene ({SceneManager.GetActiveScene().name}). Skipping UI initialization.");
+            }
+        }
+        
+        /// <summary>
+        /// Initialize core game systems (needed across all scenes)
+        /// </summary>
+        private void InitializeCoreComponents()
+        {
+            // Initialize core managers (always needed)
+            if (_relicManager == null)
+            {
+                _relicManager = new RelicManager();
+            }
+            
+            if (_moneyManager == null)
+            {
+                _moneyManager = new MoneyManager(SavedMoney); // Restore money from static state
+            }
+            
+            if (_progressionManager == null)
+            {
+                // Initialize progression manager
+                // Check if continuing from reward scene to restore level/target
+                if (ContinuingFromReward)
+                {
+                    _progressionManager = new ProgressionManager(baseTargetScore);
+                    _progressionManager.RestoreLevelState(PendingLevel, PendingTargetScore);
+                    ContinuingFromReward = false; // Reset flag
+                    Debug.Log($"[BattleController] Continuing from Reward Scene - Level {PendingLevel}, Target: {PendingTargetScore}");
+                }
+                else
+                {
+                    _progressionManager = new ProgressionManager(baseTargetScore);
+                }
+            }
+            
+            // Initialize relic system: global pool and empty backpack
+            // Give player a random starting relic if this is a new game (not continuing from reward)
+            // Only initialize if global pool hasn't been set up yet
+            if (_relicManager.GlobalRelicPool == null || _relicManager.GlobalRelicPool.Count == 0)
+            {
+                bool isNewGame = !ContinuingFromReward && (_relicManager.BackpackRelics == null || _relicManager.BackpackRelics.Count == 0);
+                InitializeRelicSystem(giveStartingRelic: isNewGame);
+            }
+        }
+        
+        /// <summary>
+        /// Initialize UI and battle-specific systems (only in BattleScene)
+        /// </summary>
+        private void InitializeBattleSceneUI()
+        {
             // Initialize cooldown system if not assigned
             if (cooldownSystem == null)
             {
@@ -141,30 +241,36 @@ namespace DiceGame
                 Debug.LogError("[BattleController] BackpackManager not assigned!");
             }
 
-            // Initialize core components first (needed for other initialization)
-            _handManager = new HandManager();
-            _handManager.SetMaxRolls(maxRollsPerHand);
-            
-            _effectHandler = new DiceEffectHandler();
-            _viewFactory = new DiceViewFactory(diceViewPrefab, diceRowParent);
-            _relicManager = new RelicManager();
-            _scoreCalculator = new ScoreCalculator();
-            _uiPresenter = new BattleUIPresenter();
-            _compositionService = new HandCompositionService();
-            _moneyManager = new MoneyManager(SavedMoney); // Restore money from static state
-            
-            // Initialize progression manager
-            // Check if continuing from reward scene to restore level/target
-            if (ContinuingFromReward)
+            // Initialize battle-specific components
+            if (_handManager == null)
             {
-                _progressionManager = new ProgressionManager(baseTargetScore);
-                _progressionManager.RestoreLevelState(PendingLevel, PendingTargetScore);
-                ContinuingFromReward = false; // Reset flag
-                Debug.Log($"[BattleController] Continuing from Reward Scene - Level {PendingLevel}, Target: {PendingTargetScore}");
+                _handManager = new HandManager();
+                _handManager.SetMaxRolls(maxRollsPerHand);
             }
-            else
+            
+            if (_effectHandler == null)
             {
-                _progressionManager = new ProgressionManager(baseTargetScore);
+                _effectHandler = new DiceEffectHandler();
+            }
+            
+            if (_viewFactory == null)
+            {
+                _viewFactory = new DiceViewFactory(diceViewPrefab, diceRowParent);
+            }
+            
+            if (_scoreCalculator == null)
+            {
+                _scoreCalculator = new ScoreCalculator();
+            }
+            
+            if (_uiPresenter == null)
+            {
+                _uiPresenter = new BattleUIPresenter();
+            }
+            
+            if (_compositionService == null)
+            {
+                _compositionService = new HandCompositionService();
             }
             
             UpdateTargetScoreDisplay();
@@ -182,11 +288,6 @@ namespace DiceGame
                 continueButton.gameObject.SetActive(false);
                 continueButton.onClick.AddListener(OnContinue);
             }
-            
-            // Initialize relic system: global pool and empty backpack
-            // Give player a random starting relic if this is a new game (not continuing from reward)
-            bool isNewGame = !ContinuingFromReward;
-            InitializeRelicSystem(isNewGame);
 
             // Subscribe to cooldown system events
             cooldownSystem.OnDicePoolRefresh += OnDicePoolRefresh;
@@ -1573,6 +1674,9 @@ namespace DiceGame
         /// </summary>
         void OnDestroy()
         {
+            // Unsubscribe from scene loaded event
+            SceneManager.sceneLoaded -= OnSceneLoaded;
+            
             if (cooldownSystem != null)
             {
                 cooldownSystem.OnDicePoolRefresh -= OnDicePoolRefresh;
@@ -1581,6 +1685,12 @@ namespace DiceGame
             
             // Unsubscribe from dice lock changes
             DiceView.OnDiceLockChanged -= UpdateComboPreview;
+            
+            // Clear instance if this is the current instance
+            if (Instance == this)
+            {
+                Instance = null;
+            }
         }
     }
 }
