@@ -17,7 +17,8 @@ namespace DiceGame
         // Static state for scene transitions
         public static bool ContinuingFromReward = false;
         public static int PendingLevel = 1;
-        public static int PendingTargetScore = 300;
+        public static int PendingTargetScore = 200;
+        public static int SavedMoney = 0; // Persist money across scene transitions
         
         // Static state for game over scene
         public static int GameOverFinalScore = 0;
@@ -48,6 +49,7 @@ namespace DiceGame
         public TMP_Text comboMultiplierText;// Combo multiplier preview
         public TMP_Text rollCountText;      // Roll count display (remaining rolls)
         public TMP_Text castCountText;      // Cast count display (remaining casts)
+        public TMP_Text moneyText;          // Money display
         
         [Header("UI - Score Display")]
         public ScoreAnimator scoreAnimator; // Animated score display system
@@ -61,7 +63,7 @@ namespace DiceGame
         [Header("Config")]
         public int diceCount = 5;         // Fixed 5 dice per hand
         public int maxRollsPerHand = 5;   // Shared roll budget across all hands
-        public int baseTargetScore = 300; // Starting target score
+        public int baseTargetScore = 200; // Starting target score
 
         [Header("Cooldown System")]
         public CooldownSystem cooldownSystem; // Reference to cooldown system
@@ -75,6 +77,7 @@ namespace DiceGame
         private ProgressionManager _progressionManager;
         private BattleUIPresenter _uiPresenter;
         private HandCompositionService _compositionService;
+        private MoneyManager _moneyManager;
 
         // Current hand state
         private readonly List<BaseDice> _dice = new();
@@ -138,6 +141,7 @@ namespace DiceGame
             _scoreCalculator = new ScoreCalculator();
             _uiPresenter = new BattleUIPresenter();
             _compositionService = new HandCompositionService();
+            _moneyManager = new MoneyManager(SavedMoney); // Restore money from static state
             
             // Initialize progression manager
             // Check if continuing from reward scene to restore level/target
@@ -157,6 +161,7 @@ namespace DiceGame
             UpdateLevelInfo();
             UpdateComboPreview();
             UpdateRollAndCastCount(); // Initialize roll and cast counts
+            UpdateMoneyDisplay(); // Initialize money display
             
             // Track initial player progression
             UnityGameAnalytics.TrackPlayerProgression(_progressionManager.TotalScore, 0, _progressionManager.CurrentLevel);
@@ -168,8 +173,10 @@ namespace DiceGame
                 continueButton.onClick.AddListener(OnContinue);
             }
             
-            // Add test relics (for demonstration - will be removed when proper relic acquisition system is added)
-            InitializeTestRelics();
+            // Initialize relic system: global pool and empty backpack
+            // Give player a random starting relic if this is a new game (not continuing from reward)
+            bool isNewGame = !ContinuingFromReward;
+            InitializeRelicSystem(isNewGame);
 
             // Subscribe to cooldown system events
             cooldownSystem.OnDicePoolRefresh += OnDicePoolRefresh;
@@ -287,28 +294,18 @@ namespace DiceGame
         }
 
         /// <summary>
-        /// Initialize test relics for demonstration (will load from ScriptableObjects after Unity setup)
+        /// Initialize relic system: set up global relic pool and empty player backpack
         /// </summary>
-        private void InitializeTestRelics()
+        /// <param name="giveStartingRelic">If true, give player a random starting relic</param>
+        private void InitializeRelicSystem(bool giveStartingRelic = false)
         {
-            // Try to load relic ScriptableObjects from Resources
-            // User should create these in Unity and place them in Assets/Resources/Relics/
-            var relicAssets = Resources.LoadAll<RelicBase>("Relics");
+            // Initialize global relic pool (all relics available this run)
+            _relicManager.InitializeGlobalRelicPool();
             
-            if (relicAssets != null && relicAssets.Length > 0)
+            // Give player a random starting relic if this is a new game
+            if (giveStartingRelic)
             {
-                Debug.Log($"[BattleController] Found {relicAssets.Length} relic(s) in Resources/Relics/");
-                foreach (var relic in relicAssets)
-                {
-                    if (_relicManager.AddRelic(relic))
-                    {
-                        Debug.Log($"[BattleController] Equipped relic: {relic.relicName} ({relic.rarity})");
-                    }
-                }
-            }
-            else
-            {
-                Debug.LogWarning("[BattleController] No relics found in Resources/Relics/. Create ScriptableObject relics in Unity to test the system.");
+                GiveRandomStartingRelic();
             }
             
             // Update relic display UI
@@ -316,6 +313,72 @@ namespace DiceGame
             {
                 relicDisplay.DisplayRelics(_relicManager);
             }
+        }
+
+        /// <summary>
+        /// Give player a random relic from the global pool as starting relic
+        /// </summary>
+        private void GiveRandomStartingRelic()
+        {
+            var globalPool = _relicManager.GlobalRelicPool;
+            if (globalPool == null || globalPool.Count == 0)
+            {
+                Debug.LogWarning("[BattleController] Cannot give starting relic - global pool is empty!");
+                return;
+            }
+
+            // Randomly select a relic from the global pool
+            int randomIndex = Random.Range(0, globalPool.Count);
+            var startingRelic = globalPool[randomIndex];
+            
+            if (startingRelic != null)
+            {
+                bool success = _relicManager.AddRelicToBackpack(startingRelic);
+                if (success)
+                {
+                    Debug.Log($"[BattleController] Gave player starting relic: {startingRelic.relicName} ({startingRelic.rarity})");
+                }
+                else
+                {
+                    Debug.LogWarning($"[BattleController] Failed to add starting relic: {startingRelic.relicName}");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Add a relic to the player's backpack (called by shop, rewards, etc.)
+        /// </summary>
+        /// <param name="relic">The relic to add</param>
+        /// <returns>True if added successfully</returns>
+        public bool AddRelicToPlayerBackpack(RelicBase relic)
+        {
+            bool success = _relicManager.AddRelicToBackpack(relic);
+            
+            if (success && relicDisplay != null)
+            {
+                // Refresh UI to show the new relic
+                relicDisplay.DisplayRelics(_relicManager);
+            }
+            
+            return success;
+        }
+
+        /// <summary>
+        /// Add a relic to the player's backpack by name (searches global pool)
+        /// </summary>
+        /// <param name="relicName">Name of the relic to add</param>
+        /// <returns>True if added successfully</returns>
+        public bool AddRelicToPlayerBackpackByName(string relicName)
+        {
+            bool success = _relicManager.AddRelicToBackpackByName(relicName);
+            
+            if (success && relicDisplay != null)
+            {
+                // Refresh UI to show the new relic
+                relicDisplay.DisplayRelics(_relicManager);
+            }
+            
+            return success;
         }
 
         /// <summary>
@@ -889,14 +952,23 @@ namespace DiceGame
                     scoreAnimator.ResetTotalScore();
                 }
                 
-                // Refresh dice pool and hand counter
-                cooldownSystem.RefreshDicePool();
-                
-                // Update displays
-                UpdateLevelInfo();
-                UpdateTargetScoreDisplay();
-                UpdateRollAndCastCount();
-                UpdateFeedback("Roll or Lock Dice");
+            // Reset relic system and give new random starting relic
+            _relicManager.ClearBackpack();
+            InitializeRelicSystem(giveStartingRelic: true);
+            
+            // Reset money (game over / restart)
+            _moneyManager.Reset();
+            SavedMoney = 0;
+            
+            // Refresh dice pool and hand counter
+            cooldownSystem.RefreshDicePool();
+            
+            // Update displays
+            UpdateLevelInfo();
+            UpdateTargetScoreDisplay();
+            UpdateRollAndCastCount();
+            UpdateMoneyDisplay();
+            UpdateFeedback("Roll or Lock Dice");
                 
                 // Start a new hand after refresh
                 StartNewHand();
@@ -962,6 +1034,53 @@ namespace DiceGame
                 int remainingCasts = Mathf.Max(0, remaining);
                 castCountText.text = remainingCasts.ToString();
             }
+        }
+
+        /// <summary>
+        /// Update money display
+        /// </summary>
+        private void UpdateMoneyDisplay()
+        {
+            if (moneyText != null && _moneyManager != null)
+            {
+                moneyText.text = _moneyManager.Money.ToString();
+            }
+        }
+
+        /// <summary>
+        /// Get current money amount (for shop, etc.)
+        /// </summary>
+        public int GetMoney()
+        {
+            return _moneyManager?.Money ?? 0;
+        }
+
+        /// <summary>
+        /// Add money (for shop, rewards, etc.)
+        /// </summary>
+        public void AddMoney(int amount)
+        {
+            if (_moneyManager != null)
+            {
+                _moneyManager.Add(amount);
+                SavedMoney = _moneyManager.Money; // Sync static state
+                UpdateMoneyDisplay();
+            }
+        }
+
+        /// <summary>
+        /// Spend money (for shop purchases, etc.)
+        /// </summary>
+        /// <returns>True if successful, false if insufficient funds</returns>
+        public bool SpendMoney(int amount)
+        {
+            if (_moneyManager != null && _moneyManager.Subtract(amount))
+            {
+                SavedMoney = _moneyManager.Money; // Sync static state
+                UpdateMoneyDisplay();
+                return true;
+            }
+            return false;
         }
 
 
@@ -1050,6 +1169,15 @@ namespace DiceGame
             ContinuingFromReward = false;
             PendingLevel = 1;
             PendingTargetScore = baseTargetScore;
+            SavedMoney = 0;
+            
+            // Reset relic system and give new random starting relic
+            _relicManager.ClearBackpack();
+            InitializeRelicSystem(giveStartingRelic: true);
+            
+            // Reset money (settings reset)
+            _moneyManager.Reset();
+            SavedMoney = 0;
             
             // Refresh dice pool and hand counter
             cooldownSystem.RefreshDicePool();
@@ -1064,6 +1192,7 @@ namespace DiceGame
             UpdateLevelInfo();
             UpdateTargetScoreDisplay();
             UpdateRollAndCastCount();
+            UpdateMoneyDisplay();
             UpdateFeedback("Roll or Lock Dice");
             
             // Start a new hand
@@ -1148,7 +1277,7 @@ namespace DiceGame
             {
                 scoreAnimator.ResetTotalScore();
             }
-
+            
             // Reset roll budget for new level
             _handManager.Reset();
             _handManager.SetMaxRolls(maxRollsPerHand);
@@ -1160,6 +1289,7 @@ namespace DiceGame
             UpdateLevelInfo();
             UpdateTargetScoreDisplay();
             UpdateRollAndCastCount();
+            UpdateMoneyDisplay();
             UpdateFeedback("Roll or Lock Dice");
 
             // Start first hand of new level
@@ -1207,6 +1337,14 @@ namespace DiceGame
             
             if (passed)
             {
+                // Reward money: 5 + remaining casts
+                var (current, remaining) = cooldownSystem.GetHandCounter();
+                int rewardMoney = 5 + remaining;
+                _moneyManager.Add(rewardMoney);
+                SavedMoney = _moneyManager.Money; // Save money before scene transition
+                UpdateMoneyDisplay();
+                Debug.Log($"[BattleController] Level passed! Money reward: +{rewardMoney} (5 + {remaining} remaining casts), Total: {SavedMoney}");
+
                 // Prepare next level state for when we return from RewardScene
                 int nextLevel = _progressionManager.CurrentLevel + 1;
                 int nextTarget = _progressionManager.CalculateTargetScore(nextLevel);

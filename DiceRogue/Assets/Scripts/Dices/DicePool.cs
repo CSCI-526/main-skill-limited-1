@@ -14,7 +14,9 @@ public static class DicePool
             new HeavyDice(), new LightDice(), new MirrorDice(),
             new CollectorDice(), new LuckySix(), new PlusOne(), new SevenSevenSeven(),
             new TwinBond(), new WeightedEdge(),
-            new D8(), new GoldenDice(), new ZombieDice()
+            // D8 temporarily banned due to UI bug
+            // new D8(), 
+            new GoldenDice(), new ZombieDice()
         };
     }
 
