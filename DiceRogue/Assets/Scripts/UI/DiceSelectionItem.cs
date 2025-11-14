@@ -3,6 +3,7 @@ using UnityEngine.UI;
 using UnityEngine.EventSystems;
 using System;
 using System.Collections;
+using TMPro;
 using DiceGame.Core;
 
 namespace DiceGame.UI
@@ -15,7 +16,7 @@ namespace DiceGame.UI
     {
         [Header("Selection UI")]
         public Image selectionIndicator; // Optional overlay to show selection state
-        public Image cooldownOverlay; // Optional overlay to show cooldown state
+        public Image cooldownOverlay; // Optional overlay to show cooldown state (created dynamically if null)
         public CanvasGroup canvasGroup; // For graying out when on cooldown
         
         [Header("Visual Feedback")]
@@ -47,6 +48,7 @@ namespace DiceGame.UI
         private Coroutine _scaleCoroutine;
         private Coroutine _alphaCoroutine;
         private Coroutine _colorCoroutine; // For hover color animations
+        private TMP_Text _cooldownText; // Text component for cooldown display
 
         private void Awake()
         {
@@ -104,6 +106,9 @@ namespace DiceGame.UI
                 _button.onClick.AddListener(HandleClick);
             }
             // If no Button, IPointerClickHandler will handle clicks
+
+            // Create cooldown overlay if it doesn't exist
+            CreateCooldownOverlayIfNeeded();
 
             // Setup interactivity based on cooldown
             UpdateInteractableState();
@@ -201,10 +206,97 @@ namespace DiceGame.UI
                 canvasGroup.interactable = isInteractable;
             }
 
-            // Show/hide cooldown overlay
+            // Show/hide cooldown overlay and update text
+            UpdateCooldownDisplay(!isInteractable);
+        }
+
+        /// <summary>
+        /// Create cooldown overlay dynamically if it doesn't exist
+        /// </summary>
+        private void CreateCooldownOverlayIfNeeded()
+        {
+            // If overlay is already assigned, use it
             if (cooldownOverlay != null)
             {
-                cooldownOverlay.enabled = !isInteractable;
+                // Try to find text component in existing overlay
+                _cooldownText = cooldownOverlay.GetComponentInChildren<TMP_Text>();
+                return;
+            }
+
+            // Check if overlay already exists as child
+            Transform existingOverlay = transform.Find("CooldownOverlay");
+            if (existingOverlay != null)
+            {
+                cooldownOverlay = existingOverlay.GetComponent<Image>();
+                _cooldownText = existingOverlay.GetComponentInChildren<TMP_Text>();
+                return;
+            }
+
+            // Create new overlay GameObject
+            GameObject overlayGO = new GameObject("CooldownOverlay");
+            overlayGO.transform.SetParent(transform, false);
+            overlayGO.transform.SetAsLastSibling(); // Ensure it appears on top
+
+            // Add RectTransform and configure it to fill the entire dice area
+            RectTransform overlayRect = overlayGO.AddComponent<RectTransform>();
+            overlayRect.anchorMin = Vector2.zero;
+            overlayRect.anchorMax = Vector2.one;
+            overlayRect.sizeDelta = Vector2.zero;
+            overlayRect.anchoredPosition = Vector2.zero;
+
+            // Add Image component for grey overlay
+            cooldownOverlay = overlayGO.AddComponent<Image>();
+            cooldownOverlay.color = new Color(0.2f, 0.2f, 0.2f, 0.9f); // Dark grey, more opaque for better visibility
+            cooldownOverlay.raycastTarget = false; // Allow clicks to pass through
+
+            // Create text GameObject as child of overlay
+            GameObject textGO = new GameObject("CooldownText");
+            textGO.transform.SetParent(overlayGO.transform, false);
+
+            // Add RectTransform for text
+            RectTransform textRect = textGO.AddComponent<RectTransform>();
+            textRect.anchorMin = Vector2.zero;
+            textRect.anchorMax = Vector2.one;
+            textRect.sizeDelta = Vector2.zero;
+            textRect.anchoredPosition = Vector2.zero;
+
+            // Add TMP_Text component
+            _cooldownText = textGO.AddComponent<TextMeshProUGUI>();
+            _cooldownText.text = "IN CD";
+            _cooldownText.fontSize = 20;
+            _cooldownText.fontStyle = FontStyles.Bold;
+            _cooldownText.color = Color.white;
+            _cooldownText.alignment = TextAlignmentOptions.Center;
+            _cooldownText.raycastTarget = false;
+
+            // Initially hide the overlay
+            overlayGO.SetActive(false);
+        }
+
+        /// <summary>
+        /// Update cooldown display visibility and text
+        /// </summary>
+        private void UpdateCooldownDisplay(bool showOverlay)
+        {
+            if (cooldownOverlay == null) return;
+
+            // Show/hide overlay
+            cooldownOverlay.gameObject.SetActive(showOverlay);
+
+            if (showOverlay && _dice != null)
+            {
+                // Update text to show cooldown count if available
+                if (_cooldownText != null)
+                {
+                    if (_dice.cooldownRemain > 0)
+                    {
+                        _cooldownText.text = $"CD: {_dice.cooldownRemain}";
+                    }
+                    else
+                    {
+                        _cooldownText.text = "IN CD";
+                    }
+                }
             }
         }
 
