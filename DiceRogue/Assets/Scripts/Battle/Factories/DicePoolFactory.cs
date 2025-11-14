@@ -65,8 +65,9 @@ namespace DiceGame
                 new DiceTypeInfo { Type = DiceType.WeightedEdge, Tier = DiceTier.Rare },
                 
                 // Legendary dice
-                new DiceTypeInfo { Type = DiceType.D8, Tier = DiceTier.Legendary },
-                new DiceTypeInfo { Type = DiceType.GoldenDice, Tier = DiceTier.Legendary },
+                // D8 and golden dice temporarily banned due to UI bug
+                // new DiceTypeInfo { Type = DiceType.D8, Tier = DiceTier.Legendary },
+                // new DiceTypeInfo { Type = DiceType.GoldenDice, Tier = DiceTier.Legendary },
                 new DiceTypeInfo { Type = DiceType.ZombieDice, Tier = DiceTier.Legendary },
             };
         }
@@ -97,7 +98,8 @@ namespace DiceGame
                 DiceType.WeightedEdge => new WeightedEdge(),
                 
                 // Legendary dice
-                DiceType.D8 => new D8(),
+                // D8 temporarily banned due to UI bug
+                // DiceType.D8 => new D8(),
                 DiceType.GoldenDice => new GoldenDice(),
                 DiceType.ZombieDice => new ZombieDice(),
                 
