@@ -44,7 +44,7 @@ namespace DiceGame.Tutorial
 
         [Header("Action Prompt Layout (left side)")]
         public Vector2 actionPromptSize = new Vector2(500f, 340f);
-        public Vector2 actionPromptOffset = new Vector2(40f, -40f);
+        public Vector2 actionPromptOffset = new Vector2(-80.0f, -40.0f);
         public Vector2 actionPromptAnchor = new Vector2(0.05f, 0.65f);
         public Vector2 actionPromptPivot = new Vector2(0f, 0.5f);
 
@@ -96,6 +96,10 @@ namespace DiceGame.Tutorial
             ConfigurePromptLayoutIfNeeded();
             HookGlobalListeners();
             CollectAllButtons();
+            
+            // Debug: Log the actual value of actionPromptOffset
+            Debug.Log($"[TutorialController] Start() - actionPromptOffset value: {actionPromptOffset}");
+            
             StartTutorialStep(0);
         }
 
@@ -296,11 +300,12 @@ namespace DiceGame.Tutorial
             if (promptRect == null) promptRect = tutorialPromptPanel.GetComponent<RectTransform>();
             if (promptRect != null)
             {
+                // Only set default layout - ApplyLayoutForStep() will override with step-specific values
                 promptRect.anchorMin = promptAnchor;
                 promptRect.anchorMax = promptAnchor;
                 promptRect.pivot = promptPivot;
                 promptRect.sizeDelta = promptSize;
-                promptRect.anchoredPosition = promptOffset;
+                // Don't set anchoredPosition here - let ApplyLayoutForStep() handle it per step
             }
 
             if (tutorialText != null)
@@ -551,7 +556,8 @@ namespace DiceGame.Tutorial
 
             if (stepIndex >= tutorialSteps.Count)
             {
-                CompleteTutorial();
+                // This should not happen as last step handles completion via Next button
+                CompleteTutorialAndGoToReward();
                 return;
             }
 
@@ -630,27 +636,6 @@ namespace DiceGame.Tutorial
             else
             {
                 currentRequiredAction = TutorialAction.None;
-                
-                // Special handling for cooldown step - show backpack
-                if (step.title == "Cooldown System")
-                {
-                    ShowBackpackForCooldownExplanation();
-                }
-                
-                if (!step.useNextButton)
-                {
-                    // Auto-advance if there is no action and no button (not used in current flow)
-                    StartCoroutine(AutoAdvanceAfterDelay(1.0f));
-                }
-            }
-        }
-
-        IEnumerator AutoAdvanceAfterDelay(float delay)
-        {
-            yield return new WaitForSeconds(delay);
-            if (currentRequiredAction == TutorialAction.None && isTutorialActive)
-            {
-                StartTutorialStep(currentStepIndex + 1);
             }
         }
 
@@ -729,6 +714,7 @@ namespace DiceGame.Tutorial
                     promptRect.pivot = actionPromptPivot;
                     promptRect.sizeDelta = actionPromptSize;
                     promptRect.anchoredPosition = actionPromptOffset;
+                    Debug.Log($"[TutorialController] Applied ActionLeft layout - Offset: {actionPromptOffset}, Actual Position: {promptRect.anchoredPosition}");
                     if (tutorialText != null)
                     {
                         tutorialText.alignment = TextAlignmentOptions.TopLeft;
@@ -1107,33 +1093,22 @@ namespace DiceGame.Tutorial
             originalButtonStates.Clear();
         }
 
-        void ShowBackpackForCooldownExplanation()
-        {
-            // Show backpack in view-only mode to display cooldown dice
-            if (backpackManager != null)
-            {
-                backpackManager.ShowBackpack(BackpackMode.ViewOnly);
-            }
-        }
-
         void OnTutorialContinue()
         {
-            HidePrompt();
-            ClearHighlights();
-            RestoreAllButtons();
-            
             // Check if this is the last step (Tutorial Complete)
             if (currentStepIndex >= 0 && currentStepIndex < tutorialSteps.Count)
             {
                 var currentStep = tutorialSteps[currentStepIndex];
                 if (currentStep.title == "Tutorial Complete!")
                 {
-                    // Last step: transition to RewardScene
                     CompleteTutorialAndGoToReward();
                     return;
                 }
             }
             
+            HidePrompt();
+            ClearHighlights();
+            RestoreAllButtons();
             StartTutorialStep(currentStepIndex + 1);
         }
 
@@ -1541,47 +1516,20 @@ namespace DiceGame.Tutorial
             StartTutorialStep(currentStepIndex + 1);
         }
 
-        void CompleteTutorial()
+        /// <summary>
+        /// Clean up all tutorial state and reset flags
+        /// </summary>
+        void CleanupTutorialState()
         {
-            if (!isTutorialActive) return;
-
-            isTutorialActive = false;
-            
-            // Clean up tutorial state
             HidePrompt();
             ClearHighlights();
             RestoreAllButtons();
             CleanupDiceViewListeners();
             UnhookDiceLockEvent();
             
-            // Reset tutorial-specific flags
             currentRequiredAction = TutorialAction.None;
             lockStepCompleted = false;
             awaitingSecondRoll = false;
-            
-            // Save tutorial completion
-            PlayerPrefs.SetInt("HasCompletedTutorial", 1);
-            PlayerPrefs.Save();
-
-            // Transition from tutorial (Level 0) to normal game (Level 1) without scene change
-            if (battleController != null)
-            {
-                battleController.CompleteTutorialAndStartLevel1();
-                Debug.Log("[TutorialController] Tutorial completed - transitioning to Level 1");
-                return;
-            }
-            
-            // Fallback: if battleController is null, reload scene
-            Debug.LogWarning("[TutorialController] BattleController not found - reloading scene");
-            BattleController.IsTutorialMode = false;
-            if (RunLoader.Instance != null)
-            {
-                RunLoader.Instance.StartRun();
-            }
-            else
-            {
-                SceneManager.LoadScene("BattleScene");
-            }
         }
 
         /// <summary>
@@ -1592,52 +1540,27 @@ namespace DiceGame.Tutorial
             if (!isTutorialActive) return;
 
             isTutorialActive = false;
-            
-            // Clean up tutorial state
-            HidePrompt();
-            ClearHighlights();
-            RestoreAllButtons();
-            CleanupDiceViewListeners();
-            UnhookDiceLockEvent();
-            
-            // Reset tutorial-specific flags
-            currentRequiredAction = TutorialAction.None;
-            lockStepCompleted = false;
-            awaitingSecondRoll = false;
+            CleanupTutorialState();
             
             // Save tutorial completion
             PlayerPrefs.SetInt("HasCompletedTutorial", 1);
             PlayerPrefs.Save();
 
             // Prepare Level 1 state for when returning from RewardScene
-            if (battleController != null)
+            int targetScore = battleController != null ? battleController.baseTargetScore : 200;
+            
+            BattleController.PendingLevel = 1;
+            BattleController.PendingTargetScore = targetScore;
+            BattleController.ContinuingFromReward = true;
+            BattleController.IsTutorialMode = false;
+            
+            if (battleController == null)
             {
-                // Set up state for Level 1 after reward
-                BattleController.PendingLevel = 1;
-                BattleController.PendingTargetScore = battleController.baseTargetScore;
-                BattleController.ContinuingFromReward = true;
-                BattleController.IsTutorialMode = false; // No longer in tutorial mode
-                
-                Debug.Log("[TutorialController] Tutorial completed - transitioning to RewardScene, then Level 1");
-                
-                // Transition to RewardScene
-                SceneManager.LoadScene("RewardScene");
+                Debug.LogWarning("[TutorialController] BattleController not found - using fallback values");
             }
-            else
-            {
-                // Fallback: if battleController is null, reload scene
-                Debug.LogWarning("[TutorialController] BattleController not found - reloading scene");
-                BattleController.IsTutorialMode = false;
-                BattleController.PendingLevel = 1;
-                BattleController.PendingTargetScore = 200;
-                BattleController.ContinuingFromReward = true;
-                SceneManager.LoadScene("RewardScene");
-            }
-        }
-
-        IEnumerator ReturnToMainMenu()
-        {
-            yield return DiceRogue.Boot.RunLoader.Instance.LoadSceneWithWipe("MainScene");
+            
+            Debug.Log("[TutorialController] Tutorial completed - transitioning to RewardScene, then Level 1");
+            SceneManager.LoadScene("RewardScene");
         }
 
         #endregion
