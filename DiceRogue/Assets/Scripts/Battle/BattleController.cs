@@ -14,53 +14,33 @@ namespace DiceGame
 {
     public class BattleController : MonoBehaviour
     {
-        // Static state for scene transitions
-        public static bool ContinuingFromReward = false;
-        public static int PendingLevel = 1;
-        public static int PendingTargetScore = 200;
-        public static int SavedMoney = 0; // Persist money across scene transitions
+        // Game state manager (replaces static variables)
+        private GameStateManager _stateManager;
         
-        // Static state for tutorial mode
-        public static bool IsTutorialMode = false; // Set by RunLoader when starting tutorial
-        
-        // Static state for game over scene
-        public static int GameOverFinalScore = 0;
-        public static int GameOverTargetScore = 0;
         [Header("UI - Main Game")]
         public Transform diceRowParent;      // Container for DiceView
         public GameObject diceViewPrefab;  // Prefab (with DiceView component)
         public Button rollButton;
         public Button submitComboButton;
         public Button continueButton;
-        public Button settingsButton;        // Settings button
         
         [Header("UI - Settings Panel")]
-        public GameObject settingsPanel;     // Settings panel (window + overlay)
-        public GameObject settingsOverlay;   // Shaded background overlay
-        public GameObject settingsWindow;   // Settings window (middle of screen)
-        public Button settingsResetButton;   // Reset button in settings
-        public Button settingsQuitButton;    // Quit button in settings
-        public Button settingsCloseButton;   // Close button (optional - can click overlay to close)
+        public SettingsPanel settingsPanel;  // Settings panel component
+        
+        [Header("Scene Transition")]
+        public SceneTransitionManager sceneTransitionManager; // Scene transition manager
         
         [Header("UI - Combo Preference Panel")]
-        public GameObject comboPreferencePanel;  // Combo preference panel (window + overlay)
-        public GameObject comboPreferenceOverlay; // Shaded background overlay
-        public GameObject comboPreferenceWindow; // Combo preference window (middle of screen)
-        public Button comboPreferenceButton;     // Button to open combo preference
-        public Button comboPreferenceCloseButton; // Close button (optional)
+        public ComboPreferencePanel comboPreferencePanel;  // Combo preference panel component
         
-        [Header("UI - Right Panel")]
-        public TMP_Text levelInfoText;      // Level display
-        public TMP_Text targetScoreText;    // Target score display
-        public TMP_Text comboNameText;      // Combo name preview
-        public TMP_Text comboBaseText;       // Combo base score preview
-        public TMP_Text comboMultiplierText;// Combo multiplier preview
-        public TMP_Text rollCountText;      // Roll count display (remaining rolls)
-        public TMP_Text castCountText;      // Cast count display (remaining casts)
-        public TMP_Text moneyText;          // Money display
+        [Header("Hand Flow")]
+        public HandFlowController handFlowController;  // Hand flow controller component
+        
+        [Header("UI - Battle UI Component")]
+        public BattleUI battleUI;           // UI manager component
         
         [Header("UI - Score Display")]
-        public ScoreAnimator scoreAnimator; // Animated score display system
+        public ScoreAnimator scoreAnimator; // Animated score display system (still needed for animation)
         
         [Header("Backpack")]
         public BackpackManager backpackManager;
@@ -87,16 +67,44 @@ namespace DiceGame
         private HandCompositionService _compositionService;
         private MoneyManager _moneyManager;
 
-        // Current hand state
-        private readonly List<BaseDice> _dice = new();
-        private readonly List<DiceView> _views = new();
-        private bool _isSubmitting = false; // Guard to prevent multiple submissions
+        // Current hand state (shared with HandFlowController)
+        public readonly List<BaseDice> _dice = new();
+        public readonly List<DiceView> _views = new();
 
         void Start()
         {
-            // Initialize analytics first
+            InitializeStateManager();
             InitializeAnalytics();
             
+            if (!InitializeRequiredComponents())
+            {
+                return; // Critical components missing, abort initialization
+            }
+            
+            InitializeCoreComponents();
+            InitializeUI();
+            InitializeManagers();
+            InitializePanels();
+            InitializeEvents();
+            StartGame();
+            
+            Debug.Log("[BattleController] Battle scene initialized with decoupled components.");
+        }
+        
+        /// <summary>
+        /// Initialize state manager
+        /// </summary>
+        private void InitializeStateManager()
+        {
+            _stateManager = GameStateManager.Instance;
+        }
+        
+        /// <summary>
+        /// Initialize required Unity components (cooldown system, score animator)
+        /// Returns false if critical components are missing
+        /// </summary>
+        private bool InitializeRequiredComponents()
+        {
             // Initialize cooldown system if not assigned
             if (cooldownSystem == null)
             {
@@ -104,7 +112,7 @@ namespace DiceGame
                 if (cooldownSystem == null)
                 {
                     Debug.LogError("[BattleController] CooldownSystem not found! Please assign it in the inspector.");
-                    return;
+                    return false;
                 }
             }
 
@@ -128,12 +136,63 @@ namespace DiceGame
                 scoreAnimator.relicDisplay = relicDisplay;
             }
             
+            return true;
+        }
+        
+        /// <summary>
+        /// Initialize core game components (managers, calculators, services)
+        /// </summary>
+        private void InitializeCoreComponents()
+        {
+            _handManager = new HandManager();
+            _handManager.SetMaxRolls(maxRollsPerHand);
+            
+            _effectHandler = new DiceEffectHandler();
+            _viewFactory = new DiceViewFactory(diceViewPrefab, diceRowParent);
+            _relicManager = new RelicManager();
+            _scoreCalculator = new ScoreCalculator();
+            _uiPresenter = new BattleUIPresenter();
+            _compositionService = new HandCompositionService();
+            _moneyManager = new MoneyManager(_stateManager.SaveData.money);
+        }
+        
+        /// <summary>
+        /// Initialize UI components and link them together
+        /// </summary>
+        private void InitializeUI()
+        {
             // Link money text to score animator for money animation
-            if (scoreAnimator != null && moneyText != null)
+            if (scoreAnimator != null && battleUI != null && battleUI.moneyText != null)
             {
-                scoreAnimator.moneyText = moneyText;
+                scoreAnimator.moneyText = battleUI.moneyText;
             }
-
+            
+            // Initialize BattleUI (after _uiPresenter is created)
+            if (battleUI != null)
+            {
+                battleUI.Initialize(_uiPresenter);
+            }
+            else
+            {
+                Debug.LogWarning("[BattleController] BattleUI component not assigned!");
+            }
+            
+            // Initialize and hide continue button
+            if (continueButton != null)
+            {
+                continueButton.gameObject.SetActive(false);
+                continueButton.onClick.AddListener(OnContinue);
+            }
+            
+            // Set up main game UI buttons (delegated to HandFlowController)
+            // Note: Buttons will be connected after HandFlowController is initialized
+        }
+        
+        /// <summary>
+        /// Initialize game managers (backpack, progression, relic system)
+        /// </summary>
+        private void InitializeManagers()
+        {
             // Initialize backpack manager
             if (backpackManager != null)
             {
@@ -153,31 +212,17 @@ namespace DiceGame
             {
                 Debug.LogError("[BattleController] BackpackManager not assigned!");
             }
-
-            // Initialize core components first (needed for other initialization)
-            _handManager = new HandManager();
-            _handManager.SetMaxRolls(maxRollsPerHand);
-            
-            _effectHandler = new DiceEffectHandler();
-            _viewFactory = new DiceViewFactory(diceViewPrefab, diceRowParent);
-            _relicManager = new RelicManager();
-            _scoreCalculator = new ScoreCalculator();
-            _uiPresenter = new BattleUIPresenter();
-            _compositionService = new HandCompositionService();
-            _moneyManager = new MoneyManager(SavedMoney); // Restore money from static state
             
             // Initialize progression manager
-            // Check if continuing from reward scene to restore level/target
-            if (ContinuingFromReward)
+            if (_stateManager.State.ContinuingFromReward)
             {
                 _progressionManager = new ProgressionManager(baseTargetScore);
-                _progressionManager.RestoreLevelState(PendingLevel, PendingTargetScore);
-                ContinuingFromReward = false; // Reset flag
-                Debug.Log($"[BattleController] Continuing from Reward Scene - Level {PendingLevel}, Target: {PendingTargetScore}");
+                _progressionManager.RestoreLevelState(_stateManager.State.PendingLevel, _stateManager.State.PendingTargetScore);
+                _stateManager.State.ContinuingFromReward = false;
+                Debug.Log($"[BattleController] Continuing from Reward Scene - Level {_stateManager.State.PendingLevel}, Target: {_stateManager.State.PendingTargetScore}");
             }
-            else if (IsTutorialMode)
+            else if (_stateManager.State.IsTutorialMode)
             {
-                // Tutorial mode: Level 0
                 _progressionManager = new ProgressionManager(baseTargetScore);
                 _progressionManager.InitializeTutorialMode();
                 Debug.Log("[BattleController] Initialized in Tutorial Mode (Level 0)");
@@ -187,158 +232,122 @@ namespace DiceGame
                 _progressionManager = new ProgressionManager(baseTargetScore);
             }
             
-            UpdateTargetScoreDisplay();
-            UpdateLevelInfo();
-            UpdateComboPreview();
-            UpdateRollAndCastCount(); // Initialize roll and cast counts
-            UpdateMoneyDisplay(); // Initialize money display
-            
-            // Track initial player progression
-            UnityGameAnalytics.TrackPlayerProgression(_progressionManager.TotalScore, 0, _progressionManager.CurrentLevel);
-
-            // Initialize and hide continue button
-            if (continueButton != null)
-            {
-                continueButton.gameObject.SetActive(false);
-                continueButton.onClick.AddListener(OnContinue);
-            }
-            
-            // Initialize relic system: global pool and empty backpack
-            // Give player a random starting relic if this is a new game (not continuing from reward)
-            bool isNewGame = !ContinuingFromReward;
-            InitializeRelicSystem(isNewGame);
-
-            // Subscribe to cooldown system events
-            cooldownSystem.OnDicePoolRefresh += OnDicePoolRefresh;
-            cooldownSystem.OnAvailableDiceChanged += OnAvailableDiceChanged;
-
-            // Set up UI
-            if (rollButton != null)
-            {
-                rollButton.onClick.AddListener(OnRollOnce);
-            }
-            if (submitComboButton != null)
-            {
-                submitComboButton.onClick.AddListener(OnSubmitCombo);
-            }
-            
-            // Set up settings panel
-            if (settingsButton != null)
-            {
-                settingsButton.onClick.AddListener(OnSettingsButtonClicked);
-            }
-            
-            // Initialize settings panel (hidden by default)
-            if (settingsPanel != null)
-            {
-                settingsPanel.SetActive(false);
-            }
-            
-            // Set up settings panel buttons
-            if (settingsResetButton != null)
-            {
-                settingsResetButton.onClick.AddListener(OnSettingsResetClicked);
-            }
-            
-            if (settingsQuitButton != null)
-            {
-                settingsQuitButton.onClick.AddListener(OnSettingsQuitClicked);
-            }
-            
-            // Setup overlay (just visual, not clickable)
-            if (settingsOverlay != null)
-            {
-                // Ensure overlay has Image component
-                Image overlayImage = settingsOverlay.GetComponent<Image>();
-                if (overlayImage == null)
-                {
-                    overlayImage = settingsOverlay.AddComponent<Image>();
-                }
-                // Disable raycast target so overlay is not clickable
-                overlayImage.raycastTarget = false;
-                
-                // Remove Button component if it exists (we don't want overlay to be clickable)
-                Button overlayButton = settingsOverlay.GetComponent<Button>();
-                if (overlayButton != null)
-                {
-                    DestroyImmediate(overlayButton);
-                }
-            }
-            
-            // Ensure settings window blocks raycasts
-            if (settingsWindow != null)
-            {
-                Image windowImage = settingsWindow.GetComponent<Image>();
-                if (windowImage == null)
-                {
-                    windowImage = settingsWindow.AddComponent<Image>();
-                }
-                windowImage.raycastTarget = true; // This blocks raycasts
-            }
-            
-            // Setup close button if provided
-            if (settingsCloseButton != null)
-            {
-                settingsCloseButton.onClick.AddListener(CloseSettingsPanel);
-            }
-            
-            // Set up combo preference panel
-            if (comboPreferenceButton != null)
-            {
-                comboPreferenceButton.onClick.AddListener(OnComboPreferenceButtonClicked);
-            }
-            
-            // Initialize combo preference panel (hidden by default)
-            if (comboPreferencePanel != null)
-            {
-                comboPreferencePanel.SetActive(false);
-            }
-            
-            // Setup overlay (just visual, not clickable)
-            if (comboPreferenceOverlay != null)
-            {
-                Image overlayImage = comboPreferenceOverlay.GetComponent<Image>();
-                if (overlayImage == null)
-                {
-                    overlayImage = comboPreferenceOverlay.AddComponent<Image>();
-                }
-                overlayImage.raycastTarget = false;
-                
-                Button overlayButton = comboPreferenceOverlay.GetComponent<Button>();
-                if (overlayButton != null)
-                {
-                    DestroyImmediate(overlayButton);
-                }
-            }
-            
-            // Ensure window blocks raycasts
-            if (comboPreferenceWindow != null)
-            {
-                Image windowImage = comboPreferenceWindow.GetComponent<Image>();
-                if (windowImage == null)
-                {
-                    windowImage = comboPreferenceWindow.AddComponent<Image>();
-                }
-                windowImage.raycastTarget = true;
-            }
-            
-            // Setup close button if provided
-            if (comboPreferenceCloseButton != null)
-            {
-                comboPreferenceCloseButton.onClick.AddListener(CloseComboPreferencePanel);
-            }
-            
-            // Subscribe to dice lock changes for combo preview updates
-            DiceView.OnDiceLockChanged += UpdateComboPreview;
+            // Initialize relic system: load from save data
+            InitializeRelicSystem();
             
             // Check if there are pending reward dice from reward scene
             IntegrateRewardDice();
+        }
+        
+        /// <summary>
+        /// Initialize UI panels (settings, combo preference)
+        /// </summary>
+        private void InitializePanels()
+        {
+            // Initialize settings panel
+            if (settingsPanel != null)
+            {
+                settingsPanel.Initialize();
+                settingsPanel.OnResetRequested += OnSettingsResetClicked;
+                settingsPanel.OnQuitRequested += OnSettingsQuitClicked;
+            }
+            else
+            {
+                Debug.LogWarning("[BattleController] SettingsPanel component not assigned!");
+            }
+            
+            // Initialize scene transition manager (create if not assigned)
+            if (sceneTransitionManager == null)
+            {
+                sceneTransitionManager = gameObject.AddComponent<SceneTransitionManager>();
+                Debug.Log("[BattleController] Created SceneTransitionManager component");
+            }
+            
+            // Initialize combo preference panel
+            if (comboPreferencePanel != null)
+            {
+                comboPreferencePanel.Initialize();
+            }
+            else
+            {
+                Debug.LogWarning("[BattleController] ComboPreferencePanel component not assigned!");
+            }
+            
+            // Initialize hand flow controller (create if not assigned)
+            if (handFlowController == null)
+            {
+                handFlowController = gameObject.AddComponent<HandFlowController>();
+                Debug.Log("[BattleController] Created HandFlowController component");
+            }
+        }
+        
+        /// <summary>
+        /// Subscribe to events from various systems
+        /// </summary>
+        private void InitializeEvents()
+        {
+            // Subscribe to cooldown system events
+            cooldownSystem.OnDicePoolRefresh += OnDicePoolRefresh;
+            cooldownSystem.OnAvailableDiceChanged += OnAvailableDiceChanged;
+            
+            // Subscribe to dice lock changes for combo preview updates
+            DiceView.OnDiceLockChanged += UpdateComboPreview;
+        }
+        
+        /// <summary>
+        /// Start the game (refresh UI, track analytics, start first hand, activate tutorial if needed)
+        /// </summary>
+        private void StartGame()
+        {
+            RefreshAllUI();
+            
+            // Track initial player progression
+            UnityGameAnalytics.TrackPlayerProgression(_progressionManager.TotalScore, 0, _progressionManager.CurrentLevel);
+            
+            // Initialize hand flow controller with dependencies
+            handFlowController.Initialize(
+                _handManager,
+                _effectHandler,
+                _viewFactory,
+                _relicManager,
+                _scoreCalculator,
+                _progressionManager,
+                _compositionService,
+                _moneyManager,
+                _stateManager,
+                cooldownSystem,
+                backpackManager,
+                scoreAnimator,
+                battleUI,
+                sceneTransitionManager,
+                submitComboButton,
+                diceCount,
+                maxRollsPerHand,
+                _dice,
+                _views
+            );
+            
+            // Set up callbacks for UI updates
+            handFlowController.OnComboPreviewUpdate += UpdateComboPreview;
+            handFlowController.OnRollAndCastCountUpdate += UpdateRollAndCastCount;
+            handFlowController.OnFeedbackUpdate += UpdateFeedback;
+            handFlowController.OnMoneyDisplayUpdate += UpdateMoneyDisplay;
+            
+            // Set up main game UI buttons (after HandFlowController is initialized)
+            if (rollButton != null)
+            {
+                rollButton.onClick.AddListener(() => handFlowController.OnRollOnce());
+            }
+            if (submitComboButton != null)
+            {
+                submitComboButton.onClick.AddListener(() => handFlowController.OnSubmitCombo());
+            }
             
             // Start first hand with a delay to ensure all systems are ready
             StartCoroutine(DelayedStartFirstHand());
             
             // Activate TutorialController if in tutorial mode
-            if (IsTutorialMode)
+            if (_stateManager.State.IsTutorialMode)
             {
                 var tutorialController = FindObjectOfType<DiceGame.Tutorial.TutorialController>(true);
                 if (tutorialController != null)
@@ -351,14 +360,12 @@ namespace DiceGame
                     Debug.LogWarning("[BattleController] TutorialController not found - tutorial may not work!");
                 }
             }
-            
-            Debug.Log("[BattleController] Battle scene initialized with decoupled components.");
         }
 
         private System.Collections.IEnumerator DelayedStartFirstHand()
         {
             yield return null; // Wait one frame
-            StartNewHand();
+            handFlowController?.StartNewHand();
         }
         
         /// <summary>
@@ -382,16 +389,21 @@ namespace DiceGame
         }
 
         /// <summary>
-        /// Initialize relic system: set up global relic pool and empty player backpack
+        /// Initialize relic system: load from save data
         /// </summary>
-        /// <param name="giveStartingRelic">If true, give player a random starting relic</param>
-        private void InitializeRelicSystem(bool giveStartingRelic = false)
+        private void InitializeRelicSystem()
         {
             // Initialize global relic pool (all relics available this run)
             _relicManager.InitializeGlobalRelicPool();
             
-            // Give player a random starting relic if this is a new game
-            if (giveStartingRelic)
+            // Load relics from save data
+            foreach (var relicName in _stateManager.SaveData.relicNames)
+            {
+                _relicManager.AddRelicToBackpackByName(relicName);
+            }
+            
+            // Give player a random starting relic if this is a new game (no relics and not continuing from reward)
+            if (_relicManager.PlayerBackpack.Count == 0 && !_stateManager.State.ContinuingFromReward)
             {
                 GiveRandomStartingRelic();
             }
@@ -442,10 +454,20 @@ namespace DiceGame
         {
             bool success = _relicManager.AddRelicToBackpack(relic);
             
-            if (success && relicDisplay != null)
+            if (success)
             {
-                // Refresh UI to show the new relic
-                relicDisplay.DisplayRelics(_relicManager);
+                // Save to persistence
+                if (!_stateManager.SaveData.relicNames.Contains(relic.relicName))
+                {
+                    _stateManager.SaveData.relicNames.Add(relic.relicName);
+                    _stateManager.Save();
+                }
+                
+                if (relicDisplay != null)
+                {
+                    // Refresh UI to show the new relic
+                    relicDisplay.DisplayRelics(_relicManager);
+                }
             }
             
             return success;
@@ -460,10 +482,20 @@ namespace DiceGame
         {
             bool success = _relicManager.AddRelicToBackpackByName(relicName);
             
-            if (success && relicDisplay != null)
+            if (success)
             {
-                // Refresh UI to show the new relic
-                relicDisplay.DisplayRelics(_relicManager);
+                // Save to persistence
+                if (!_stateManager.SaveData.relicNames.Contains(relicName))
+                {
+                    _stateManager.SaveData.relicNames.Add(relicName);
+                    _stateManager.Save();
+                }
+                
+                if (relicDisplay != null)
+                {
+                    // Refresh UI to show the new relic
+                    relicDisplay.DisplayRelics(_relicManager);
+                }
             }
             
             return success;
@@ -475,20 +507,20 @@ namespace DiceGame
         private void IntegrateRewardDice()
         {
             // Check if there are pending reward dice
-            if (RewardSceneManager.PendingDiceTypeIds.Count == 0)
+            if (_stateManager.State.PendingDiceTypeIds.Count == 0)
             {
                 Debug.Log("[BattleController] No pending reward dice to integrate");
                 return;
             }
 
-            Debug.Log($"[BattleController] Found {RewardSceneManager.PendingDiceTypeIds.Count} reward dice to integrate");
+            Debug.Log($"[BattleController] Found {_stateManager.State.PendingDiceTypeIds.Count} reward dice to integrate");
 
             // Get current dice pool
             var currentPool = cooldownSystem.GetAllDice();
             var newPool = new List<BaseDice>(currentPool);
 
             // Create and add reward dice
-            foreach (var typeId in RewardSceneManager.PendingDiceTypeIds)
+            foreach (var typeId in _stateManager.State.PendingDiceTypeIds)
             {
                 var rewardDice = CreateDiceFromTypeId(typeId);
                 if (rewardDice != null)
@@ -499,7 +531,15 @@ namespace DiceGame
             }
 
             // Clear pending list
-            RewardSceneManager.PendingDiceTypeIds.Clear();
+            _stateManager.State.PendingDiceTypeIds.Clear();
+
+            // Save dice to persistence
+            _stateManager.SaveData.diceTypeIds.Clear();
+            _stateManager.SaveData.diceTypeIds.AddRange(
+                newPool.Where(d => !(d is NormalDice))
+                       .Select(d => d.GetType().Name)
+            );
+            _stateManager.Save();
 
             // Update cooldown system with new pool
             cooldownSystem.SetPlayerBackpackDice(newPool);
@@ -543,468 +583,20 @@ namespace DiceGame
         }
 
     /// <summary>
-    /// Start a new hand by selecting available dice from the pool
+    /// Start a new hand (delegated to HandFlowController)
     /// </summary>
-    private void StartNewHand()
+    public void StartNewHand()
     {
-        // Check if hands remain (safety check before pool refresh)
-        var (handCount, handRemaining) = cooldownSystem.GetHandCounter();
-        if (handRemaining <= 0 && handCount > 0) // Don't block the very first hand
-        {
-            Debug.LogWarning("[BattleController] Cannot start new hand - no hands remaining. Battle complete!");
-            UpdateFeedback("Roll or Lock Dice");
-            UpdateRollAndCastCount();
-            return;
-        }
-
-        // Advance cooldowns before starting new hand (except for the very first hand)
-        if (handCount > 0) // Only advance cooldowns if this is not the first hand
-        {
-            cooldownSystem.AdvanceCooldowns();
-        }
-        
-        // Clear previous dice and views using factory
-        _dice.Clear();
-        _viewFactory.DestroyViews(_views);
-
-        // Show backpack for dice selection
-        UpdateFeedback("Roll or Lock Dice");
-        if (DiceTooltipManager.Instance != null)
-            DiceTooltipManager.Instance.HideTooltip();
-
-        backpackManager.ShowBackpack(BackpackMode.Selection);
+        handFlowController?.StartNewHand();
     }
 
     private void OnDiceSelectedFromBackpack(List<BaseDice> selectedDice)
     {
-        // Use HandCompositionService to compose the hand
-        var composedHand = _compositionService.ComposeHandWithSelection(selectedDice, diceCount);
-        
-        _dice.Clear(); // Clear existing dice before adding the new selection
-        _dice.AddRange(composedHand);
-        
-        // Separate special dice from normal dice for cooldown registration
-        var selectedSpecialDice = composedHand.Where(d => !(d is NormalDice)).ToList();
-        
-        if (selectedSpecialDice.Count > 0)
-        {
-            // Register selection with cooldown system
-            if (!cooldownSystem.SelectDiceForHand(selectedSpecialDice))
-            {
-                Debug.LogError("[BattleController] Failed to select dice for hand!");
-                return;
-            }
-            
-            // Track dice usage for analytics
-            foreach (var dice in selectedSpecialDice)
-            {
-                UnityGameAnalytics.TrackDiceUsage(dice.diceName);
-            }
-        }
-        
-        // Reset dice state for new hand
-        _compositionService.ResetHandDice(_dice);
-
-        // Create views using factory (includes placeholders for empty slots)
-        var newViews = _viewFactory.CreateViews(_dice, diceCount);
-        _views.AddRange(newViews);
-        
-        // Pass dice views to score animator for pop effects
-        if (scoreAnimator != null)
-        {
-            scoreAnimator.SetDiceViews(_views);
-        }
-
-        // Start new hand in hand manager
-        _handManager.StartHand();
-        
-        // Update combo preview after dice selection
-        UpdateComboPreview();
-        
-        // Get hand composition for feedback
-        var (specialCount, normalCount) = _compositionService.GetHandComposition(_dice);
-        
-        // Show idle message after dice selection
-        UpdateFeedback("Roll or Lock Dice");
-        UpdateRollAndCastCount();
-        
-        Debug.Log($"[BattleController] Started hand with {diceCount} dice total");
-        
-        // Auto-roll all dice once (free roll - doesn't count toward roll budget)
-        PerformAutoRoll();
+        // Delegate to HandFlowController
+        handFlowController?.OnDiceSelectedFromBackpack(selectedDice);
     }
 
-        /// <summary>
-        /// Perform auto-roll when hand starts (free roll - doesn't count toward budget)
-        /// </summary>
-        private void PerformAutoRoll()
-        {
-            Debug.Log("[BattleController] Performing auto-initial roll (free roll)");
-            
-            // Roll all dice (they start unlocked)
-            for (int i = 0; i < _dice.Count; i++)
-            {
-                var d = _dice[i];
-                var v = _views[i]; 
-
-                if (d.tier != DiceTier.Filler)
-                {
-                    _effectHandler.SetupPlusOneDice(d, i, _dice);
-
-                    int result = d.Roll();
-                    Debug.Log($"  - {d.diceName} auto-rolled: {result}");
-
-                    // Play roll animation
-                    if (v != null)
-                        v.PlayRollAnimation(result, 0.5f);
-                }
-            }
-
-            // Apply all special dice effects using effect handler
-            _effectHandler.ApplyRollEffects(_dice);
-
-            // Refresh all views using factory
-            _viewFactory.RefreshViews(_views);
-            
-            // Update combo preview after rolling
-            UpdateComboPreview();
-            
-            // Note: Don't update roll count - this is a free roll
-            // Note: Don't update feedback - keep "Roll or Lock Dice" message
-        }
-
-        void OnRollOnce()
-        {
-            // Check if hands remain
-            var (current, remaining) = cooldownSystem.GetHandCounter();
-            if (remaining <= 0)
-            {
-                UpdateFeedback("Roll or Lock Dice");
-                Debug.LogWarning("[BattleController] Cannot roll - no hands remaining.");
-                return;
-            }
-
-            // Check if we can roll using HandManager
-            if (!_handManager.CanRoll)
-            {
-                UpdateFeedback("No rolls remaining. Cast your combo!", isWarning: true);
-                Debug.LogWarning("[BattleController] Roll budget exhausted.");
-                return;
-            }
-
-            // Increment roll counter
-            int rollNumber = _handManager.IncrementRoll();
-            Debug.Log($"[BattleController] Rolling dice (hand roll {rollNumber}, total {_handManager.TotalRollsUsed}/{maxRollsPerHand})");
-
-            // Roll only unlocked dice (skip placeholder dice)
-            for (int i = 0; i < _dice.Count; i++)
-            {
-                var d = _dice[i];
-                var v = _views[i]; 
-
-                if (!d.isLocked && d.tier != DiceTier.Filler)
-                {
-                    _effectHandler.SetupPlusOneDice(d, i, _dice);
-
-                    int result = d.Roll();
-                    Debug.Log($"  - {d.diceName} rolled: {result}");
-
-                    // play animation
-                    if (v != null)
-                        v.PlayRollAnimation(result, 0.5f); // second parameter is lasting time
-                }
-                else if (d.isLocked)
-                {
-                    Debug.Log($"  - {d.diceName} locked at: {d.lastRollValue}");
-                }
-            }
-
-            // Apply all special dice effects using effect handler
-            _effectHandler.ApplyRollEffects(_dice);
-
-            // Refresh all views using factory
-            _viewFactory.RefreshViews(_views);
-            
-            // Update combo preview after rolling
-            UpdateComboPreview();
-            
-            // Update roll count display
-            UpdateRollAndCastCount();
-            
-            // Show idle message after rolling
-            UpdateFeedback("Roll or Lock Dice");
-        }
-
-        void OnSubmitCombo()
-        {
-            // Prevent multiple submissions during animation
-            if (_isSubmitting)
-            {
-                Debug.LogWarning("[BattleController] Already submitting - ignoring duplicate submission");
-                return;
-            }
-
-            // Check if hands remain
-            var (current, remaining) = cooldownSystem.GetHandCounter();
-            if (remaining <= 0)
-            {
-                UpdateFeedback("Roll or Lock Dice");
-                Debug.LogWarning("[BattleController] Cannot submit - no hands remaining.");
-                return;
-            }
-
-            // Validate using HandManager
-            if (!_handManager.CanSubmit(_dice))
-            {
-                UpdateFeedback("Select at least one dice!", isWarning: true);
-                return;
-            }
-
-            // Set submission flag and disable button
-            _isSubmitting = true;
-            if (submitComboButton != null)
-            {
-                submitComboButton.interactable = false;
-            }
-
-            // Update cast count (shows remaining casts)
-            UpdateRollAndCastCount();
-
-            // Get submitted dice using HandManager
-            var submittedDice = _handManager.GetSubmittedDice(_dice);
-            var submittedValues = _handManager.GetSubmittedValues(submittedDice);
-
-            Debug.Log("[BattleController] ====== COMBO SUBMITTED ======");
-            Debug.Log($"[BattleController] Rolls used this hand: {_handManager.RollsUsed} (total {_handManager.TotalRollsUsed}/{maxRollsPerHand})");
-            Debug.Log($"[BattleController] Submitted {submittedDice.Count} locked dice");
-            
-            // Log submitted dice
-            foreach (var dice in submittedDice)
-            {
-                Debug.Log($"  {dice.diceName}: {dice.lastRollValue} [SUBMITTED]");
-            }
-
-            // Calculate score using centralized ScoreCalculator
-            if (submittedValues.Count > 0)
-            {
-                // Create and populate ScoringContext for relics
-                var context = CreateScoringContext(submittedDice, submittedValues);
-                
-                // Calculate score breakdown (but final score will come from animation)
-                // This handles: combo evaluation, dice multipliers, and relic effects
-                var scoreResult = _scoreCalculator.CalculateScore(submittedDice, submittedValues, _relicManager, context);
-                
-                // Trigger animated score display - animation calculates the final score step-by-step
-                if (scoreAnimator != null)
-                {
-                    scoreAnimator.AnimateScore(scoreResult, submittedDice);
-                    
-                    // Start coroutine to handle post-animation logic (UI refresh, score addition, next hand)
-                    StartCoroutine(AddScoreAfterAnimation(scoreResult.comboName, current + 1, submittedDice));
-                }
-                else
-                {
-                    // Fallback if no animator: use calculator's final score and proceed immediately
-                    _progressionManager.AddScore(scoreResult.finalScore);
-                    UnityGameAnalytics.TrackPlayerProgression(_progressionManager.TotalScore, current + 1, _progressionManager.CurrentLevel);
-                    UnityGameAnalytics.TrackScoreCombination(scoreResult.comboName);
-                    
-                    // Complete hand and continue flow
-                    CompleteHandAndContinue(submittedDice);
-                }
-            }
-            else
-            {
-                UpdateFeedback("Select at least one dice!", isWarning: true);
-            }
-            
-            Debug.Log($"[BattleController] Submitted dice values: [{string.Join(", ", submittedValues)}]");
-            Debug.Log("[BattleController] ============================");
-            
-            // NOTE: Hand completion and UI refresh now happens AFTER animation in AddScoreAfterAnimation()
-        }
-
-        /// <summary>
-        /// Start a new hand after a brief delay
-        /// </summary>
-        private System.Collections.IEnumerator DelayedStartNewHand()
-        {
-            // Brief pause before starting new hand (animation already completed when this is called)
-            yield return new UnityEngine.WaitForSeconds(0.5f);
-            StartNewHand();
-        }
-
-        /// <summary>
-        /// Wait for score animation to complete, then refresh UI and add the calculated score to progression
-        /// </summary>
-        private System.Collections.IEnumerator AddScoreAfterAnimation(string comboName, int handNumber, List<BaseDice> submittedDice)
-        {
-            // Wait for animation to reach the UI refresh point (variable timing based on number of steps)
-            float timeout = 0f;
-            float maxTimeout = 15f; // Safety timeout
-            
-            while (!scoreAnimator.IsReadyForUIRefresh && timeout < maxTimeout)
-            {
-                yield return new WaitForSeconds(0.1f);
-                timeout += 0.1f;
-            }
-            
-            if (timeout >= maxTimeout)
-            {
-                Debug.LogWarning("[BattleController] Animation timeout - proceeding with UI refresh");
-            }
-            
-            // REFRESH UI: Dice, Deck, and Feedback (happens AFTER animation steps, BEFORE total score update)
-            Debug.Log("[BattleController] Refreshing UI after score animation...");
-            
-            // Show idle message after score animation completes
-            // (Score animation will show in comboScoreText, then fade out)
-            
-            // Get the final calculated score from the animator (already available at this point)
-            int finalScore = scoreAnimator.GetLastHandScore();
-            
-            // Add score to progression manager (this is the authoritative score from animation)
-            _progressionManager.AddScore(finalScore);
-            
-            // Track analytics
-            UnityGameAnalytics.TrackPlayerProgression(_progressionManager.TotalScore, handNumber, _progressionManager.CurrentLevel);
-            UnityGameAnalytics.TrackScoreCombination(comboName);
-            
-            Debug.Log($"[BattleController] Score added after animation: {finalScore}");
-            
-            // EARLY WIN DETECTION: Check immediately if target score reached
-            if (_progressionManager.TotalScore >= _progressionManager.TargetScore)
-            {
-                Debug.Log($"[BattleController] Early win detected! Total: {_progressionManager.TotalScore}, Target: {_progressionManager.TargetScore}");
-                
-                // Skip idle message in ScoreAnimator
-                if (scoreAnimator != null)
-                {
-                    scoreAnimator.SkipIdleMessage();
-                }
-                
-                // Wait for animation to complete INCLUDING fade out (but skip idle message)
-                timeout = 0f;
-                while (scoreAnimator.IsAnimating && timeout < maxTimeout)
-                {
-                    yield return new WaitForSeconds(0.1f);
-                    timeout += 0.1f;
-                }
-                
-                // Wait for fade out to completely finish (fade duration is 0.3s, plus hold time 0.8s)
-                // Animation completes after fade, so we just need a small buffer to ensure text is cleared
-                yield return new WaitForSeconds(0.1f);
-                
-                // Clear submission flag and re-enable button
-                _isSubmitting = false;
-                if (submitComboButton != null)
-                {
-                    submitComboButton.interactable = true;
-                }
-
-                // Complete the hand first (apply cooldowns)
-                var specialDiceOnly = submittedDice.Where(d => !(d is NormalDice)).ToList();
-                if (specialDiceOnly.Count > 0)
-                {
-                    cooldownSystem.CompleteHand(specialDiceOnly);
-                }
-                else
-                {
-                    cooldownSystem.CompleteHand(new List<BaseDice>());
-                }
-                _handManager.EndHand();
-                
-                // Update UI
-                UpdateRollAndCastCount();
-                
-                // Trigger win evaluation after fade out completes (skip remaining casts)
-                StartCoroutine(EvaluateTargetScore());
-                yield break; // Exit coroutine - don't continue to next hand
-            }
-            
-            // Wait for the entire animation to complete (total score update + fade out)
-            timeout = 0f;
-            while (scoreAnimator.IsAnimating && timeout < maxTimeout)
-            {
-                yield return new WaitForSeconds(0.1f);
-                timeout += 0.1f;
-            }
-            
-            if (timeout >= maxTimeout)
-            {
-                Debug.LogWarning("[BattleController] Animation completion timeout - proceeding anyway");
-            }
-            
-            // Show idle message after animation completes (only if not win)
-            UpdateFeedback("Roll or Lock Dice");
-            
-            // Complete hand and continue to next hand or evaluation
-            CompleteHandAndContinue(submittedDice);
-        }
-
-        /// <summary>
-        /// Complete the current hand and continue to next hand or evaluation
-        /// </summary>
-        private void CompleteHandAndContinue(List<BaseDice> submittedDice)
-        {
-            // Clear submission flag and re-enable button
-            _isSubmitting = false;
-            if (submitComboButton != null)
-            {
-                submitComboButton.interactable = true;
-            }
-
-            // Complete the hand in cooldown system with submitted dice
-            // Filter out NormalDice (temporary fillers) - only submit special dice from the pool
-            var specialDiceOnly = submittedDice.Where(d => !(d is NormalDice)).ToList();
-            if (specialDiceOnly.Count > 0)
-            {
-                Debug.Log($"[BattleController] Passing {specialDiceOnly.Count} special dice to cooldown system");
-                cooldownSystem.CompleteHand(specialDiceOnly);
-            }
-            else
-            {
-                Debug.Log("[BattleController] No special dice submitted, only normal dice used");
-                cooldownSystem.CompleteHand(new List<BaseDice>()); // Complete hand without cooldown
-            }
-            _handManager.EndHand();
-            
-            // Check if we can start a new hand
-            var (currentHand, handsRemaining) = cooldownSystem.GetHandCounter();
-            if (handsRemaining > 0)
-            {
-                // Start next hand after a brief delay
-                StartCoroutine(DelayedStartNewHand());
-            }
-            else
-            {
-                Debug.Log("[BattleController] All hands completed! Evaluating target score...");
-                // Update UI to show battle is complete
-                UpdateRollAndCastCount();
-                
-                // Trigger target score evaluation animation
-                StartCoroutine(EvaluateTargetScore());
-            }
-        }
-
-        /// <summary>
-        /// Create and populate ScoringContext for relic application
-        /// </summary>
-        private ScoringContext CreateScoringContext(List<BaseDice> submittedDice, List<int> submittedValues)
-        {
-            var context = new ScoringContext
-            {
-                submittedValues = new List<int>(submittedValues),
-                submittedDice = new List<BaseDice>(submittedDice),
-                handBudget = 6, // Default hand budget (could be modified by relics in future)
-                totalSelectedCost = submittedDice.Sum(d => d.cost),
-                rollsUsed = _handManager.RollsUsed,
-                maxRollsPerHand = maxRollsPerHand,
-                hasFillerInHand = submittedDice.Any(d => d is NormalDice)
-            };
-            
-            return context;
-        }
+        // Hand flow methods moved to HandFlowController
 
         void ResetForNewHand()
         {
@@ -1038,20 +630,19 @@ namespace DiceGame
                 
             // Reset relic system and give new random starting relic
             _relicManager.ClearBackpack();
-            InitializeRelicSystem(giveStartingRelic: true);
+            _stateManager.SaveData.relicNames.Clear();
+            InitializeRelicSystem();
             
             // Reset money (game over / restart)
             _moneyManager.Reset();
-            SavedMoney = 0;
+            _stateManager.SaveData.money = 0;
+            _stateManager.Save();
             
             // Refresh dice pool and hand counter
             cooldownSystem.RefreshDicePool();
             
             // Update displays
-            UpdateLevelInfo();
-            UpdateTargetScoreDisplay();
-            UpdateRollAndCastCount();
-            UpdateMoneyDisplay();
+            RefreshAllUI();
             UpdateFeedback("Roll or Lock Dice");
                 
                 // Start a new hand after refresh
@@ -1077,26 +668,11 @@ namespace DiceGame
         }
 
         /// <summary>
-        /// Update feedback message in combo score text (minimal tips only)
+        /// Update feedback message
         /// </summary>
         void UpdateFeedback(string msg, bool isWarning = false)
         {
-            if (scoreAnimator != null && scoreAnimator.comboScoreText != null)
-            {
-                // Only show feedback if not currently animating a score
-                if (!scoreAnimator.IsAnimating)
-                {
-                    // White color for idle tips, red color for warnings
-                    string color = isWarning ? "#FF6666" : "#FFFFFF";
-                    scoreAnimator.comboScoreText.text = $"<color={color}>{msg}</color>";
-                    
-                    // Ensure text is visible (reset alpha in case it was faded out)
-                    var color2 = scoreAnimator.comboScoreText.color;
-                    color2.a = 1f;
-                    scoreAnimator.comboScoreText.color = color2;
-                }
-            }
-            Debug.Log($"[BattleController] Feedback: {msg}");
+            battleUI?.UpdateFeedback(msg, isWarning);
         }
 
         /// <summary>
@@ -1104,20 +680,20 @@ namespace DiceGame
         /// </summary>
         private void UpdateRollAndCastCount()
         {
-            // Update roll count: shows remaining rolls (just the number)
-            if (rollCountText != null && _handManager != null)
-            {
-                int remainingRolls = Mathf.Max(0, maxRollsPerHand - _handManager.TotalRollsUsed);
-                rollCountText.text = remainingRolls.ToString();
-            }
+            if (battleUI == null) return;
             
-            // Update cast count: shows remaining casts (based on remaining hands)
-            if (castCountText != null && cooldownSystem != null)
+            int remainingRolls = _handManager != null 
+                ? Mathf.Max(0, maxRollsPerHand - _handManager.TotalRollsUsed) 
+                : 0;
+            
+            int remainingCasts = 0;
+            if (cooldownSystem != null)
             {
                 var (current, remaining) = cooldownSystem.GetHandCounter();
-                int remainingCasts = Mathf.Max(0, remaining);
-                castCountText.text = remainingCasts.ToString();
+                remainingCasts = Mathf.Max(0, remaining);
             }
+            
+            battleUI.UpdateRollAndCastCount(remainingRolls, remainingCasts);
         }
 
         /// <summary>
@@ -1125,9 +701,9 @@ namespace DiceGame
         /// </summary>
         private void UpdateMoneyDisplay()
         {
-            if (moneyText != null && _moneyManager != null)
+            if (battleUI != null && _moneyManager != null)
             {
-                moneyText.text = _moneyManager.Money.ToString();
+                battleUI.UpdateMoney(_moneyManager.Money);
             }
         }
 
@@ -1147,7 +723,8 @@ namespace DiceGame
             if (_moneyManager != null)
             {
                 _moneyManager.Add(amount);
-                SavedMoney = _moneyManager.Money; // Sync static state
+                _stateManager.SaveData.money = _moneyManager.Money;
+                _stateManager.Save();
                 UpdateMoneyDisplay();
             }
         }
@@ -1160,7 +737,8 @@ namespace DiceGame
         {
             if (_moneyManager != null && _moneyManager.Subtract(amount))
             {
-                SavedMoney = _moneyManager.Money; // Sync static state
+                _stateManager.SaveData.money = _moneyManager.Money;
+                _stateManager.Save();
                 UpdateMoneyDisplay();
                 return true;
             }
@@ -1169,21 +747,13 @@ namespace DiceGame
 
 
         /// <summary>
-        /// Update deck status display showing all dice and their states
-        /// </summary>
-        private void UpdateDeckStatus()
-        {
-            // This is now handled by the backpack system.
-        }
-
-        /// <summary>
         /// Update target score display
         /// </summary>
         private void UpdateTargetScoreDisplay()
         {
-            if (targetScoreText != null && _uiPresenter != null && _progressionManager != null)
+            if (battleUI != null && _progressionManager != null)
             {
-                targetScoreText.text = _uiPresenter.FormatTargetScore(_progressionManager.TargetScore, _progressionManager.CurrentLevel);
+                battleUI.UpdateTargetScore(_progressionManager.TargetScore, _progressionManager.CurrentLevel);
             }
         }
 
@@ -1192,17 +762,22 @@ namespace DiceGame
         /// </summary>
         private void UpdateLevelInfo()
         {
-            if (levelInfoText != null && _progressionManager != null)
+            if (battleUI != null && _progressionManager != null)
             {
-                if (_progressionManager.IsTutorialMode)
-                {
-                    levelInfoText.text = "Tutorial";
-                }
-                else
-                {
-                    levelInfoText.text = $"Level {_progressionManager.CurrentLevel}";
-                }
+                battleUI.UpdateLevelInfo(_progressionManager.CurrentLevel, _progressionManager.IsTutorialMode);
             }
+        }
+        
+        /// <summary>
+        /// Refresh all UI elements
+        /// </summary>
+        private void RefreshAllUI()
+        {
+            UpdateTargetScoreDisplay();
+            UpdateLevelInfo();
+            UpdateComboPreview();
+            UpdateRollAndCastCount();
+            UpdateMoneyDisplay();
         }
 
         /// <summary>
@@ -1213,7 +788,9 @@ namespace DiceGame
             if (_progressionManager != null && _progressionManager.IsTutorialMode)
             {
                 _progressionManager.StartNormalGame();
-                IsTutorialMode = false;
+                _stateManager.State.IsTutorialMode = false;
+                _stateManager.SaveData.hasCompletedTutorial = true;
+                _stateManager.Save();
                 
                 // Close backpack if open
                 if (backpackManager != null)
@@ -1249,10 +826,7 @@ namespace DiceGame
                 _views.Clear();
                 
                 // Update UI
-                UpdateLevelInfo();
-                UpdateTargetScoreDisplay();
-                UpdateRollAndCastCount();
-                UpdateComboPreview();
+                RefreshAllUI();
                 UpdateFeedback("Roll or Lock Dice");
                 
                 // Start first hand of Level 1
@@ -1262,30 +836,6 @@ namespace DiceGame
             }
         }
 
-        /// <summary>
-        /// Open settings panel
-        /// </summary>
-        private void OnSettingsButtonClicked()
-        {
-            if (settingsPanel != null)
-            {
-                settingsPanel.SetActive(true);
-                Debug.Log("[BattleController] Settings panel opened");
-            }
-        }
-        
-        /// <summary>
-        /// Close settings panel
-        /// </summary>
-        private void CloseSettingsPanel()
-        {
-            if (settingsPanel != null)
-            {
-                settingsPanel.SetActive(false);
-                Debug.Log("[BattleController] Settings panel closed");
-            }
-        }
-        
         /// <summary>
         /// Open backpack for viewing (not selection mode)
         /// Called by Unity button or programmatically
@@ -1309,38 +859,11 @@ namespace DiceGame
         }
         
         /// <summary>
-        /// Open combo preference panel
-        /// </summary>
-        private void OnComboPreferenceButtonClicked()
-        {
-            if (comboPreferencePanel != null)
-            {
-                comboPreferencePanel.SetActive(true);
-                Debug.Log("[BattleController] Combo preference panel opened");
-            }
-        }
-        
-        /// <summary>
-        /// Close combo preference panel
-        /// </summary>
-        private void CloseComboPreferencePanel()
-        {
-            if (comboPreferencePanel != null)
-            {
-                comboPreferencePanel.SetActive(false);
-                Debug.Log("[BattleController] Combo preference panel closed");
-            }
-        }
-        
-        /// <summary>
-        /// Reset game to initial state (from settings panel)
+        /// Reset game to initial state (called by SettingsPanel)
         /// </summary>
         private void OnSettingsResetClicked()
         {
             Debug.Log("[BattleController] Resetting game to initial state...");
-            
-            // Close settings panel
-            CloseSettingsPanel();
             
             // Reset progression to level 1
             _progressionManager.ResetToLevelOne();
@@ -1359,19 +882,18 @@ namespace DiceGame
             _dice.Clear();
             _viewFactory.DestroyViews(_views);
             
-            // Reset static state
-            ContinuingFromReward = false;
-            PendingLevel = 1;
-            PendingTargetScore = baseTargetScore;
-            SavedMoney = 0;
+            // Reset runtime state
+            _stateManager.ResetState();
             
             // Reset relic system and give new random starting relic
             _relicManager.ClearBackpack();
-            InitializeRelicSystem(giveStartingRelic: true);
+            _stateManager.SaveData.relicNames.Clear();
+            InitializeRelicSystem();
             
             // Reset money (settings reset)
             _moneyManager.Reset();
-            SavedMoney = 0;
+            _stateManager.SaveData.money = 0;
+            _stateManager.ResetSaveData();
             
             // Refresh dice pool and hand counter
             cooldownSystem.RefreshDicePool();
@@ -1383,10 +905,7 @@ namespace DiceGame
             }
             
             // Update displays
-            UpdateLevelInfo();
-            UpdateTargetScoreDisplay();
-            UpdateRollAndCastCount();
-            UpdateMoneyDisplay();
+            RefreshAllUI();
             UpdateFeedback("Roll or Lock Dice");
             
             // Start a new hand
@@ -1396,14 +915,11 @@ namespace DiceGame
         }
         
         /// <summary>
-        /// Quit game (from settings panel)
+        /// Quit game (called by SettingsPanel)
         /// </summary>
         private void OnSettingsQuitClicked()
         {
             Debug.Log("[BattleController] Quitting game...");
-            
-            // Close settings panel
-            CloseSettingsPanel();
             
             // Quit application (works in builds)
             // In editor, this will stop play mode
@@ -1420,6 +936,8 @@ namespace DiceGame
         /// </summary>
         private void UpdateComboPreview()
         {
+            if (battleUI == null) return;
+            
             // Get locked dice values (only dice that are locked and have been rolled)
             var lockedValues = _dice
                 .Where(d => d.isLocked && d.lastRollValue > 0 && d.tier != DiceTier.Filler)
@@ -1429,9 +947,7 @@ namespace DiceGame
             if (lockedValues.Count == 0)
             {
                 // No dice locked - show default state
-                if (comboNameText != null) comboNameText.text = "No Combo";
-                if (comboBaseText != null) comboBaseText.text = "<color=#CCCCCC>0</color>";
-                if (comboMultiplierText != null) comboMultiplierText.text = "<color=#CCCCCC>1.0</color>";
+                battleUI.UpdateComboPreviewEmpty();
                 return;
             }
             
@@ -1440,14 +956,7 @@ namespace DiceGame
             var (comboName, baseScore, multiplier) = _scoreCalculator.PreviewCombo(lockedValues);
             
             // Update UI
-            // Combo name stays as is
-            if (comboNameText != null) comboNameText.text = comboName;
-            
-            // Base score: just the number, orange color (#FF8C00 - DarkOrange)
-            if (comboBaseText != null) comboBaseText.text = $"<color=#FF8C00><b>{baseScore}</b></color>";
-            
-            // Multiplier: just the number, blue color (#4A90E2 - Nice blue)
-            if (comboMultiplierText != null) comboMultiplierText.text = $"<color=#4A90E2>{multiplier:F1}</color>";
+            battleUI.UpdateComboPreview(comboName, baseScore, multiplier);
         }
 
         /// <summary>
@@ -1481,175 +990,14 @@ namespace DiceGame
             cooldownSystem.RefreshDicePool();
 
             // Update displays
-            UpdateLevelInfo();
-            UpdateTargetScoreDisplay();
-            UpdateRollAndCastCount();
-            UpdateMoneyDisplay();
+            RefreshAllUI();
             UpdateFeedback("Roll or Lock Dice");
 
             // Start first hand of new level
             StartNewHand();
         }
 
-        /// <summary>
-        /// Evaluate if player passed target score with dramatic animation
-        /// </summary>
-        private System.Collections.IEnumerator EvaluateTargetScore()
-        {
-            // Skip evaluation in tutorial mode
-            if (_progressionManager != null && _progressionManager.IsTutorialMode)
-            {
-                Debug.Log("[BattleController] Skipping target evaluation - tutorial mode");
-                yield break;
-            }
-            
-            if (DiceTooltipManager.Instance != null)
-                DiceTooltipManager.Instance.HideTooltip();
-
-            // No wait needed - animation already completed before this is called
-
-            int finalScore = scoreAnimator != null ? scoreAnimator.GetTotalScore() : _progressionManager.TotalScore;
-            bool passed = _progressionManager.EvaluateTargetScore();
-
-            // Trigger pass/fail animation in ScoreAnimator
-            if (scoreAnimator != null)
-            {
-                scoreAnimator.AnimateTargetEvaluation(finalScore, _progressionManager.TargetScore, passed);
-                
-                // Wait for "You pass!" message to complete
-                float timeout = 0f;
-                float maxTimeout = 10f; // Safety timeout to prevent infinite wait
-                while (scoreAnimator.IsAnimating && timeout < maxTimeout)
-                {
-                    yield return new UnityEngine.WaitForSeconds(0.1f);
-                    timeout += 0.1f;
-                }
-                
-                if (timeout >= maxTimeout)
-                {
-                    Debug.LogWarning("[BattleController] Animation completion timeout - proceeding anyway");
-                }
-            }
-            else
-            {
-                // Fallback if no animator - show idle message
-                UpdateFeedback("Roll or Lock Dice");
-                yield return new UnityEngine.WaitForSeconds(1.0f); // Brief delay for fallback
-            }
-            
-            if (passed)
-            {
-                // Reward money: 5 + remaining casts
-                var (current, remaining) = cooldownSystem.GetHandCounter();
-                int rewardMoney = 5 + remaining;
-                int currentMoney = _moneyManager.Money;
-                
-                // Show reward message
-                if (scoreAnimator != null && scoreAnimator.comboScoreText != null)
-                {
-                    scoreAnimator.comboScoreText.text = $"<size=150%><color=#FFD700>Level reward: 5+{remaining}</color></size>";
-                    yield return new WaitForSeconds(1.0f);
-                }
-                
-                // Animate money increase (similar to score animation)
-                if (scoreAnimator != null && scoreAnimator.moneyText != null)
-                {
-                    scoreAnimator.AnimateMoneyIncrease(rewardMoney, currentMoney, (money) =>
-                    {
-                        _moneyManager.Set(money);
-                        SavedMoney = money;
-                        UpdateMoneyDisplay();
-                    });
-                    
-                    // Wait for animation to complete before transitioning
-                    yield return new WaitForSeconds(scoreAnimator.countUpDuration + 0.3f);
-                }
-                else
-                {
-                    // Fallback: add money immediately if no animator
-                    _moneyManager.Add(rewardMoney);
-                    SavedMoney = _moneyManager.Money;
-                    UpdateMoneyDisplay();
-                }
-                
-                Debug.Log($"[BattleController] Level passed! Money reward: +{rewardMoney} (5 + {remaining} remaining casts), Total: {SavedMoney}");
-
-                // Prepare next level state for when we return from RewardScene
-                int nextLevel = _progressionManager.CurrentLevel + 1;
-                int nextTarget = _progressionManager.CalculateTargetScore(nextLevel);
-
-                PendingLevel = nextLevel;
-                PendingTargetScore = nextTarget;
-                ContinuingFromReward = true;
-
-                // Transition to reward scene
-                Debug.Log($"[BattleController] Target passed! Loading RewardScene. Next Level: {nextLevel}, Next Target: {nextTarget}");
-                SceneManager.LoadScene("RewardScene");
-            }
-            else
-            {
-                // Player failed - store score data and transition to game over scene
-                GameOverFinalScore = finalScore;
-                GameOverTargetScore = _progressionManager.TargetScore;
-                
-                Debug.Log($"[BattleController] ========== GAME OVER ==========");
-                Debug.Log($"[BattleController] Target failed! Final: {finalScore}, Target: {_progressionManager.TargetScore}");
-                Debug.Log($"[BattleController] Stored scores - Final: {GameOverFinalScore}, Target: {GameOverTargetScore}");
-                
-                // Transition to game over scene with wipe animation
-                bool transitionStarted = false;
-                
-                if (DiceRogue.Boot.RunLoader.Instance != null)
-                {
-                    Debug.Log("[BattleController] RunLoader.Instance found - calling LoadGameOverScene()");
-                    string sceneName = DiceRogue.Boot.RunLoader.Instance.gameOverSceneName;
-                    Debug.Log($"[BattleController] GameOver scene name: '{sceneName}'");
-                    
-                    if (!string.IsNullOrEmpty(sceneName))
-                    {
-                        DiceRogue.Boot.RunLoader.Instance.LoadGameOverScene();
-                        Debug.Log("[BattleController] LoadGameOverScene() called successfully - transition should start now");
-                        transitionStarted = true;
-                        
-                        // Wait a few frames to ensure the transition coroutine starts and begins loading
-                        yield return new UnityEngine.WaitForSeconds(0.1f);
-                        
-                        // Check if we're still in BattleScene (transition might have failed)
-                        string currentScene = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name;
-                        if (currentScene == "BattleScene")
-                        {
-                            Debug.LogWarning("[BattleController] Still in BattleScene after transition attempt - waiting longer...");
-                            yield return new UnityEngine.WaitForSeconds(0.5f);
-                            
-                            // Check again
-                            currentScene = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name;
-                            if (currentScene == "BattleScene")
-                            {
-                                Debug.LogError("[BattleController] Transition failed! Using direct scene load as fallback.");
-                                transitionStarted = false;
-                            }
-                        }
-                    }
-                    else
-                    {
-                        Debug.LogError("[BattleController] GameOver scene name is null or empty!");
-                        transitionStarted = false;
-                    }
-                }
-                else
-                {
-                    Debug.LogError("[BattleController] RunLoader.Instance is NULL! Cannot use wipe transition.");
-                    transitionStarted = false;
-                }
-                
-                // Fallback: Direct scene load if transition didn't work
-                if (!transitionStarted)
-                {
-                    Debug.LogWarning("[BattleController] Using fallback: Direct SceneManager.LoadScene");
-                    UnityEngine.SceneManagement.SceneManager.LoadScene("GameOverScene");
-                }
-            }
-        }
+        // EvaluateTargetScore moved to HandFlowController
 
         #region CooldownSystem Event Handlers
 
@@ -1714,6 +1062,13 @@ namespace DiceGame
             if (backpackManager != null && backpackManager.openBackpackButton != null)
             {
                 backpackManager.openBackpackButton.onClick.RemoveListener(OpenBackpackForViewing);
+            }
+            
+            // Clean up settings panel events
+            if (settingsPanel != null)
+            {
+                settingsPanel.OnResetRequested -= OnSettingsResetClicked;
+                settingsPanel.OnQuitRequested -= OnSettingsQuitClicked;
             }
         }
     }

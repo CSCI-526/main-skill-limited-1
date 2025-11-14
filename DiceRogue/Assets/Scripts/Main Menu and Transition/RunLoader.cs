@@ -48,13 +48,13 @@ namespace DiceRogue.Boot
 
         public void StartRun()
         {
-            BattleController.IsTutorialMode = false; // Ensure normal mode
+            GameStateManager.Instance.State.IsTutorialMode = false; // Ensure normal mode
             StartCoroutine(LoadSceneWithWipe(battleSceneName));
         }
 
         public void StartTutorial()
         {
-            BattleController.IsTutorialMode = true; // Set tutorial mode flag
+            GameStateManager.Instance.State.IsTutorialMode = true; // Set tutorial mode flag
             StartCoroutine(LoadSceneWithWipe(battleSceneName)); // Load BattleScene, not TutorialScene
         }
 

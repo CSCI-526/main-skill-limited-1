@@ -318,13 +318,13 @@ namespace DiceGame.Core
             {
                 baseScore = 210;
                 comboMultiplier = 12.0f;
-                return "Large Straight (1–5 or 2–6)";
+                return "Large Straight";
             }
             else if (isSmallStraight)
             {
                 baseScore = 135;
                 comboMultiplier = 5.0f;
-                return "Small Straight (any 4 in sequence)";
+                return "Small Straight";
             }
             else if (freq[0] == 3)
             {
@@ -348,7 +348,7 @@ namespace DiceGame.Core
             {
                 baseScore = 10;
                 comboMultiplier = 0.5f;
-                return "No Combo (Bust)";
+                return "No Combo";
             }
         }
 

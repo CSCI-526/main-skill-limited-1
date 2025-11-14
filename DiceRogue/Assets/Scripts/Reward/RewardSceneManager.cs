@@ -7,8 +7,7 @@ using UnityEngine.SceneManagement;
 
 public class RewardSceneManager : MonoBehaviour
 {
-    // Static list to pass picked dice type ids across scenes
-    public static readonly List<string> PendingDiceTypeIds = new List<string>();
+    private GameStateManager _stateManager;
     [Header("Reference")]
     public List<BaseDice> allDicePool;
     [SerializeField] private Transform rewardParent;      // UI container (e.g., RewardPanel under Canvas)
@@ -40,7 +39,7 @@ public class RewardSceneManager : MonoBehaviour
 
         // Convert to a type identifier (e.g., "D8", "HeavyDice") to recreate later
         var typeId = _selectedDice.GetType().Name;
-        PendingDiceTypeIds.Add(typeId);
+        _stateManager.State.PendingDiceTypeIds.Add(typeId);
         Debug.Log($"[RewardScene] ========================================");
         Debug.Log($"[RewardScene] Reward confirmed!");
         Debug.Log($"[RewardScene] Selected: {_selectedDice.diceName} ({_selectedDice.tier})");
@@ -54,6 +53,8 @@ public class RewardSceneManager : MonoBehaviour
 
     void Start()
     {
+        _stateManager = GameStateManager.Instance;
+        
         // 1) Build a pool (default prototypes) and pick 3 non-filler dice
         allDicePool = DicePool.GetAll();
         GenerateRewardOptions();   // fills rewardResult with 3 random non-filler dice

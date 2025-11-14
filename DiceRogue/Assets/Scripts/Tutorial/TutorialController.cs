@@ -1549,10 +1549,11 @@ namespace DiceGame.Tutorial
             // Prepare Level 1 state for when returning from RewardScene
             int targetScore = battleController != null ? battleController.baseTargetScore : 200;
             
-            BattleController.PendingLevel = 1;
-            BattleController.PendingTargetScore = targetScore;
-            BattleController.ContinuingFromReward = true;
-            BattleController.IsTutorialMode = false;
+            var stateManager = GameStateManager.Instance;
+            stateManager.State.PendingLevel = 1;
+            stateManager.State.PendingTargetScore = targetScore;
+            stateManager.State.ContinuingFromReward = true;
+            stateManager.State.IsTutorialMode = false;
             
             if (battleController == null)
             {
