@@ -22,7 +22,7 @@ namespace DiceGame
         public int TotalScore => _totalScore;
         public float SessionDuration => Time.time - _sessionStartTime;
 
-        public ProgressionManager(int baseTargetScore = 300)
+        public ProgressionManager(int baseTargetScore = 200)
         {
             _baseTargetScore = baseTargetScore;
             _currentLevel = 1;
@@ -94,12 +94,12 @@ namespace DiceGame
 
         /// <summary>
         /// Calculate target score for a given level using progressive formula
-        /// Progressive increase: +300, +400, +500, +600, +700, ...
-        /// Formula: Base + sum of (300 + i*100) for i = 0 to level-2
-        /// Level 1: 300 (base)
-        /// Level 2: 300 + 300 = 600
-        /// Level 3: 600 + 400 = 1000
-        /// Level 4: 1000 + 500 = 1500
+        /// Progressive increase: +100, +200, +300, +400, +500, ...
+        /// Formula: Base + sum of (100 + i*100) for i = 0 to level-2
+        /// Level 1: 200 (base)
+        /// Level 2: 200 + 100 = 300
+        /// Level 3: 300 + 200 = 500
+        /// Level 4: 500 + 300 = 800
         /// </summary>
         public int CalculateTargetScore(int level)
         {
@@ -108,7 +108,7 @@ namespace DiceGame
             int target = _baseTargetScore;
             for (int i = 0; i < level - 1; i++)
             {
-                int increase = 300 + i * 100; // 300, 400, 500, 600, 700, ...
+                int increase = 100 + i * 100; // 100, 200, 300, 400, 500, ...
                 target += increase;
             }
             

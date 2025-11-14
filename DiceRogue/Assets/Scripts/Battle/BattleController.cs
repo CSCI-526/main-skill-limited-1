@@ -17,7 +17,7 @@ namespace DiceGame
         // Static state for scene transitions
         public static bool ContinuingFromReward = false;
         public static int PendingLevel = 1;
-        public static int PendingTargetScore = 300;
+        public static int PendingTargetScore = 200;
         
         // Static state for game over scene
         public static int GameOverFinalScore = 0;
@@ -61,7 +61,7 @@ namespace DiceGame
         [Header("Config")]
         public int diceCount = 5;         // Fixed 5 dice per hand
         public int maxRollsPerHand = 5;   // Shared roll budget across all hands
-        public int baseTargetScore = 300; // Starting target score
+        public int baseTargetScore = 200; // Starting target score
 
         [Header("Cooldown System")]
         public CooldownSystem cooldownSystem; // Reference to cooldown system
