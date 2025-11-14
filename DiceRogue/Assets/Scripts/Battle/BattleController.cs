@@ -138,6 +138,16 @@ namespace DiceGame
             if (backpackManager != null)
             {
                 backpackManager.Initialize(cooldownSystem, OnDiceSelectedFromBackpack);
+                
+                // Set up open backpack button listener
+                if (backpackManager.openBackpackButton != null)
+                {
+                    backpackManager.openBackpackButton.onClick.AddListener(OpenBackpackForViewing);
+                }
+                else
+                {
+                    Debug.LogWarning("[BattleController] BackpackManager.openBackpackButton is not assigned!");
+                }
             }
             else
             {
@@ -1277,6 +1287,28 @@ namespace DiceGame
         }
         
         /// <summary>
+        /// Open backpack for viewing (not selection mode)
+        /// Called by Unity button or programmatically
+        /// </summary>
+        public void OnBackpackButtonPressed()
+        {
+            if (backpackManager != null)
+            {
+                backpackManager.ShowBackpack(BackpackMode.ViewOnly);
+                Debug.Log("[BattleController] Backpack opened for viewing");
+            }
+        }
+        
+        /// <summary>
+        /// Open backpack for viewing (not selection mode)
+        /// Internal method that can be called programmatically
+        /// </summary>
+        private void OpenBackpackForViewing()
+        {
+            OnBackpackButtonPressed();
+        }
+        
+        /// <summary>
         /// Open combo preference panel
         /// </summary>
         private void OnComboPreferenceButtonClicked()
@@ -1677,6 +1709,12 @@ namespace DiceGame
             
             // Unsubscribe from dice lock changes
             DiceView.OnDiceLockChanged -= UpdateComboPreview;
+            
+            // Clean up backpack button listener
+            if (backpackManager != null && backpackManager.openBackpackButton != null)
+            {
+                backpackManager.openBackpackButton.onClick.RemoveListener(OpenBackpackForViewing);
+            }
         }
     }
 }
