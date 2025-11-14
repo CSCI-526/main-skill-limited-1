@@ -27,10 +27,8 @@ namespace DiceGame
         public Transform diceRowParent;      // Container for DiceView
         public GameObject diceViewPrefab;  // Prefab (with DiceView component)
         public Button rollButton;
-        public Button resetRollButton;
         public Button submitComboButton;
         public Button continueButton;
-        public Button openBackpackButton;
         public Button settingsButton;        // Settings button
         
         [Header("UI - Settings Panel")]
@@ -40,6 +38,13 @@ namespace DiceGame
         public Button settingsResetButton;   // Reset button in settings
         public Button settingsQuitButton;    // Quit button in settings
         public Button settingsCloseButton;   // Close button (optional - can click overlay to close)
+        
+        [Header("UI - Combo Preference Panel")]
+        public GameObject comboPreferencePanel;  // Combo preference panel (window + overlay)
+        public GameObject comboPreferenceOverlay; // Shaded background overlay
+        public GameObject comboPreferenceWindow; // Combo preference window (middle of screen)
+        public Button comboPreferenceButton;     // Button to open combo preference
+        public Button comboPreferenceCloseButton; // Close button (optional)
         
         [Header("UI - Right Panel")]
         public TMP_Text levelInfoText;      // Level display
@@ -82,7 +87,6 @@ namespace DiceGame
         // Current hand state
         private readonly List<BaseDice> _dice = new();
         private readonly List<DiceView> _views = new();
-        private bool _isSelectionMode = false;
         private bool _isSubmitting = false; // Guard to prevent multiple submissions
 
         void Start()
@@ -189,9 +193,14 @@ namespace DiceGame
             cooldownSystem.OnAvailableDiceChanged += OnAvailableDiceChanged;
 
             // Set up UI
-            rollButton.onClick.AddListener(OnRollOnce);
-            resetRollButton.onClick.AddListener(ResetForNewHand);
-            submitComboButton.onClick.AddListener(OnSubmitCombo);
+            if (rollButton != null)
+            {
+                rollButton.onClick.AddListener(OnRollOnce);
+            }
+            if (submitComboButton != null)
+            {
+                submitComboButton.onClick.AddListener(OnSubmitCombo);
+            }
             
             // Set up settings panel
             if (settingsButton != null)
@@ -253,6 +262,52 @@ namespace DiceGame
                 settingsCloseButton.onClick.AddListener(CloseSettingsPanel);
             }
             
+            // Set up combo preference panel
+            if (comboPreferenceButton != null)
+            {
+                comboPreferenceButton.onClick.AddListener(OnComboPreferenceButtonClicked);
+            }
+            
+            // Initialize combo preference panel (hidden by default)
+            if (comboPreferencePanel != null)
+            {
+                comboPreferencePanel.SetActive(false);
+            }
+            
+            // Setup overlay (just visual, not clickable)
+            if (comboPreferenceOverlay != null)
+            {
+                Image overlayImage = comboPreferenceOverlay.GetComponent<Image>();
+                if (overlayImage == null)
+                {
+                    overlayImage = comboPreferenceOverlay.AddComponent<Image>();
+                }
+                overlayImage.raycastTarget = false;
+                
+                Button overlayButton = comboPreferenceOverlay.GetComponent<Button>();
+                if (overlayButton != null)
+                {
+                    DestroyImmediate(overlayButton);
+                }
+            }
+            
+            // Ensure window blocks raycasts
+            if (comboPreferenceWindow != null)
+            {
+                Image windowImage = comboPreferenceWindow.GetComponent<Image>();
+                if (windowImage == null)
+                {
+                    windowImage = comboPreferenceWindow.AddComponent<Image>();
+                }
+                windowImage.raycastTarget = true;
+            }
+            
+            // Setup close button if provided
+            if (comboPreferenceCloseButton != null)
+            {
+                comboPreferenceCloseButton.onClick.AddListener(CloseComboPreferencePanel);
+            }
+            
             // Subscribe to dice lock changes for combo preview updates
             DiceView.OnDiceLockChanged += UpdateComboPreview;
             
@@ -269,14 +324,6 @@ namespace DiceGame
         {
             yield return null; // Wait one frame
             StartNewHand();
-        }
-        
-        public void OnBackpackButtonPressed()
-        {
-            if (!_isSelectionMode)
-            {
-                backpackManager.ShowBackpack(BackpackMode.ViewOnly);
-            }
         }
         
         /// <summary>
@@ -465,8 +512,6 @@ namespace DiceGame
     /// </summary>
     private void StartNewHand()
     {
-        _isSelectionMode = true;
-
         // Check if hands remain (safety check before pool refresh)
         var (handCount, handRemaining) = cooldownSystem.GetHandCounter();
         if (handRemaining <= 0 && handCount > 0) // Don't block the very first hand
@@ -497,8 +542,6 @@ namespace DiceGame
 
     private void OnDiceSelectedFromBackpack(List<BaseDice> selectedDice)
     {
-        _isSelectionMode = false;
-
         // Use HandCompositionService to compose the hand
         var composedHand = _compositionService.ComposeHandWithSelection(selectedDice, diceCount);
         
@@ -1027,14 +1070,14 @@ namespace DiceGame
         private void UpdateRollAndCastCount()
         {
             // Update roll count: shows remaining rolls (just the number)
-            if (rollCountText != null)
+            if (rollCountText != null && _handManager != null)
             {
                 int remainingRolls = Mathf.Max(0, maxRollsPerHand - _handManager.TotalRollsUsed);
                 rollCountText.text = remainingRolls.ToString();
             }
             
             // Update cast count: shows remaining casts (based on remaining hands)
-            if (castCountText != null)
+            if (castCountText != null && cooldownSystem != null)
             {
                 var (current, remaining) = cooldownSystem.GetHandCounter();
                 int remainingCasts = Mathf.Max(0, remaining);
@@ -1103,7 +1146,7 @@ namespace DiceGame
         /// </summary>
         private void UpdateTargetScoreDisplay()
         {
-            if (targetScoreText != null)
+            if (targetScoreText != null && _uiPresenter != null && _progressionManager != null)
             {
                 targetScoreText.text = _uiPresenter.FormatTargetScore(_progressionManager.TargetScore, _progressionManager.CurrentLevel);
             }
@@ -1114,7 +1157,7 @@ namespace DiceGame
         /// </summary>
         private void UpdateLevelInfo()
         {
-            if (levelInfoText != null)
+            if (levelInfoText != null && _progressionManager != null)
             {
                 levelInfoText.text = $"Level {_progressionManager.CurrentLevel}";
             }
@@ -1141,6 +1184,30 @@ namespace DiceGame
             {
                 settingsPanel.SetActive(false);
                 Debug.Log("[BattleController] Settings panel closed");
+            }
+        }
+        
+        /// <summary>
+        /// Open combo preference panel
+        /// </summary>
+        private void OnComboPreferenceButtonClicked()
+        {
+            if (comboPreferencePanel != null)
+            {
+                comboPreferencePanel.SetActive(true);
+                Debug.Log("[BattleController] Combo preference panel opened");
+            }
+        }
+        
+        /// <summary>
+        /// Close combo preference panel
+        /// </summary>
+        private void CloseComboPreferencePanel()
+        {
+            if (comboPreferencePanel != null)
+            {
+                comboPreferencePanel.SetActive(false);
+                Debug.Log("[BattleController] Combo preference panel closed");
             }
         }
         
@@ -1248,6 +1315,7 @@ namespace DiceGame
             }
             
             // Use ScoreCalculator to preview combo (default values only)
+            if (_scoreCalculator == null) return;
             var (comboName, baseScore, multiplier) = _scoreCalculator.PreviewCombo(lockedValues);
             
             // Update UI

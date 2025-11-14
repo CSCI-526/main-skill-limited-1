@@ -126,7 +126,7 @@ namespace DiceGame.Tutorial
                 if (backpackManager == null) backpackManager = battleController.backpackManager;
                 if (diceRowParent == null) diceRowParent = battleController.diceRowParent;
                 if (scoreAnimator == null) scoreAnimator = battleController.scoreAnimator;
-                if (openBackpackButton == null) openBackpackButton = battleController.openBackpackButton;
+                if (openBackpackButton == null && backpackManager != null) openBackpackButton = backpackManager.openBackpackButton;
                 if (rollButton == null) rollButton = battleController.rollButton;
                 if (submitComboButton == null) submitComboButton = battleController.submitComboButton;
             }
