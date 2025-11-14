@@ -206,8 +206,10 @@ namespace DiceGame.UI
                 canvasGroup.interactable = isInteractable;
             }
 
-            // Show/hide cooldown overlay and update text
-            UpdateCooldownDisplay(!isInteractable);
+            // Show/hide cooldown overlay - only show if dice is actually on cooldown
+            // Don't show overlay if dice is just disabled due to selection limit
+            bool isOnCooldown = _dice != null && _dice.cooldownRemain > 0;
+            UpdateCooldownDisplay(isOnCooldown);
         }
 
         /// <summary>
@@ -255,8 +257,9 @@ namespace DiceGame.UI
 
             // Add RectTransform for text
             RectTransform textRect = textGO.AddComponent<RectTransform>();
-            textRect.anchorMin = Vector2.zero;
-            textRect.anchorMax = Vector2.one;
+            // Anchor to bottom-middle area (20% to 40% from bottom)
+            textRect.anchorMin = new Vector2(0f, 0.2f);
+            textRect.anchorMax = new Vector2(1f, 0.4f);
             textRect.sizeDelta = Vector2.zero;
             textRect.anchoredPosition = Vector2.zero;
 
@@ -265,8 +268,8 @@ namespace DiceGame.UI
             _cooldownText.text = "IN CD";
             _cooldownText.fontSize = 20;
             _cooldownText.fontStyle = FontStyles.Bold;
-            _cooldownText.color = Color.white;
-            _cooldownText.alignment = TextAlignmentOptions.Center;
+            _cooldownText.color = Color.red;
+            _cooldownText.alignment = TextAlignmentOptions.Center; // Center both horizontally and vertically within the anchored area
             _cooldownText.raycastTarget = false;
 
             // Initially hide the overlay
