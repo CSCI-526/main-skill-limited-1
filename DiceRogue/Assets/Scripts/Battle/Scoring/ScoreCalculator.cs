@@ -294,59 +294,48 @@ namespace DiceGame.Core
             var freq = counts.Values.OrderByDescending(x => x).ToList();
             bool isLargeStraight = CheckLargeStraight(sorted);
             bool isSmallStraight = CheckSmallStraight(sorted);
-            bool allEven = sorted.All(v => v % 2 == 0);
-            bool allOdd = sorted.All(v => v % 2 == 1);
-            bool allLow = sorted.All(v => v <= 3);
-            bool allHigh = sorted.All(v => v >= 4);
-            int sum = sorted.Sum();
 
             // Combo evaluation (from highest to lowest priority)
             if (freq.Count == 1 && freq[0] == 5)
             {
-                baseScore = 180;
-                comboMultiplier = 4.0f;
-                return "Five of a Kind (Yahtzee)";
+                baseScore = 230;
+                comboMultiplier = 15.0f;
+                return "Five of a Kind";
             }
             else if (freq[0] == 4)
             {
-                baseScore = 120;
-                comboMultiplier = 2.5f;
+                baseScore = 170;
+                comboMultiplier = 7.0f;
                 return "Four of a Kind";
             }
             else if (freq[0] == 3 && freq.Contains(2))
             {
-                baseScore = 100;
-                comboMultiplier = 2.0f;
-                return "Full House (3+2)";
+                baseScore = 150;
+                comboMultiplier = 6.0f;
+                return "Full House";
             }
             else if (isLargeStraight)
             {
-                baseScore = 90;
-                comboMultiplier = 1.8f;
+                baseScore = 210;
+                comboMultiplier = 12.0f;
                 return "Large Straight (1–5 or 2–6)";
             }
             else if (isSmallStraight)
             {
-                baseScore = 75;
-                comboMultiplier = 1.5f;
+                baseScore = 135;
+                comboMultiplier = 5.0f;
                 return "Small Straight (any 4 in sequence)";
-            }
-            else if (sum == 21)  // Sum Jackpot has priority over Three of a Kind
-            {
-                baseScore = 70;
-                comboMultiplier = 1.8f;
-                return "Sum Jackpot (Total = 21)";
             }
             else if (freq[0] == 3)
             {
-                baseScore = 60;
-                comboMultiplier = 1.5f;
+                baseScore = 90;
+                comboMultiplier = 3.0f;
                 return "Three of a Kind";
             }
             else if (freq.Count >= 2 && freq[0] == 2 && freq[1] == 2)
             {
-                baseScore = 45;
-                comboMultiplier = 1.2f;
+                baseScore = 60;
+                comboMultiplier = 2.0f;
                 return "Two Pair";
             }
             else if (freq[0] == 2)
@@ -355,34 +344,10 @@ namespace DiceGame.Core
                 comboMultiplier = 1.0f;
                 return "One Pair";
             }
-            else if (allEven)
-            {
-                baseScore = 35;
-                comboMultiplier = 1.2f;
-                return "All Even Numbers";
-            }
-            else if (allOdd)
-            {
-                baseScore = 35;
-                comboMultiplier = 1.2f;
-                return "All Odd Numbers";
-            }
-            else if (allLow)
-            {
-                baseScore = 25;
-                comboMultiplier = 1.0f;
-                return "Low Roll (All ≤3)";
-            }
-            else if (allHigh)
-            {
-                baseScore = 25;
-                comboMultiplier = 1.0f;
-                return "High Roll (All ≥4)";
-            }
             else
             {
                 baseScore = 10;
-                comboMultiplier = 0.8f;
+                comboMultiplier = 0.5f;
                 return "No Combo (Bust)";
             }
         }
