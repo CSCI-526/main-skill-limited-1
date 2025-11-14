@@ -6052,7 +6052,7 @@ MonoBehaviour:
   relicDisplay: {fileID: 2110859706}
   diceCount: 5
   maxRollsPerHand: 5
-  baseTargetScore: 300
+  baseTargetScore: 10000
   cooldownSystem: {fileID: 1114827930}
 --- !u!224 &1233482898
 RectTransform:
