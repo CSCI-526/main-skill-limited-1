@@ -18,6 +18,7 @@ namespace DiceGame
         public static bool ContinuingFromReward = false;
         public static int PendingLevel = 1;
         public static int PendingTargetScore = 200;
+        public static int SavedMoney = 0; // Persist money across scene transitions
         
         // Static state for game over scene
         public static int GameOverFinalScore = 0;
@@ -48,6 +49,7 @@ namespace DiceGame
         public TMP_Text comboMultiplierText;// Combo multiplier preview
         public TMP_Text rollCountText;      // Roll count display (remaining rolls)
         public TMP_Text castCountText;      // Cast count display (remaining casts)
+        public TMP_Text moneyText;          // Money display
         
         [Header("UI - Score Display")]
         public ScoreAnimator scoreAnimator; // Animated score display system
@@ -75,6 +77,7 @@ namespace DiceGame
         private ProgressionManager _progressionManager;
         private BattleUIPresenter _uiPresenter;
         private HandCompositionService _compositionService;
+        private MoneyManager _moneyManager;
 
         // Current hand state
         private readonly List<BaseDice> _dice = new();
@@ -138,6 +141,7 @@ namespace DiceGame
             _scoreCalculator = new ScoreCalculator();
             _uiPresenter = new BattleUIPresenter();
             _compositionService = new HandCompositionService();
+            _moneyManager = new MoneyManager(SavedMoney); // Restore money from static state
             
             // Initialize progression manager
             // Check if continuing from reward scene to restore level/target
@@ -157,6 +161,7 @@ namespace DiceGame
             UpdateLevelInfo();
             UpdateComboPreview();
             UpdateRollAndCastCount(); // Initialize roll and cast counts
+            UpdateMoneyDisplay(); // Initialize money display
             
             // Track initial player progression
             UnityGameAnalytics.TrackPlayerProgression(_progressionManager.TotalScore, 0, _progressionManager.CurrentLevel);
@@ -947,18 +952,23 @@ namespace DiceGame
                     scoreAnimator.ResetTotalScore();
                 }
                 
-                // Reset relic system and give new random starting relic
-                _relicManager.ClearBackpack();
-                InitializeRelicSystem(giveStartingRelic: true);
-                
-                // Refresh dice pool and hand counter
-                cooldownSystem.RefreshDicePool();
-                
-                // Update displays
-                UpdateLevelInfo();
-                UpdateTargetScoreDisplay();
-                UpdateRollAndCastCount();
-                UpdateFeedback("Roll or Lock Dice");
+            // Reset relic system and give new random starting relic
+            _relicManager.ClearBackpack();
+            InitializeRelicSystem(giveStartingRelic: true);
+            
+            // Reset money (game over / restart)
+            _moneyManager.Reset();
+            SavedMoney = 0;
+            
+            // Refresh dice pool and hand counter
+            cooldownSystem.RefreshDicePool();
+            
+            // Update displays
+            UpdateLevelInfo();
+            UpdateTargetScoreDisplay();
+            UpdateRollAndCastCount();
+            UpdateMoneyDisplay();
+            UpdateFeedback("Roll or Lock Dice");
                 
                 // Start a new hand after refresh
                 StartNewHand();
@@ -1023,6 +1033,17 @@ namespace DiceGame
                 var (current, remaining) = cooldownSystem.GetHandCounter();
                 int remainingCasts = Mathf.Max(0, remaining);
                 castCountText.text = remainingCasts.ToString();
+            }
+        }
+
+        /// <summary>
+        /// Update money display
+        /// </summary>
+        private void UpdateMoneyDisplay()
+        {
+            if (moneyText != null && _moneyManager != null)
+            {
+                moneyText.text = _moneyManager.Money.ToString();
             }
         }
 
@@ -1112,10 +1133,15 @@ namespace DiceGame
             ContinuingFromReward = false;
             PendingLevel = 1;
             PendingTargetScore = baseTargetScore;
+            SavedMoney = 0;
             
             // Reset relic system and give new random starting relic
             _relicManager.ClearBackpack();
             InitializeRelicSystem(giveStartingRelic: true);
+            
+            // Reset money (settings reset)
+            _moneyManager.Reset();
+            SavedMoney = 0;
             
             // Refresh dice pool and hand counter
             cooldownSystem.RefreshDicePool();
@@ -1130,6 +1156,7 @@ namespace DiceGame
             UpdateLevelInfo();
             UpdateTargetScoreDisplay();
             UpdateRollAndCastCount();
+            UpdateMoneyDisplay();
             UpdateFeedback("Roll or Lock Dice");
             
             // Start a new hand
@@ -1214,7 +1241,7 @@ namespace DiceGame
             {
                 scoreAnimator.ResetTotalScore();
             }
-
+            
             // Reset roll budget for new level
             _handManager.Reset();
             _handManager.SetMaxRolls(maxRollsPerHand);
@@ -1226,6 +1253,7 @@ namespace DiceGame
             UpdateLevelInfo();
             UpdateTargetScoreDisplay();
             UpdateRollAndCastCount();
+            UpdateMoneyDisplay();
             UpdateFeedback("Roll or Lock Dice");
 
             // Start first hand of new level
@@ -1273,6 +1301,14 @@ namespace DiceGame
             
             if (passed)
             {
+                // Reward money: 5 + remaining casts
+                var (current, remaining) = cooldownSystem.GetHandCounter();
+                int rewardMoney = 5 + remaining;
+                _moneyManager.Add(rewardMoney);
+                SavedMoney = _moneyManager.Money; // Save money before scene transition
+                UpdateMoneyDisplay();
+                Debug.Log($"[BattleController] Level passed! Money reward: +{rewardMoney} (5 + {remaining} remaining casts), Total: {SavedMoney}");
+
                 // Prepare next level state for when we return from RewardScene
                 int nextLevel = _progressionManager.CurrentLevel + 1;
                 int nextTarget = _progressionManager.CalculateTargetScore(nextLevel);
