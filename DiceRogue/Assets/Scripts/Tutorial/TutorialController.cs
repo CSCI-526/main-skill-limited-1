@@ -188,7 +188,7 @@ namespace DiceGame.Tutorial
             tutorialSteps.Add(new TutorialStep
             {
                 title = "Roll Your Dice",
-                message = "Press Roll to throw your selected dice.",
+                message = "Press Roll to throw your unselected dice.",
                 highlightElement = rollButton != null ? rollButton.gameObject : null,
                 useNextButton = false,
                 waitForAction = true,
@@ -199,7 +199,7 @@ namespace DiceGame.Tutorial
             tutorialSteps.Add(new TutorialStep
             {
                 title = "Check Combo Preference",
-                message = "Review the Combo Preference panel to see which combinations are valuable",
+                message = "Click the Combo rule button to see which combinations are valuable",
                 useNextButton = true,
                 waitForAction = false,
                 layout = StepLayout.ComboInfo,
@@ -240,7 +240,7 @@ namespace DiceGame.Tutorial
             tutorialSteps.Add(new TutorialStep
             {
                 title = "Cooldown System",
-                message = "Dice selected and casted need one round to cooldown before reuse.",
+                message = "Dice casted need one round to cooldown before reuse.",
                 highlightElement = openBackpackButton != null ? openBackpackButton.gameObject : null,
                 useNextButton = true,
                 waitForAction = false,
