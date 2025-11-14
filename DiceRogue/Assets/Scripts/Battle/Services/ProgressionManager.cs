@@ -32,6 +32,34 @@ namespace DiceGame
         }
 
         /// <summary>
+        /// Initialize as tutorial mode (Level 0)
+        /// </summary>
+        public void InitializeTutorialMode()
+        {
+            _currentLevel = 0;
+            _currentTargetScore = 0; // No target score in tutorial
+            _totalScore = 0;
+            _sessionStartTime = Time.time;
+            Debug.Log("[ProgressionManager] Initialized in Tutorial Mode (Level 0)");
+        }
+
+        /// <summary>
+        /// Start normal game from Level 1 (called after tutorial completes)
+        /// </summary>
+        public void StartNormalGame()
+        {
+            _currentLevel = 1;
+            _currentTargetScore = _baseTargetScore;
+            _totalScore = 0;
+            Debug.Log($"[ProgressionManager] Started normal game - Level {_currentLevel}, Target: {_currentTargetScore}");
+        }
+
+        /// <summary>
+        /// Check if currently in tutorial mode
+        /// </summary>
+        public bool IsTutorialMode => _currentLevel == 0;
+
+        /// <summary>
         /// Add score from a completed hand
         /// </summary>
         public void AddScore(int score)
@@ -54,6 +82,13 @@ namespace DiceGame
         /// </summary>
         public bool EvaluateTargetScore()
         {
+            // Tutorial mode (Level 0) has no target score
+            if (_currentLevel == 0)
+            {
+                Debug.Log("[ProgressionManager] Target Evaluation skipped - Tutorial mode (Level 0)");
+                return false;
+            }
+            
             bool passed = _totalScore >= _currentTargetScore;
             Debug.Log($"[ProgressionManager] Target Evaluation - Target: {_currentTargetScore}, Final: {_totalScore}, Passed: {passed}");
             return passed;

@@ -44,7 +44,7 @@ namespace DiceGame.Tutorial
 
         [Header("Action Prompt Layout (left side)")]
         public Vector2 actionPromptSize = new Vector2(500f, 340f);
-        public Vector2 actionPromptOffset = new Vector2(40f, -40f);
+        public Vector2 actionPromptOffset = new Vector2(-80.0f, -40.0f);
         public Vector2 actionPromptAnchor = new Vector2(0.05f, 0.65f);
         public Vector2 actionPromptPivot = new Vector2(0f, 0.5f);
 
@@ -96,6 +96,10 @@ namespace DiceGame.Tutorial
             ConfigurePromptLayoutIfNeeded();
             HookGlobalListeners();
             CollectAllButtons();
+            
+            // Debug: Log the actual value of actionPromptOffset
+            Debug.Log($"[TutorialController] Start() - actionPromptOffset value: {actionPromptOffset}");
+            
             StartTutorialStep(0);
         }
 
@@ -251,19 +255,8 @@ namespace DiceGame.Tutorial
 
             tutorialSteps.Add(new TutorialStep
             {
-                title = "Cooldown System",
-                message = "Dice casted need one round to cooldown before reuse.",
-                highlightElement = openBackpackButton != null ? openBackpackButton.gameObject : null,
-                useNextButton = true,
-                waitForAction = false,
-                layout = StepLayout.ActionLeft,
-                requiredAction = TutorialAction.None
-            });
-
-            tutorialSteps.Add(new TutorialStep
-            {
                 title = "Tutorial Complete!",
-                message = "You're ready to play. Click Next to return to the main menu.",
+                message = "Great job! You've learned the basics. Click Next to claim your reward and start Level 1.",
                 useNextButton = true,
                 waitForAction = false,
                 layout = StepLayout.IntroCenter,
@@ -307,11 +300,12 @@ namespace DiceGame.Tutorial
             if (promptRect == null) promptRect = tutorialPromptPanel.GetComponent<RectTransform>();
             if (promptRect != null)
             {
+                // Only set default layout - ApplyLayoutForStep() will override with step-specific values
                 promptRect.anchorMin = promptAnchor;
                 promptRect.anchorMax = promptAnchor;
                 promptRect.pivot = promptPivot;
                 promptRect.sizeDelta = promptSize;
-                promptRect.anchoredPosition = promptOffset;
+                // Don't set anchoredPosition here - let ApplyLayoutForStep() handle it per step
             }
 
             if (tutorialText != null)
@@ -562,7 +556,8 @@ namespace DiceGame.Tutorial
 
             if (stepIndex >= tutorialSteps.Count)
             {
-                CompleteTutorial();
+                // This should not happen as last step handles completion via Next button
+                CompleteTutorialAndGoToReward();
                 return;
             }
 
@@ -641,27 +636,6 @@ namespace DiceGame.Tutorial
             else
             {
                 currentRequiredAction = TutorialAction.None;
-                
-                // Special handling for cooldown step - show backpack
-                if (step.title == "Cooldown System")
-                {
-                    ShowBackpackForCooldownExplanation();
-                }
-                
-                if (!step.useNextButton)
-                {
-                    // Auto-advance if there is no action and no button (not used in current flow)
-                    StartCoroutine(AutoAdvanceAfterDelay(1.0f));
-                }
-            }
-        }
-
-        IEnumerator AutoAdvanceAfterDelay(float delay)
-        {
-            yield return new WaitForSeconds(delay);
-            if (currentRequiredAction == TutorialAction.None && isTutorialActive)
-            {
-                StartTutorialStep(currentStepIndex + 1);
             }
         }
 
@@ -740,6 +714,7 @@ namespace DiceGame.Tutorial
                     promptRect.pivot = actionPromptPivot;
                     promptRect.sizeDelta = actionPromptSize;
                     promptRect.anchoredPosition = actionPromptOffset;
+                    Debug.Log($"[TutorialController] Applied ActionLeft layout - Offset: {actionPromptOffset}, Actual Position: {promptRect.anchoredPosition}");
                     if (tutorialText != null)
                     {
                         tutorialText.alignment = TextAlignmentOptions.TopLeft;
@@ -1118,17 +1093,19 @@ namespace DiceGame.Tutorial
             originalButtonStates.Clear();
         }
 
-        void ShowBackpackForCooldownExplanation()
-        {
-            // Show backpack in view-only mode to display cooldown dice
-            if (backpackManager != null)
-            {
-                backpackManager.ShowBackpack(BackpackMode.ViewOnly);
-            }
-        }
-
         void OnTutorialContinue()
         {
+            // Check if this is the last step (Tutorial Complete)
+            if (currentStepIndex >= 0 && currentStepIndex < tutorialSteps.Count)
+            {
+                var currentStep = tutorialSteps[currentStepIndex];
+                if (currentStep.title == "Tutorial Complete!")
+                {
+                    CompleteTutorialAndGoToReward();
+                    return;
+                }
+            }
+            
             HidePrompt();
             ClearHighlights();
             RestoreAllButtons();
@@ -1539,28 +1516,51 @@ namespace DiceGame.Tutorial
             StartTutorialStep(currentStepIndex + 1);
         }
 
-        void CompleteTutorial()
+        /// <summary>
+        /// Clean up all tutorial state and reset flags
+        /// </summary>
+        void CleanupTutorialState()
+        {
+            HidePrompt();
+            ClearHighlights();
+            RestoreAllButtons();
+            CleanupDiceViewListeners();
+            UnhookDiceLockEvent();
+            
+            currentRequiredAction = TutorialAction.None;
+            lockStepCompleted = false;
+            awaitingSecondRoll = false;
+        }
+
+        /// <summary>
+        /// Complete tutorial and transition to RewardScene, then return to Level 1
+        /// </summary>
+        void CompleteTutorialAndGoToReward()
         {
             if (!isTutorialActive) return;
 
             isTutorialActive = false;
-            HidePrompt();
+            CleanupTutorialState();
+            
+            // Save tutorial completion
             PlayerPrefs.SetInt("HasCompletedTutorial", 1);
             PlayerPrefs.Save();
 
-            if (RunLoader.Instance != null)
+            // Prepare Level 1 state for when returning from RewardScene
+            int targetScore = battleController != null ? battleController.baseTargetScore : 200;
+            
+            BattleController.PendingLevel = 1;
+            BattleController.PendingTargetScore = targetScore;
+            BattleController.ContinuingFromReward = true;
+            BattleController.IsTutorialMode = false;
+            
+            if (battleController == null)
             {
-                RunLoader.Instance.StartRun();
+                Debug.LogWarning("[TutorialController] BattleController not found - using fallback values");
             }
-            else
-            {
-                SceneManager.LoadScene("BattleScene");
-            }
-        }
-
-        IEnumerator ReturnToMainMenu()
-        {
-            yield return DiceRogue.Boot.RunLoader.Instance.LoadSceneWithWipe("MainScene");
+            
+            Debug.Log("[TutorialController] Tutorial completed - transitioning to RewardScene, then Level 1");
+            SceneManager.LoadScene("RewardScene");
         }
 
         #endregion
