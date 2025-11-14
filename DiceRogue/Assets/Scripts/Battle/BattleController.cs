@@ -14,15 +14,11 @@ namespace DiceGame
 {
     public class BattleController : MonoBehaviour
     {
-        // Static instance for cross-scene access (e.g., shop scene)
-        public static BattleController Instance { get; private set; }
-        
         // Static state for scene transitions
         public static bool ContinuingFromReward = false;
         public static int PendingLevel = 1;
         public static int PendingTargetScore = 200;
         public static int SavedMoney = 0; // Persist money across scene transitions
-        public static List<string> SavedRelicNames = new List<string>(); // Persist relic names across scene transitions
         
         // Static state for game over scene
         public static int GameOverFinalScore = 0;
@@ -93,163 +89,11 @@ namespace DiceGame
         private readonly List<DiceView> _views = new();
         private bool _isSubmitting = false; // Guard to prevent multiple submissions
 
-        void Awake()
-        {
-            // Singleton pattern: ensure only one BattleController exists
-            if (Instance != null && Instance != this)
-            {
-                Debug.LogWarning("[BattleController] Duplicate BattleController detected. Destroying duplicate.");
-                Destroy(gameObject);
-                return;
-            }
-            
-            Instance = this;
-            DontDestroyOnLoad(gameObject);
-            
-            // Subscribe to scene loaded event to reinitialize UI when returning to BattleScene
-            SceneManager.sceneLoaded += OnSceneLoaded;
-            
-            Debug.Log("[BattleController] BattleController set to persist across scenes.");
-        }
-        
-        /// <summary>
-        /// Called when a scene is loaded - reinitialize UI if returning to BattleScene
-        /// </summary>
-        private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
-        {
-            if (scene.name == "BattleScene")
-            {
-                Debug.Log("[BattleController] BattleScene loaded - reinitializing UI...");
-                // Reinitialize UI components when returning to BattleScene
-                InitializeBattleSceneUI();
-            }
-        }
-
         void Start()
         {
-            // Check if we're in BattleScene (for UI initialization)
-            bool isBattleScene = SceneManager.GetActiveScene().name == "BattleScene";
-            
             // Initialize analytics first
             InitializeAnalytics();
             
-            // Initialize core components (always needed, even in shop scene)
-            InitializeCoreComponents();
-            
-            // Only initialize UI and battle-specific systems in BattleScene
-            if (isBattleScene)
-            {
-                InitializeBattleSceneUI();
-            }
-            else
-            {
-                Debug.Log($"[BattleController] Not in BattleScene ({SceneManager.GetActiveScene().name}). Skipping UI initialization.");
-            }
-        }
-        
-        /// <summary>
-        /// Initialize core game systems (needed across all scenes)
-        /// </summary>
-        private void InitializeCoreComponents()
-        {
-            // Initialize core managers (always needed)
-            // CRITICAL: Never recreate RelicManager if it already exists - this would lose all relics!
-            if (_relicManager == null)
-            {
-                Debug.Log("[BattleController] Creating new RelicManager instance");
-                _relicManager = new RelicManager();
-            }
-            else
-            {
-                // RelicManager already exists - verify it has the expected state
-                int backpackCount = _relicManager.PlayerBackpack?.Count ?? 0;
-                int poolCount = _relicManager.GlobalRelicPool?.Count ?? 0;
-                Debug.Log($"[BattleController] RelicManager already exists - Backpack: {backpackCount}, Pool: {poolCount}");
-            }
-            
-            if (_moneyManager == null)
-            {
-                _moneyManager = new MoneyManager(SavedMoney); // Restore money from static state
-            }
-            
-            if (_progressionManager == null)
-            {
-                // Initialize progression manager
-                // Check if continuing from reward scene to restore level/target
-                if (ContinuingFromReward)
-                {
-                    _progressionManager = new ProgressionManager(baseTargetScore);
-                    _progressionManager.RestoreLevelState(PendingLevel, PendingTargetScore);
-                    ContinuingFromReward = false; // Reset flag
-                    Debug.Log($"[BattleController] Continuing from Reward Scene - Level {PendingLevel}, Target: {PendingTargetScore}");
-                }
-                else
-                {
-                    _progressionManager = new ProgressionManager(baseTargetScore);
-                }
-            }
-            
-            // Initialize relic system: global pool and empty backpack
-            // Give player a random starting relic if this is a new game (not continuing from reward)
-            // Use static SavedRelicNames to restore relics across scene transitions
-            bool hasRelics = _relicManager.PlayerBackpack != null && _relicManager.PlayerBackpack.Count > 0;
-            bool globalPoolEmpty = _relicManager.GlobalRelicPool == null || _relicManager.GlobalRelicPool.Count == 0;
-            bool hasSavedRelics = SavedRelicNames != null && SavedRelicNames.Count > 0;
-            
-            Debug.Log($"[BattleController] InitializeCoreComponents - HasRelics: {hasRelics} (count: {(_relicManager.PlayerBackpack?.Count ?? 0)}), HasSavedRelics: {hasSavedRelics} (count: {SavedRelicNames?.Count ?? 0}), GlobalPoolEmpty: {globalPoolEmpty}, ContinuingFromReward: {ContinuingFromReward}");
-            
-            // Restore relics from static saved list if backpack is empty but we have saved relics
-            if (!hasRelics && hasSavedRelics)
-            {
-                Debug.Log($"[BattleController] Restoring {SavedRelicNames.Count} relics from saved list: [{string.Join(", ", SavedRelicNames)}]");
-                RestoreRelicsFromSavedNames();
-                hasRelics = true; // Update flag after restoration
-                // Re-check global pool status after restoration (RestoreRelicsFromSavedNames ensures it exists)
-                globalPoolEmpty = _relicManager.GlobalRelicPool == null || _relicManager.GlobalRelicPool.Count == 0;
-            }
-            
-            if (hasRelics)
-            {
-                // Player already has relics - NEVER reinitialize global pool
-                // Reinitializing would create new ScriptableObject instances and break references
-                Debug.Log($"[BattleController] ✓ Preserving {_relicManager.PlayerBackpack.Count} existing relics - skipping global pool reinitialization");
-                
-                // Ensure global pool exists (reinitialize only if empty and we have relics)
-                // Note: This should rarely happen since RestoreRelicsFromSavedNames ensures the pool exists
-                if (globalPoolEmpty)
-                {
-                    Debug.Log("[BattleController] Global pool is empty but player has relics - reinitializing pool to ensure new relics can be added");
-                    _relicManager.InitializeGlobalRelicPool();
-                }
-            }
-            else if (globalPoolEmpty)
-            {
-                // No relics and no global pool - safe to initialize fresh
-                bool isNewGame = !ContinuingFromReward;
-                Debug.Log($"[BattleController] Initializing relic system fresh (isNewGame: {isNewGame})");
-                InitializeRelicSystem(giveStartingRelic: isNewGame);
-            }
-            else
-            {
-                // Global pool exists but player has no relics - this is fine, just update UI
-                Debug.Log("[BattleController] Global pool exists but player has no relics - skipping initialization");
-            }
-            
-            // Always update relic display UI when returning to BattleScene
-            if (relicDisplay != null)
-            {
-                relicDisplay.DisplayRelics(_relicManager);
-            }
-            
-            // Debug: Log final state
-            Debug.Log($"[BattleController] Final state - PlayerBackpack: {(_relicManager.PlayerBackpack?.Count ?? 0)} relics, GlobalPool: {(_relicManager.GlobalRelicPool?.Count ?? 0)} relics, SavedRelicNames: {SavedRelicNames?.Count ?? 0}");
-        }
-        
-        /// <summary>
-        /// Initialize UI and battle-specific systems (only in BattleScene)
-        /// </summary>
-        private void InitializeBattleSceneUI()
-        {
             // Initialize cooldown system if not assigned
             if (cooldownSystem == null)
             {
@@ -297,36 +141,30 @@ namespace DiceGame
                 Debug.LogError("[BattleController] BackpackManager not assigned!");
             }
 
-            // Initialize battle-specific components
-            if (_handManager == null)
-            {
-                _handManager = new HandManager();
-                _handManager.SetMaxRolls(maxRollsPerHand);
-            }
+            // Initialize core components first (needed for other initialization)
+            _handManager = new HandManager();
+            _handManager.SetMaxRolls(maxRollsPerHand);
             
-            if (_effectHandler == null)
-            {
-                _effectHandler = new DiceEffectHandler();
-            }
+            _effectHandler = new DiceEffectHandler();
+            _viewFactory = new DiceViewFactory(diceViewPrefab, diceRowParent);
+            _relicManager = new RelicManager();
+            _scoreCalculator = new ScoreCalculator();
+            _uiPresenter = new BattleUIPresenter();
+            _compositionService = new HandCompositionService();
+            _moneyManager = new MoneyManager(SavedMoney); // Restore money from static state
             
-            if (_viewFactory == null)
+            // Initialize progression manager
+            // Check if continuing from reward scene to restore level/target
+            if (ContinuingFromReward)
             {
-                _viewFactory = new DiceViewFactory(diceViewPrefab, diceRowParent);
+                _progressionManager = new ProgressionManager(baseTargetScore);
+                _progressionManager.RestoreLevelState(PendingLevel, PendingTargetScore);
+                ContinuingFromReward = false; // Reset flag
+                Debug.Log($"[BattleController] Continuing from Reward Scene - Level {PendingLevel}, Target: {PendingTargetScore}");
             }
-            
-            if (_scoreCalculator == null)
+            else
             {
-                _scoreCalculator = new ScoreCalculator();
-            }
-            
-            if (_uiPresenter == null)
-            {
-                _uiPresenter = new BattleUIPresenter();
-            }
-            
-            if (_compositionService == null)
-            {
-                _compositionService = new HandCompositionService();
+                _progressionManager = new ProgressionManager(baseTargetScore);
             }
             
             UpdateTargetScoreDisplay();
@@ -344,6 +182,11 @@ namespace DiceGame
                 continueButton.gameObject.SetActive(false);
                 continueButton.onClick.AddListener(OnContinue);
             }
+            
+            // Initialize relic system: global pool and empty backpack
+            // Give player a random starting relic if this is a new game (not continuing from reward)
+            bool isNewGame = !ContinuingFromReward;
+            InitializeRelicSystem(isNewGame);
 
             // Subscribe to cooldown system events
             cooldownSystem.OnDicePoolRefresh += OnDicePoolRefresh;
@@ -509,17 +352,6 @@ namespace DiceGame
         /// <param name="giveStartingRelic">If true, give player a random starting relic</param>
         private void InitializeRelicSystem(bool giveStartingRelic = false)
         {
-            // SAFETY CHECK: Never initialize if player already has relics
-            // This prevents accidentally clearing the global pool and breaking references
-            bool hasRelics = _relicManager.PlayerBackpack != null && _relicManager.PlayerBackpack.Count > 0;
-            if (hasRelics)
-            {
-                Debug.LogError("[BattleController] InitializeRelicSystem called but player already has relics! This should never happen. Aborting to preserve relics.");
-                return;
-            }
-            
-            Debug.Log("[BattleController] InitializeRelicSystem - Initializing global relic pool");
-            
             // Initialize global relic pool (all relics available this run)
             _relicManager.InitializeGlobalRelicPool();
             
@@ -563,136 +395,6 @@ namespace DiceGame
                 {
                     Debug.LogWarning($"[BattleController] Failed to add starting relic: {startingRelic.relicName}");
                 }
-            }
-        }
-
-        /// <summary>
-        /// Give player a random relic from the global pool after passing a level
-        /// Filters out relics the player already has to avoid duplicates
-        /// </summary>
-        private void GiveRandomRelicAfterLevelPass()
-        {
-            var globalPool = _relicManager.GlobalRelicPool;
-            if (globalPool == null || globalPool.Count == 0)
-            {
-                Debug.LogWarning("[BattleController] Cannot give level pass relic - global pool is empty!");
-                return;
-            }
-
-            // Get relics the player already has
-            var playerBackpack = _relicManager.PlayerBackpack;
-            var ownedRelicNames = new HashSet<string>();
-            int backpackCount = 0;
-            foreach (var ownedRelic in playerBackpack)
-            {
-                if (ownedRelic != null)
-                {
-                    ownedRelicNames.Add(ownedRelic.relicName);
-                    backpackCount++;
-                }
-            }
-            
-            Debug.Log($"[BattleController] GiveRandomRelicAfterLevelPass - Player currently has {backpackCount} relics: [{string.Join(", ", ownedRelicNames)}]");
-            Debug.Log($"[BattleController] Global pool has {globalPool.Count} relics");
-
-            // Filter out relics the player already has
-            var availableRelics = globalPool
-                .Where(r => r != null && !ownedRelicNames.Contains(r.relicName))
-                .ToList();
-
-            Debug.Log($"[BattleController] Available relics (not owned): {availableRelics.Count}");
-
-            if (availableRelics.Count == 0)
-            {
-                Debug.LogWarning("[BattleController] Cannot give level pass relic - player already has all available relics!");
-                return;
-            }
-
-            // Randomly select a relic from available relics
-            int randomIndex = Random.Range(0, availableRelics.Count);
-            var newRelic = availableRelics[randomIndex];
-            
-            if (newRelic != null)
-            {
-                bool success = _relicManager.AddRelicToBackpack(newRelic);
-                if (success)
-                {
-                    Debug.Log($"[BattleController] ✓ Successfully gave player level pass relic: {newRelic.relicName} ({newRelic.rarity})");
-                    Debug.Log($"[BattleController] Player now has {_relicManager.PlayerBackpack.Count} total relics");
-                    
-                    // Update relic display UI
-                    if (relicDisplay != null)
-                    {
-                        relicDisplay.DisplayRelics(_relicManager);
-                    }
-                }
-                else
-                {
-                    Debug.LogWarning($"[BattleController] ✗ Failed to add level pass relic: {newRelic.relicName}");
-                }
-            }
-        }
-
-        /// <summary>
-        /// Save current relic names to static list for persistence across scene transitions
-        /// </summary>
-        private void SaveRelicNamesToStatic()
-        {
-            SavedRelicNames.Clear();
-            
-            if (_relicManager?.PlayerBackpack != null)
-            {
-                foreach (var relic in _relicManager.PlayerBackpack)
-                {
-                    if (relic != null && !string.IsNullOrEmpty(relic.relicName))
-                    {
-                        SavedRelicNames.Add(relic.relicName);
-                    }
-                }
-            }
-            
-            Debug.Log($"[BattleController] Saved {SavedRelicNames.Count} relic names to static list: [{string.Join(", ", SavedRelicNames)}]");
-        }
-
-        /// <summary>
-        /// Restore relics from saved names list (used when returning from RewardScene)
-        /// </summary>
-        private void RestoreRelicsFromSavedNames()
-        {
-            if (SavedRelicNames == null || SavedRelicNames.Count == 0)
-            {
-                Debug.Log("[BattleController] No saved relic names to restore");
-                return;
-            }
-
-            // Ensure global pool exists
-            if (_relicManager.GlobalRelicPool == null || _relicManager.GlobalRelicPool.Count == 0)
-            {
-                Debug.LogWarning("[BattleController] Global pool is empty - initializing before restoring relics");
-                _relicManager.InitializeGlobalRelicPool();
-            }
-
-            int restoredCount = 0;
-            foreach (var relicName in SavedRelicNames)
-            {
-                bool success = _relicManager.AddRelicToBackpackByName(relicName);
-                if (success)
-                {
-                    restoredCount++;
-                    Debug.Log($"[BattleController] ✓ Restored relic: {relicName}");
-                }
-                else
-                {
-                    Debug.LogWarning($"[BattleController] ✗ Failed to restore relic: {relicName}");
-                }
-            }
-            
-            Debug.Log($"[BattleController] Restored {restoredCount}/{SavedRelicNames.Count} relics from saved names");
-            
-            // Update relic display UI
-            if (relicDisplay != null)
-            {
-                relicDisplay.DisplayRelics(_relicManager);
             }
         }
 
@@ -840,25 +542,8 @@ namespace DiceGame
 
     private void OnDiceSelectedFromBackpack(List<BaseDice> selectedDice)
     {
-        // Debug: Log what was selected
-        Debug.Log($"[BattleController] OnDiceSelectedFromBackpack called with {selectedDice.Count} dice:");
-        foreach (var d in selectedDice)
-        {
-            Debug.Log($"  - {d.diceName} ({(d is NormalDice ? "NormalDice" : d.GetType().Name)})");
-        }
-        
-        // Filter out any NormalDice that might have been accidentally included in selection
-        var specialDiceOnly = selectedDice.Where(d => !(d is NormalDice)).ToList();
-        Debug.Log($"[BattleController] Filtered to {specialDiceOnly.Count} special dice (removed {selectedDice.Count - specialDiceOnly.Count} NormalDice)");
-        
-        // Use HandCompositionService to compose the hand (only with special dice)
-        var composedHand = _compositionService.ComposeHandWithSelection(specialDiceOnly, diceCount);
-        
-        Debug.Log($"[BattleController] Composed hand has {composedHand.Count} dice:");
-        foreach (var d in composedHand)
-        {
-            Debug.Log($"  - {d.diceName} ({(d is NormalDice ? "NormalDice" : d.GetType().Name)})");
-        }
+        // Use HandCompositionService to compose the hand
+        var composedHand = _compositionService.ComposeHandWithSelection(selectedDice, diceCount);
         
         _dice.Clear(); // Clear existing dice before adding the new selection
         _dice.AddRange(composedHand);
@@ -885,9 +570,6 @@ namespace DiceGame
         // Reset dice state for new hand
         _compositionService.ResetHandDice(_dice);
 
-        // Clear existing views before creating new ones (important with DontDestroyOnLoad)
-        _viewFactory.DestroyViews(_views);
-        
         // Create views using factory (includes placeholders for empty slots)
         var newViews = _viewFactory.CreateViews(_dice, diceCount);
         _views.AddRange(newViews);
@@ -1326,7 +1008,6 @@ namespace DiceGame
             // Reset money (game over / restart)
             _moneyManager.Reset();
             SavedMoney = 0;
-            SavedRelicNames.Clear();
             
             // Refresh dice pool and hand counter
             cooldownSystem.RefreshDicePool();
@@ -1562,7 +1243,6 @@ namespace DiceGame
             PendingLevel = 1;
             PendingTargetScore = baseTargetScore;
             SavedMoney = 0;
-            SavedRelicNames.Clear();
             
             // Reset relic system and give new random starting relic
             _relicManager.ClearBackpack();
@@ -1766,12 +1446,6 @@ namespace DiceGame
                 
                 Debug.Log($"[BattleController] Level passed! Money reward: +{rewardMoney} (5 + {remaining} remaining casts), Total: {SavedMoney}");
 
-                // Give player a random relic after passing the level
-                GiveRandomRelicAfterLevelPass();
-
-                // Save relic names to static list before transitioning to RewardScene
-                SaveRelicNamesToStatic();
-
                 // Prepare next level state for when we return from RewardScene
                 int nextLevel = _progressionManager.CurrentLevel + 1;
                 int nextTarget = _progressionManager.CalculateTargetScore(nextLevel);
@@ -1899,9 +1573,6 @@ namespace DiceGame
         /// </summary>
         void OnDestroy()
         {
-            // Unsubscribe from scene loaded event
-            SceneManager.sceneLoaded -= OnSceneLoaded;
-            
             if (cooldownSystem != null)
             {
                 cooldownSystem.OnDicePoolRefresh -= OnDicePoolRefresh;
@@ -1910,12 +1581,6 @@ namespace DiceGame
             
             // Unsubscribe from dice lock changes
             DiceView.OnDiceLockChanged -= UpdateComboPreview;
-            
-            // Clear instance if this is the current instance
-            if (Instance == this)
-            {
-                Instance = null;
-            }
         }
     }
 }
