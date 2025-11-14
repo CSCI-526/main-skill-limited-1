@@ -168,8 +168,10 @@ namespace DiceGame
                 continueButton.onClick.AddListener(OnContinue);
             }
             
-            // Add test relics (for demonstration - will be removed when proper relic acquisition system is added)
-            InitializeTestRelics();
+            // Initialize relic system: global pool and empty backpack
+            // Give player a random starting relic if this is a new game (not continuing from reward)
+            bool isNewGame = !ContinuingFromReward;
+            InitializeRelicSystem(isNewGame);
 
             // Subscribe to cooldown system events
             cooldownSystem.OnDicePoolRefresh += OnDicePoolRefresh;
@@ -287,28 +289,18 @@ namespace DiceGame
         }
 
         /// <summary>
-        /// Initialize test relics for demonstration (will load from ScriptableObjects after Unity setup)
+        /// Initialize relic system: set up global relic pool and empty player backpack
         /// </summary>
-        private void InitializeTestRelics()
+        /// <param name="giveStartingRelic">If true, give player a random starting relic</param>
+        private void InitializeRelicSystem(bool giveStartingRelic = false)
         {
-            // Try to load relic ScriptableObjects from Resources
-            // User should create these in Unity and place them in Assets/Resources/Relics/
-            var relicAssets = Resources.LoadAll<RelicBase>("Relics");
+            // Initialize global relic pool (all relics available this run)
+            _relicManager.InitializeGlobalRelicPool();
             
-            if (relicAssets != null && relicAssets.Length > 0)
+            // Give player a random starting relic if this is a new game
+            if (giveStartingRelic)
             {
-                Debug.Log($"[BattleController] Found {relicAssets.Length} relic(s) in Resources/Relics/");
-                foreach (var relic in relicAssets)
-                {
-                    if (_relicManager.AddRelic(relic))
-                    {
-                        Debug.Log($"[BattleController] Equipped relic: {relic.relicName} ({relic.rarity})");
-                    }
-                }
-            }
-            else
-            {
-                Debug.LogWarning("[BattleController] No relics found in Resources/Relics/. Create ScriptableObject relics in Unity to test the system.");
+                GiveRandomStartingRelic();
             }
             
             // Update relic display UI
@@ -316,6 +308,72 @@ namespace DiceGame
             {
                 relicDisplay.DisplayRelics(_relicManager);
             }
+        }
+
+        /// <summary>
+        /// Give player a random relic from the global pool as starting relic
+        /// </summary>
+        private void GiveRandomStartingRelic()
+        {
+            var globalPool = _relicManager.GlobalRelicPool;
+            if (globalPool == null || globalPool.Count == 0)
+            {
+                Debug.LogWarning("[BattleController] Cannot give starting relic - global pool is empty!");
+                return;
+            }
+
+            // Randomly select a relic from the global pool
+            int randomIndex = Random.Range(0, globalPool.Count);
+            var startingRelic = globalPool[randomIndex];
+            
+            if (startingRelic != null)
+            {
+                bool success = _relicManager.AddRelicToBackpack(startingRelic);
+                if (success)
+                {
+                    Debug.Log($"[BattleController] Gave player starting relic: {startingRelic.relicName} ({startingRelic.rarity})");
+                }
+                else
+                {
+                    Debug.LogWarning($"[BattleController] Failed to add starting relic: {startingRelic.relicName}");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Add a relic to the player's backpack (called by shop, rewards, etc.)
+        /// </summary>
+        /// <param name="relic">The relic to add</param>
+        /// <returns>True if added successfully</returns>
+        public bool AddRelicToPlayerBackpack(RelicBase relic)
+        {
+            bool success = _relicManager.AddRelicToBackpack(relic);
+            
+            if (success && relicDisplay != null)
+            {
+                // Refresh UI to show the new relic
+                relicDisplay.DisplayRelics(_relicManager);
+            }
+            
+            return success;
+        }
+
+        /// <summary>
+        /// Add a relic to the player's backpack by name (searches global pool)
+        /// </summary>
+        /// <param name="relicName">Name of the relic to add</param>
+        /// <returns>True if added successfully</returns>
+        public bool AddRelicToPlayerBackpackByName(string relicName)
+        {
+            bool success = _relicManager.AddRelicToBackpackByName(relicName);
+            
+            if (success && relicDisplay != null)
+            {
+                // Refresh UI to show the new relic
+                relicDisplay.DisplayRelics(_relicManager);
+            }
+            
+            return success;
         }
 
         /// <summary>
@@ -889,6 +947,10 @@ namespace DiceGame
                     scoreAnimator.ResetTotalScore();
                 }
                 
+                // Reset relic system and give new random starting relic
+                _relicManager.ClearBackpack();
+                InitializeRelicSystem(giveStartingRelic: true);
+                
                 // Refresh dice pool and hand counter
                 cooldownSystem.RefreshDicePool();
                 
@@ -1050,6 +1112,10 @@ namespace DiceGame
             ContinuingFromReward = false;
             PendingLevel = 1;
             PendingTargetScore = baseTargetScore;
+            
+            // Reset relic system and give new random starting relic
+            _relicManager.ClearBackpack();
+            InitializeRelicSystem(giveStartingRelic: true);
             
             // Refresh dice pool and hand counter
             cooldownSystem.RefreshDicePool();
