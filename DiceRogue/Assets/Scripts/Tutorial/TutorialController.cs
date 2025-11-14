@@ -73,11 +73,20 @@ namespace DiceGame.Tutorial
         private bool lockStepCompleted;
         private bool awaitingSecondRoll;
         private System.Action diceLockChangedHandler;
+        [Header("Lock Dice Requirements")]
+        [Tooltip("How many dice the player must lock before the tutorial advances.")]
+        public int requiredLockedDiceCount = 3;
 
         private RectTransform promptRect;
         private RectTransform textRect;
         private RectTransform nextButtonRect;
         private TextMeshProUGUI nextButtonLabel;
+
+        // Highlighting system
+        private readonly List<GameObject> highlightedElements = new();
+        private readonly List<Coroutine> highlightCoroutines = new();
+        private readonly Dictionary<Button, bool> originalButtonStates = new();
+        private readonly List<Button> allButtons = new();
 
         void Start()
         {
@@ -86,6 +95,7 @@ namespace DiceGame.Tutorial
             InitializeTutorialUI();
             ConfigurePromptLayoutIfNeeded();
             HookGlobalListeners();
+            CollectAllButtons();
             StartTutorialStep(0);
         }
 
@@ -94,6 +104,8 @@ namespace DiceGame.Tutorial
             UnhookGlobalListeners();
             CleanupDiceViewListeners();
             UnhookDiceLockEvent();
+            ClearHighlights();
+            RestoreAllButtons();
         }
 
         #region Setup
@@ -178,7 +190,7 @@ namespace DiceGame.Tutorial
             tutorialSteps.Add(new TutorialStep
             {
                 title = "Lock Dice",
-                message = "Click the dice you want to keep, so that roll dices won't change their value, up to five dices can be locked.",
+                message = "Click the dice you want to keep. Locked dice won't change when you roll. Lock any three dice to continue.",
                 useNextButton = false,
                 waitForAction = true,
                 layout = StepLayout.ActionLeft,
@@ -198,7 +210,7 @@ namespace DiceGame.Tutorial
 
             tutorialSteps.Add(new TutorialStep
             {
-                title = "Check Combo Preference",
+                title = "Check Combo Rules",
                 message = "Click the Combo rule button to see which combinations are valuable",
                 useNextButton = true,
                 waitForAction = false,
@@ -560,7 +572,19 @@ namespace DiceGame.Tutorial
             ApplyLayoutForStep(step);
             SetNextButtonVisible(step.useNextButton);
             ShowPrompt(step.title, step.message);
-            HighlightElement(step.highlightElement);
+            
+            // Manage button states (disable non-required buttons)
+            ManageButtonStates(step);
+            
+            // Highlight required elements
+            if (step.requiredAction == TutorialAction.LockDice)
+            {
+                HighlightDiceViews();
+            }
+            else
+            {
+                HighlightElement(step.highlightElement);
+            }
             
             // Force text update after all layout changes
             if (tutorialText != null)
@@ -582,6 +606,8 @@ namespace DiceGame.Tutorial
                     {
                         StartCoroutine(RetryHookDiceSelectionButton());
                     }
+                    // Re-collect buttons after backpack opens (dice buttons are created dynamically)
+                    StartCoroutine(RefreshButtonsAfterBackpackOpens());
                 }
                 else if (step.requiredAction == TutorialAction.RollDice)
                 {
@@ -600,6 +626,8 @@ namespace DiceGame.Tutorial
                     HookDiceLockEvent();
                     // Wait for dice views to be ready (rolled and interactable)
                     StartCoroutine(WaitForDiceViewsReadyAndAttach());
+                    // Re-collect buttons after dice views are spawned
+                    StartCoroutine(RefreshButtonsAfterDiceSpawn());
                 }
                 else if (step.requiredAction == TutorialAction.ScoreAnimationComplete)
                 {
@@ -790,9 +818,304 @@ namespace DiceGame.Tutorial
             }
         }
 
+        void CollectAllButtons()
+        {
+            allButtons.Clear();
+            Button[] buttons = FindObjectsOfType<Button>(true);
+            foreach (var btn in buttons)
+            {
+                if (btn != null && !allButtons.Contains(btn))
+                {
+                    allButtons.Add(btn);
+                    originalButtonStates[btn] = btn.interactable;
+                }
+            }
+        }
+
         void HighlightElement(GameObject element)
         {
-            // Placeholder: add visual effects (pulse, outline) here later
+            ClearHighlights();
+            
+            if (element == null) return;
+
+            highlightedElements.Add(element);
+            Coroutine highlightCoroutine = StartCoroutine(PulseHighlight(element));
+            highlightCoroutines.Add(highlightCoroutine);
+        }
+
+        void HighlightDiceViews()
+        {
+            ClearHighlights();
+            
+            DiceView[] views = null;
+            if (diceRowParent != null)
+            {
+                views = diceRowParent.GetComponentsInChildren<DiceView>(true);
+            }
+            
+            if (views == null || views.Length == 0)
+            {
+                views = FindObjectsOfType<DiceView>(true);
+            }
+            
+            if (views != null && views.Length > 0)
+            {
+                foreach (var view in views)
+                {
+                    if (view != null && view.model != null && view.model.tier != DiceTier.Filler)
+                    {
+                        highlightedElements.Add(view.gameObject);
+                        Coroutine highlightCoroutine = StartCoroutine(PulseHighlight(view.gameObject));
+                        highlightCoroutines.Add(highlightCoroutine);
+                    }
+                }
+            }
+        }
+
+        IEnumerator PulseHighlight(GameObject element)
+        {
+            if (element == null) yield break;
+            
+            RectTransform rect = element.GetComponent<RectTransform>();
+            if (rect == null) yield break;
+            
+            Vector3 originalScale = rect.localScale;
+            float pulseSpeed = 2f;
+            float scaleAmount = 0.15f;
+            
+            while (highlightedElements.Contains(element))
+            {
+                float t = Mathf.Sin(Time.time * pulseSpeed) * 0.5f + 0.5f;
+                float scale = 1f + (t * scaleAmount);
+                rect.localScale = originalScale * scale;
+                yield return null;
+            }
+            
+            rect.localScale = originalScale;
+        }
+
+        void ClearHighlights()
+        {
+            foreach (var coroutine in highlightCoroutines)
+            {
+                if (coroutine != null)
+                {
+                    StopCoroutine(coroutine);
+                }
+            }
+            highlightCoroutines.Clear();
+            
+            // Reset scales
+            foreach (var element in highlightedElements)
+            {
+                if (element != null)
+                {
+                    RectTransform rect = element.GetComponent<RectTransform>();
+                    if (rect != null)
+                    {
+                        rect.localScale = Vector3.one;
+                    }
+                }
+            }
+            
+            highlightedElements.Clear();
+        }
+
+        void ManageButtonStates(TutorialStep step)
+        {
+            // Skip button locking for "Build Your Hand" step - allow all buttons
+            if (step.title == "Build Your Hand")
+            {
+                RestoreAllButtons();
+                return;
+            }
+            
+            // Determine which buttons should be enabled for this step
+            HashSet<Button> allowedButtons = new HashSet<Button>();
+            
+            // Always allow tutorial UI buttons
+            if (tutorialContinueButton != null) allowedButtons.Add(tutorialContinueButton);
+            if (skipTutorialButton != null) allowedButtons.Add(skipTutorialButton);
+            
+            // Combo rules button should always remain usable
+            GameObject comboPrefBtn = GameObject.Find("ComboPreferenceButton");
+            if (comboPrefBtn != null)
+            {
+                Button comboBtn = comboPrefBtn.GetComponent<Button>();
+                if (comboBtn != null) allowedButtons.Add(comboBtn);
+            }
+            
+            // Step-specific buttons
+            switch (step.requiredAction)
+            {
+                case TutorialAction.ConfirmHand:
+                    // Allow open backpack button and confirm button in dice selection UI
+                    if (openBackpackButton != null) allowedButtons.Add(openBackpackButton);
+                    if (diceSelectionUI != null && diceSelectionUI.submitButton != null)
+                    {
+                        allowedButtons.Add(diceSelectionUI.submitButton);
+                    }
+                    // Allow dice buttons in backpack
+                    if (diceSelectionUI != null)
+                    {
+                        DiceButton[] diceButtons = diceSelectionUI.GetComponentsInChildren<DiceButton>(true);
+                        foreach (var db in diceButtons)
+                        {
+                            if (db != null && db.button != null)
+                            {
+                                allowedButtons.Add(db.button);
+                            }
+                        }
+                    }
+                    break;
+                    
+                case TutorialAction.LockDice:
+                    // Allow dice views to be clicked
+                    DiceView[] views = null;
+                    if (diceRowParent != null)
+                    {
+                        views = diceRowParent.GetComponentsInChildren<DiceView>(true);
+                    }
+                    if (views == null || views.Length == 0)
+                    {
+                        views = FindObjectsOfType<DiceView>(true);
+                    }
+                    if (views != null)
+                    {
+                        foreach (var view in views)
+                        {
+                            if (view != null)
+                            {
+                                Button diceBtn = view.GetComponent<Button>();
+                                if (diceBtn != null) allowedButtons.Add(diceBtn);
+                                if (view.lockButton != null) allowedButtons.Add(view.lockButton);
+                            }
+                        }
+                    }
+                    break;
+                    
+                case TutorialAction.RollDice:
+                    if (rollButton != null) allowedButtons.Add(rollButton);
+                    break;
+                    
+                case TutorialAction.SecondRoll:
+                    if (rollButton != null) allowedButtons.Add(rollButton);
+                    // Also allow dice locking during second roll
+                    views = null;
+                    if (diceRowParent != null)
+                    {
+                        views = diceRowParent.GetComponentsInChildren<DiceView>(true);
+                    }
+                    if (views == null || views.Length == 0)
+                    {
+                        views = FindObjectsOfType<DiceView>(true);
+                    }
+                    if (views != null)
+                    {
+                        foreach (var view in views)
+                        {
+                            if (view != null)
+                            {
+                                Button diceBtn = view.GetComponent<Button>();
+                                if (diceBtn != null) allowedButtons.Add(diceBtn);
+                                if (view.lockButton != null) allowedButtons.Add(view.lockButton);
+                            }
+                        }
+                    }
+                    break;
+                    
+                case TutorialAction.SubmitHand:
+                    if (submitComboButton != null) allowedButtons.Add(submitComboButton);
+                    // Allow dice locking before submitting
+                    views = null;
+                    if (diceRowParent != null)
+                    {
+                        views = diceRowParent.GetComponentsInChildren<DiceView>(true);
+                    }
+                    if (views == null || views.Length == 0)
+                    {
+                        views = FindObjectsOfType<DiceView>(true);
+                    }
+                    if (views != null)
+                    {
+                        foreach (var view in views)
+                        {
+                            if (view != null)
+                            {
+                                Button diceBtn = view.GetComponent<Button>();
+                                if (diceBtn != null) allowedButtons.Add(diceBtn);
+                                if (view.lockButton != null) allowedButtons.Add(view.lockButton);
+                            }
+                        }
+                    }
+                    break;
+                    
+                case TutorialAction.None:
+                    // For intro/outro steps, only allow Next button (plus combo rules which was already added)
+                    break;
+            }
+            
+            // Disable all buttons except allowed ones
+            foreach (var btn in allButtons)
+            {
+                if (btn == null) continue;
+                
+                if (allowedButtons.Contains(btn))
+                {
+                    // Restore original interactable state if it was saved
+                    if (originalButtonStates.ContainsKey(btn))
+                    {
+                        btn.interactable = originalButtonStates[btn];
+                    }
+                    else
+                    {
+                        btn.interactable = true;
+                    }
+                }
+                else
+                {
+                    // Save current state if not already saved
+                    if (!originalButtonStates.ContainsKey(btn))
+                    {
+                        originalButtonStates[btn] = btn.interactable;
+                    }
+                    btn.interactable = false;
+                }
+            }
+            
+            // Also handle buttons that might not be in allButtons yet (dynamically created)
+            // Find and disable any other buttons in the scene
+            Button[] allSceneButtons = FindObjectsOfType<Button>(true);
+            foreach (var btn in allSceneButtons)
+            {
+                if (btn == null || allButtons.Contains(btn)) continue;
+                
+                if (allowedButtons.Contains(btn))
+                {
+                    btn.interactable = true;
+                }
+                else
+                {
+                    // Save state and disable
+                    if (!originalButtonStates.ContainsKey(btn))
+                    {
+                        originalButtonStates[btn] = btn.interactable;
+                    }
+                    btn.interactable = false;
+                }
+            }
+        }
+
+        void RestoreAllButtons()
+        {
+            foreach (var kvp in originalButtonStates)
+            {
+                if (kvp.Key != null)
+                {
+                    kvp.Key.interactable = kvp.Value;
+                }
+            }
+            originalButtonStates.Clear();
         }
 
         void ShowBackpackForCooldownExplanation()
@@ -807,6 +1130,8 @@ namespace DiceGame.Tutorial
         void OnTutorialContinue()
         {
             HidePrompt();
+            ClearHighlights();
+            RestoreAllButtons();
             StartTutorialStep(currentStepIndex + 1);
         }
 
@@ -1045,18 +1370,12 @@ namespace DiceGame.Tutorial
                 views = FindObjectsOfType<DiceView>(true);
             }
             
-            if (views != null && views.Length > 0)
+            int lockedCount = CountLockedDice(views);
+            if (lockedCount >= Mathf.Max(1, requiredLockedDiceCount))
             {
-                foreach (var view in views)
-                {
-                    if (view != null && view.model != null && view.model.isLocked && view.model.tier != DiceTier.Filler)
-                    {
-                        lockStepCompleted = true;
-                        RegisterActionCompletion(TutorialAction.LockDice);
-                        UnhookDiceLockEvent();
-                        return;
-                    }
-                }
+                lockStepCompleted = true;
+                RegisterActionCompletion(TutorialAction.LockDice);
+                UnhookDiceLockEvent();
             }
         }
 
@@ -1086,12 +1405,36 @@ namespace DiceGame.Tutorial
             
             if (view == null || view.model == null) yield break;
             
-            if (view.model.isLocked)
+            DiceView[] views = null;
+            if (diceRowParent != null)
+            {
+                views = diceRowParent.GetComponentsInChildren<DiceView>(true);
+            }
+            if (views == null || views.Length == 0)
+            {
+                views = FindObjectsOfType<DiceView>(true);
+            }
+            
+            int lockedCount = CountLockedDice(views);
+            if (lockedCount >= Mathf.Max(1, requiredLockedDiceCount))
             {
                 lockStepCompleted = true;
                 RegisterActionCompletion(TutorialAction.LockDice);
                 CleanupDiceViewListeners();
             }
+        }
+        
+        int CountLockedDice(DiceView[] views)
+        {
+            if (views == null) return 0;
+            int count = 0;
+            foreach (var v in views)
+            {
+                if (v == null || v.model == null) continue;
+                if (v.model.tier == DiceTier.Filler) continue;
+                if (v.model.isLocked) count++;
+            }
+            return count;
         }
 
         void StartScoreWatcher()
@@ -1154,6 +1497,8 @@ namespace DiceGame.Tutorial
 
             currentRequiredAction = TutorialAction.None;
             HidePrompt();
+            ClearHighlights();
+            RestoreAllButtons();
             
             // Special handling: Wait a bit after score animation before showing cooldown step
             if (action == TutorialAction.ScoreAnimationComplete)
@@ -1163,6 +1508,27 @@ namespace DiceGame.Tutorial
             else
             {
                 StartTutorialStep(currentStepIndex + 1);
+            }
+        }
+
+        IEnumerator RefreshButtonsAfterDiceSpawn()
+        {
+            yield return new WaitForSeconds(0.5f);
+            CollectAllButtons();
+            if (currentStepIndex >= 0 && currentStepIndex < tutorialSteps.Count)
+            {
+                ManageButtonStates(tutorialSteps[currentStepIndex]);
+            }
+        }
+
+        IEnumerator RefreshButtonsAfterBackpackOpens()
+        {
+            // Wait for backpack to open and dice buttons to be created
+            yield return new WaitForSeconds(0.3f);
+            CollectAllButtons();
+            if (currentStepIndex >= 0 && currentStepIndex < tutorialSteps.Count)
+            {
+                ManageButtonStates(tutorialSteps[currentStepIndex]);
             }
         }
 
