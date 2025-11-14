@@ -1047,6 +1047,42 @@ namespace DiceGame
             }
         }
 
+        /// <summary>
+        /// Get current money amount (for shop, etc.)
+        /// </summary>
+        public int GetMoney()
+        {
+            return _moneyManager?.Money ?? 0;
+        }
+
+        /// <summary>
+        /// Add money (for shop, rewards, etc.)
+        /// </summary>
+        public void AddMoney(int amount)
+        {
+            if (_moneyManager != null)
+            {
+                _moneyManager.Add(amount);
+                SavedMoney = _moneyManager.Money; // Sync static state
+                UpdateMoneyDisplay();
+            }
+        }
+
+        /// <summary>
+        /// Spend money (for shop purchases, etc.)
+        /// </summary>
+        /// <returns>True if successful, false if insufficient funds</returns>
+        public bool SpendMoney(int amount)
+        {
+            if (_moneyManager != null && _moneyManager.Subtract(amount))
+            {
+                SavedMoney = _moneyManager.Money; // Sync static state
+                UpdateMoneyDisplay();
+                return true;
+            }
+            return false;
+        }
+
 
         /// <summary>
         /// Update deck status display showing all dice and their states
