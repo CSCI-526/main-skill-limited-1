@@ -112,10 +112,13 @@ namespace DiceGame.UI
                 if (isSelectionMode)
                 {
                     // Selection mode: show available dice from CooldownSystem (for hand selection)
+                    // Filter out NormalDice - they are temporary fillers and shouldn't be selectable
                     if (_cooldownSystem != null)
                     {
-                        diceToDisplay = _cooldownSystem.GetAvailableDice();
-                        Debug.Log($"[BackpackManager] Selection mode: Displaying {diceToDisplay.Count} available dice from CooldownSystem");
+                        diceToDisplay = _cooldownSystem.GetAvailableDice()
+                            .Where(d => !(d is NormalDice))
+                            .ToList();
+                        Debug.Log($"[BackpackManager] Selection mode: Displaying {diceToDisplay.Count} available dice from CooldownSystem (NormalDice filtered out)");
                     }
                 }
                 else
@@ -129,17 +132,23 @@ namespace DiceGame.UI
                     else if (_cooldownSystem != null)
                     {
                         // Fallback: show all dice from CooldownSystem if DiceManager not available
-                        diceToDisplay = _cooldownSystem.GetAllDice();
-                        Debug.Log($"[BackpackManager] ViewOnly mode (fallback): Displaying {diceToDisplay.Count} dice from CooldownSystem");
+                        // Filter out NormalDice - they are temporary fillers
+                        diceToDisplay = _cooldownSystem.GetAllDice()
+                            .Where(d => !(d is NormalDice))
+                            .ToList();
+                        Debug.Log($"[BackpackManager] ViewOnly mode (fallback): Displaying {diceToDisplay.Count} dice from CooldownSystem (NormalDice filtered out)");
                     }
                 }
             }
 
             // Fallback: if mode detection failed, use CooldownSystem
+            // Filter out NormalDice - they are temporary fillers
             if (diceToDisplay == null && _cooldownSystem != null)
             {
-                diceToDisplay = _cooldownSystem.GetAllDice();
-                Debug.Log($"[BackpackManager] Fallback: Displaying {diceToDisplay.Count} dice from CooldownSystem");
+                diceToDisplay = _cooldownSystem.GetAllDice()
+                    .Where(d => !(d is NormalDice))
+                    .ToList();
+                Debug.Log($"[BackpackManager] Fallback: Displaying {diceToDisplay.Count} dice from CooldownSystem (NormalDice filtered out)");
             }
 
             // Display dice

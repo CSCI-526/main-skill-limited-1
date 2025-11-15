@@ -1533,7 +1533,7 @@ namespace DiceGame.Tutorial
         }
 
         /// <summary>
-        /// Complete tutorial and transition to RewardScene, then return to Level 1
+        /// Complete tutorial and transition to ShopScene, then return to Level 1
         /// </summary>
         void CompleteTutorialAndGoToReward()
         {
@@ -1546,7 +1546,7 @@ namespace DiceGame.Tutorial
             PlayerPrefs.SetInt("HasCompletedTutorial", 1);
             PlayerPrefs.Save();
 
-            // Prepare Level 1 state for when returning from RewardScene
+            // Prepare Level 1 state for when returning from ShopScene
             int targetScore = battleController != null ? battleController.baseTargetScore : 200;
             
             var stateManager = GameStateManager.Instance;
@@ -1560,8 +1560,8 @@ namespace DiceGame.Tutorial
                 Debug.LogWarning("[TutorialController] BattleController not found - using fallback values");
             }
             
-            Debug.Log("[TutorialController] Tutorial completed - transitioning to RewardScene, then Level 1");
-            SceneManager.LoadScene("RewardScene");
+            Debug.Log("[TutorialController] Tutorial completed - transitioning to ShopScene, then Level 1");
+            SceneManager.LoadScene("ShopScene");
         }
 
         #endregion

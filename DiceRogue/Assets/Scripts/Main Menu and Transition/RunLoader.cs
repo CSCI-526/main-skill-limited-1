@@ -49,12 +49,54 @@ namespace DiceRogue.Boot
         public void StartRun()
         {
             GameStateManager.Instance.State.IsTutorialMode = false; // Ensure normal mode
+            
+            // Reset game data for new run (money and dice backpack)
+            // Preserve bestScore and hasCompletedTutorial
+            ResetGameDataForNewRun();
+            
             StartCoroutine(LoadSceneWithWipe(battleSceneName));
+        }
+        
+        /// <summary>
+        /// Reset game data for a new run (money and dice backpack)
+        /// Preserves bestScore and hasCompletedTutorial
+        /// </summary>
+        private void ResetGameDataForNewRun()
+        {
+            var stateManager = GameStateManager.Instance;
+            if (stateManager == null || stateManager.SaveData == null)
+            {
+                Debug.LogWarning("[RunLoader] Cannot reset game data - GameStateManager or SaveData is null");
+                return;
+            }
+            
+            // Save bestScore and hasCompletedTutorial before reset
+            int bestScore = stateManager.SaveData.bestScore;
+            bool hasCompletedTutorial = stateManager.SaveData.hasCompletedTutorial;
+            
+            // Reset money and dice backpack
+            stateManager.SaveData.money = 0;
+            stateManager.SaveData.diceTypeIds.Clear();
+            stateManager.SaveData.relicNames.Clear();
+            
+            // Restore preserved values
+            stateManager.SaveData.bestScore = bestScore;
+            stateManager.SaveData.hasCompletedTutorial = hasCompletedTutorial;
+            
+            // Save the reset data
+            stateManager.Save();
+            
+            Debug.Log("[RunLoader] Reset game data for new run - money and dice backpack cleared");
         }
 
         public void StartTutorial()
         {
             GameStateManager.Instance.State.IsTutorialMode = true; // Set tutorial mode flag
+            
+            // Reset game data for tutorial run (money and dice backpack)
+            // Preserve bestScore and hasCompletedTutorial
+            ResetGameDataForNewRun();
+            
             StartCoroutine(LoadSceneWithWipe(battleSceneName)); // Load BattleScene, not TutorialScene
         }
 

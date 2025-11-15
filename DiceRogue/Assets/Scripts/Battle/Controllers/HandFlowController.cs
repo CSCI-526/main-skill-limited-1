@@ -626,7 +626,7 @@ namespace DiceGame
                 
                 Debug.Log($"[HandFlowController] Level passed! Money reward: +{rewardMoney} (5 + {remaining} remaining casts), Total: {_stateManager.SaveData.money}");
 
-                // Prepare next level state for when we return from RewardScene
+                // Prepare next level state for when we return from ShopScene
                 int nextLevel = _progressionManager.CurrentLevel + 1;
                 int nextTarget = _progressionManager.CalculateTargetScore(nextLevel);
 
@@ -634,8 +634,8 @@ namespace DiceGame
                 _stateManager.State.PendingTargetScore = nextTarget;
                 _stateManager.State.ContinuingFromReward = true;
 
-                // Transition to reward scene
-                Debug.Log($"[HandFlowController] Target passed! Loading RewardScene. Next Level: {nextLevel}, Next Target: {nextTarget}");
+                // Transition to shop scene
+                Debug.Log($"[HandFlowController] Target passed! Loading ShopScene. Next Level: {nextLevel}, Next Target: {nextTarget}");
                 _sceneTransitionManager.TransitionToRewardScene();
             }
             else

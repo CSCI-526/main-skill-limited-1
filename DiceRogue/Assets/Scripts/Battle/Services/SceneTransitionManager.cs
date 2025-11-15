@@ -10,12 +10,12 @@ namespace DiceGame
     public class SceneTransitionManager : MonoBehaviour
     {
         /// <summary>
-        /// Transition to reward scene after level completion
+        /// Transition to shop scene after level completion
         /// </summary>
         public void TransitionToRewardScene()
         {
-            Debug.Log("[SceneTransitionManager] Transitioning to RewardScene");
-            SceneManager.LoadScene("RewardScene");
+            Debug.Log("[SceneTransitionManager] Transitioning to ShopScene");
+            SceneManager.LoadScene("ShopScene");
         }
         
         /// <summary>
