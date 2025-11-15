@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
@@ -16,14 +17,34 @@ namespace DiceGame.UI
         public DiceSelectionUI diceSelectionUI;
 
         private CooldownSystem _cooldownSystem;
+        private DiceManager _diceManager;  // Dice manager for accessing player backpack
         private Action<List<BaseDice>> _onDiceSelected;
         private bool _isSelectionRequired;
 
         public void Initialize(CooldownSystem cooldownSystem, Action<List<BaseDice>> onDiceSelected)
         {
             _cooldownSystem = cooldownSystem;
+            _diceManager = null; // No DiceManager for backward compatibility
             _onDiceSelected = onDiceSelected;
+            InitializeInternal();
+        }
 
+        /// <summary>
+        /// Initialize with DiceManager for enhanced backpack functionality
+        /// </summary>
+        /// <param name="cooldownSystem">Cooldown system for getting available dice</param>
+        /// <param name="diceManager">Dice manager for accessing player backpack</param>
+        /// <param name="onDiceSelected">Callback when dice are selected</param>
+        public void Initialize(CooldownSystem cooldownSystem, DiceManager diceManager, Action<List<BaseDice>> onDiceSelected)
+        {
+            _cooldownSystem = cooldownSystem;
+            _diceManager = diceManager;
+            _onDiceSelected = onDiceSelected;
+            InitializeInternal();
+        }
+
+        private void InitializeInternal()
+        {
             if (closeBackpackButton != null)
             {
                 closeBackpackButton.onClick.AddListener(HideBackpack);
@@ -75,10 +96,60 @@ namespace DiceGame.UI
 
         private void RefreshDiceList()
         {
-            if (_cooldownSystem != null && diceSelectionUI != null)
+            if (diceSelectionUI == null)
             {
-                var allDice = _cooldownSystem.GetAllDice();
-                diceSelectionUI.DisplayDice(allDice);
+                return;
+            }
+
+            List<BaseDice> diceToDisplay = null;
+
+            // Determine which dice to display based on mode
+            if (diceSelectionUI != null)
+            {
+                // Check current mode by checking if submit button is active
+                bool isSelectionMode = diceSelectionUI.submitButton != null && diceSelectionUI.submitButton.gameObject.activeSelf;
+
+                if (isSelectionMode)
+                {
+                    // Selection mode: show available dice from CooldownSystem (for hand selection)
+                    if (_cooldownSystem != null)
+                    {
+                        diceToDisplay = _cooldownSystem.GetAvailableDice();
+                        Debug.Log($"[BackpackManager] Selection mode: Displaying {diceToDisplay.Count} available dice from CooldownSystem");
+                    }
+                }
+                else
+                {
+                    // ViewOnly mode: show all dice from player backpack (if DiceManager available)
+                    if (_diceManager != null)
+                    {
+                        diceToDisplay = _diceManager.PlayerDiceBackpack.ToList();
+                        Debug.Log($"[BackpackManager] ViewOnly mode: Displaying {diceToDisplay.Count} dice from player backpack");
+                    }
+                    else if (_cooldownSystem != null)
+                    {
+                        // Fallback: show all dice from CooldownSystem if DiceManager not available
+                        diceToDisplay = _cooldownSystem.GetAllDice();
+                        Debug.Log($"[BackpackManager] ViewOnly mode (fallback): Displaying {diceToDisplay.Count} dice from CooldownSystem");
+                    }
+                }
+            }
+
+            // Fallback: if mode detection failed, use CooldownSystem
+            if (diceToDisplay == null && _cooldownSystem != null)
+            {
+                diceToDisplay = _cooldownSystem.GetAllDice();
+                Debug.Log($"[BackpackManager] Fallback: Displaying {diceToDisplay.Count} dice from CooldownSystem");
+            }
+
+            // Display dice
+            if (diceToDisplay != null)
+            {
+                diceSelectionUI.DisplayDice(diceToDisplay);
+            }
+            else
+            {
+                Debug.LogWarning("[BackpackManager] Cannot refresh dice list - no data source available");
             }
         }
 

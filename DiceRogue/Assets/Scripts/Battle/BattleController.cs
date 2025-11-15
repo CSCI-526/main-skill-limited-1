@@ -61,6 +61,7 @@ namespace DiceGame
         private DiceEffectHandler _effectHandler;
         private DiceViewFactory _viewFactory;
         private RelicManager _relicManager;
+        private DiceManager _diceManager;  // Dice manager (global pool + player backpack)
         private ScoreCalculator _scoreCalculator;
         private ProgressionManager _progressionManager;
         private BattleUIPresenter _uiPresenter;
@@ -150,6 +151,11 @@ namespace DiceGame
             _effectHandler = new DiceEffectHandler();
             _viewFactory = new DiceViewFactory(diceViewPrefab, diceRowParent);
             _relicManager = new RelicManager();
+            
+            // Initialize dice manager
+            _diceManager = new DiceManager();
+            _diceManager.InitializeGlobalDicePool();
+            
             _scoreCalculator = new ScoreCalculator();
             _uiPresenter = new BattleUIPresenter();
             _compositionService = new HandCompositionService();
@@ -196,7 +202,8 @@ namespace DiceGame
             // Initialize backpack manager
             if (backpackManager != null)
             {
-                backpackManager.Initialize(cooldownSystem, OnDiceSelectedFromBackpack);
+                // Initialize with DiceManager for enhanced functionality
+                backpackManager.Initialize(cooldownSystem, _diceManager, OnDiceSelectedFromBackpack);
                 
                 // Set up open backpack button listener
                 if (backpackManager.openBackpackButton != null)
@@ -234,6 +241,9 @@ namespace DiceGame
             
             // Initialize relic system: load from save data
             InitializeRelicSystem();
+            
+            // Initialize dice system: load from save data and update cooldown system
+            InitializeDiceSystem();
             
             // Check if there are pending reward dice from reward scene
             IntegrateRewardDice();
@@ -416,6 +426,40 @@ namespace DiceGame
         }
 
         /// <summary>
+        /// Initialize dice system: load from save data and update cooldown system
+        /// </summary>
+        private void InitializeDiceSystem()
+        {
+            // Load player dice backpack from save data
+            if (_diceManager != null)
+            {
+                _diceManager.LoadFromSaveData(_stateManager.SaveData);
+                
+                // Update CooldownSystem with backpack dice
+                UpdateCooldownSystemFromBackpack();
+            }
+        }
+
+        /// <summary>
+        /// Update CooldownSystem with dice from player backpack
+        /// </summary>
+        private void UpdateCooldownSystemFromBackpack()
+        {
+            if (_diceManager == null || cooldownSystem == null)
+            {
+                return;
+            }
+
+            // Get dice from player backpack
+            var backpackDice = _diceManager.PlayerDiceBackpack.ToList();
+            
+            // Update CooldownSystem
+            cooldownSystem.SetPlayerBackpackDice(backpackDice);
+            
+            Debug.Log($"[BattleController] Updated CooldownSystem with {backpackDice.Count} dice from backpack");
+        }
+
+        /// <summary>
         /// Give player a random relic from the global pool as starting relic
         /// </summary>
         private void GiveRandomStartingRelic()
@@ -502,7 +546,7 @@ namespace DiceGame
         }
 
         /// <summary>
-        /// Integrate reward dice from reward scene into the dice pool
+        /// Integrate reward dice from reward scene into the dice backpack
         /// </summary>
         private void IntegrateRewardDice()
         {
@@ -515,41 +559,39 @@ namespace DiceGame
 
             Debug.Log($"[BattleController] Found {_stateManager.State.PendingDiceTypeIds.Count} reward dice to integrate");
 
-            // Get current dice pool
-            var currentPool = cooldownSystem.GetAllDice();
-            var newPool = new List<BaseDice>(currentPool);
-
-            // Create and add reward dice
+            // Use DiceManager to add dice to backpack
             foreach (var typeId in _stateManager.State.PendingDiceTypeIds)
             {
-                var rewardDice = CreateDiceFromTypeId(typeId);
-                if (rewardDice != null)
+                bool success = _diceManager.AddDiceToBackpackByName(typeId);
+                if (success)
                 {
-                    newPool.Add(rewardDice);
-                    Debug.Log($"[BattleController] Added reward dice: {rewardDice.diceName} ({rewardDice.tier})");
+                    Debug.Log($"[BattleController] Added reward dice to backpack: {typeId}");
+                }
+                else
+                {
+                    Debug.LogWarning($"[BattleController] Failed to add reward dice: {typeId}");
                 }
             }
 
             // Clear pending list
             _stateManager.State.PendingDiceTypeIds.Clear();
 
-            // Save dice to persistence
-            _stateManager.SaveData.diceTypeIds.Clear();
-            _stateManager.SaveData.diceTypeIds.AddRange(
-                newPool.Where(d => !(d is NormalDice))
-                       .Select(d => d.GetType().Name)
-            );
+            // Save to persistence
+            _diceManager.SaveToSaveData(_stateManager.SaveData);
             _stateManager.Save();
 
-            // Update cooldown system with new pool
-            cooldownSystem.SetPlayerBackpackDice(newPool);
+            // Update CooldownSystem with backpack dice
+            UpdateCooldownSystemFromBackpack();
 
-            Debug.Log($"[BattleController] Integrated reward dice. New pool size: {newPool.Count}");
+            Debug.Log($"[BattleController] Integrated reward dice. Backpack size: {_diceManager.PlayerDiceBackpack.Count}");
         }
 
         /// <summary>
         /// Create a dice instance from type ID string
+        /// NOTE: This method is kept for backward compatibility but is now deprecated.
+        /// Use DiceManager.AddDiceToBackpackByName() instead.
         /// </summary>
+        [System.Obsolete("Use DiceManager.AddDiceToBackpackByName() instead")]
         private BaseDice CreateDiceFromTypeId(string typeId)
         {
             // Use DicePool to get all available dice prototypes
@@ -633,12 +675,20 @@ namespace DiceGame
             _stateManager.SaveData.relicNames.Clear();
             InitializeRelicSystem();
             
+            // Reset dice backpack (game over / restart)
+            if (_diceManager != null)
+            {
+                _diceManager.ClearBackpack();
+                _diceManager.SaveToSaveData(_stateManager.SaveData);
+            }
+            
             // Reset money (game over / restart)
             _moneyManager.Reset();
             _stateManager.SaveData.money = 0;
             _stateManager.Save();
             
             // Refresh dice pool and hand counter
+            UpdateCooldownSystemFromBackpack();
             cooldownSystem.RefreshDicePool();
             
             // Update displays
@@ -890,12 +940,20 @@ namespace DiceGame
             _stateManager.SaveData.relicNames.Clear();
             InitializeRelicSystem();
             
+            // Reset dice backpack (settings reset)
+            if (_diceManager != null)
+            {
+                _diceManager.ClearBackpack();
+                _diceManager.SaveToSaveData(_stateManager.SaveData);
+            }
+            
             // Reset money (settings reset)
             _moneyManager.Reset();
             _stateManager.SaveData.money = 0;
             _stateManager.ResetSaveData();
             
             // Refresh dice pool and hand counter
+            UpdateCooldownSystemFromBackpack();
             cooldownSystem.RefreshDicePool();
             
             // Hide continue button if visible

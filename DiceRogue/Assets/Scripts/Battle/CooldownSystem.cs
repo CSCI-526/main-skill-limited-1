@@ -47,75 +47,69 @@ namespace DiceGame
 
         void Awake()
         {
-            InitializeDicePool();
+            // Don't initialize dice pool here - wait for external call to SetPlayerBackpackDice()
+            // This allows DiceManager to provide dice from player's backpack
+            InitializeEmptyPool();
         }
 
         /// <summary>
-        /// Initialize the 8-dice pool from player's backpack
-        /// If backpack has fewer than 8 dice, fill with normal dice
+        /// Initialize empty dice pool (will be populated by SetPlayerBackpackDice())
+        /// This method creates an empty pool and waits for external initialization
         /// </summary>
-        private void InitializeDicePool()
+        private void InitializeEmptyPool()
         {
             _dicePool.Clear();
-            
-            // TODO: Get dice from player's backpack/inventory system
-            // For now, simulate a backpack with some dice
-            var backpackDice = GetPlayerBackpackDice();
-            
-            // Add backpack dice to pool
-            foreach (var dice in backpackDice)
-            {
-                _dicePool.Add(dice);
-            }
-            
-            // Fill remaining slots with normal dice to reach 8 total
-            while (_dicePool.Count < maxDicePool)
-            {
-                var normalDice = new NormalDice
-                {
-                    diceName = $"Basic D6_{_dicePool.Count + 1}",
-                    tier = DiceTier.Common,
-                    cost = 1,
-                    cooldownAfterUse = cooldownTurns,
-                    cooldownRemain = 0
-                };
-                _dicePool.Add(normalDice);
-            }
-            
-            UpdateAvailableDice();
             _isInitialized = true;
             
-            Debug.Log($"[CooldownSystem] Initialized with {_dicePool.Count} dice in pool ({backpackDice.Count} from backpack)");
-            LogDicePool();
+            Debug.Log("[CooldownSystem] Initialized with empty pool. Waiting for SetPlayerBackpackDice() call.");
+            Debug.Log("[CooldownSystem] NOTE: Dice pool will be populated by BattleController via DiceManager.");
         }
 
         /// <summary>
         /// Get dice from player's backpack/inventory
-        /// Uses DicePoolFactory to create a random pool of 8 dice from all available types
+        /// DEPRECATED: This method is no longer used. Dice are now provided via SetPlayerBackpackDice() from DiceManager.
+        /// Kept for backward compatibility only.
         /// </summary>
+        [System.Obsolete("Use DiceManager and SetPlayerBackpackDice() instead. This method is deprecated.")]
         private List<BaseDice> GetPlayerBackpackDice()
         {
-            // Use DicePoolFactory to create random pool of 8 dice
-            Debug.Log("[CooldownSystem] Generating random dice pool from all available dice types...");
-            var backpackDice = DicePoolFactory.CreateRandomPool(maxDicePool, cooldownTurns);
+            // Fallback: Create random pool from DicePool if called (for backward compatibility)
+            Debug.LogWarning("[CooldownSystem] GetPlayerBackpackDice() is deprecated. Use DiceManager and SetPlayerBackpackDice() instead.");
+            Debug.Log("[CooldownSystem] Generating fallback random dice pool from DicePool...");
             
-            return backpackDice;
+            // Use DicePool to get all available dice types
+            var allDice = DicePool.GetNonFiller();
+            
+            // Shuffle and take random selection
+            var shuffled = allDice.OrderBy(x => Random.value).ToList();
+            var selectedDice = shuffled.Take(maxDicePool).ToList();
+            
+            // Set cooldown properties
+            foreach (var dice in selectedDice)
+            {
+                dice.cooldownAfterUse = cooldownTurns;
+                dice.cooldownRemain = 0;
+            }
+            
+            Debug.Log($"[CooldownSystem] Generated fallback pool of {selectedDice.Count} dice");
+            return selectedDice;
         }
 
         /// <summary>
         /// Set dice from player's backpack/inventory system
-        /// Call this method to provide dice from the inventory system
+        /// This is the primary method to initialize the dice pool.
+        /// Called by BattleController via DiceManager.PlayerDiceBackpack
         /// </summary>
-        /// <param name="backpackDice">Dice from player's inventory</param>
+        /// <param name="backpackDice">Dice from player's inventory (from DiceManager)</param>
         public void SetPlayerBackpackDice(List<BaseDice> backpackDice)
         {
             if (backpackDice == null)
             {
-                Debug.LogWarning("[CooldownSystem] Backpack dice list is null, using default");
-                return;
+                Debug.LogWarning("[CooldownSystem] Backpack dice list is null, initializing with empty pool");
+                backpackDice = new List<BaseDice>();
             }
 
-            Debug.Log($"[CooldownSystem] Setting dice pool from backpack: {backpackDice.Count} dice");
+            Debug.Log($"[CooldownSystem] Setting dice pool from DiceManager backpack: {backpackDice.Count} dice");
             
             // Clear current pool
             _dicePool.Clear();
@@ -123,6 +117,12 @@ namespace DiceGame
             // Add backpack dice to pool
             foreach (var dice in backpackDice)
             {
+                if (dice == null)
+                {
+                    Debug.LogWarning("[CooldownSystem] Skipping null dice in backpack");
+                    continue;
+                }
+                
                 // Ensure cooldown settings are correct
                 dice.cooldownAfterUse = cooldownTurns;
                 dice.cooldownRemain = 0;
@@ -130,6 +130,7 @@ namespace DiceGame
             }
             
             // Fill remaining slots with normal dice to reach 8 total
+            // This ensures we always have exactly 8 dice in the pool
             while (_dicePool.Count < maxDicePool)
             {
                 var normalDice = new NormalDice
@@ -143,8 +144,13 @@ namespace DiceGame
                 _dicePool.Add(normalDice);
             }
             
+            // Mark as initialized
+            _isInitialized = true;
+            
+            // Update available dice
             UpdateAvailableDice();
-            Debug.Log($"[CooldownSystem] Dice pool updated: {_dicePool.Count} total ({backpackDice.Count} from backpack)");
+            
+            Debug.Log($"[CooldownSystem] Dice pool updated: {_dicePool.Count} total ({backpackDice.Count} from backpack, {maxDicePool - backpackDice.Count} NormalDice added)");
             LogDicePool();
         }
 
