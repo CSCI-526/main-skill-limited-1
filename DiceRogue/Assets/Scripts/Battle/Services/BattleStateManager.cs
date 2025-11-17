@@ -70,14 +70,11 @@ namespace DiceGame
         /// </summary>
         public void ResetForNewHand(System.Action onRefreshUI, System.Action<string, bool> onUpdateFeedback, System.Action onStartNewHand, System.Action onUpdateCooldownSystem)
         {
-            Debug.Log("[BattleStateManager] Resetting for new hand...");
-            
             // Check if hands remain
             var (current, remaining) = _cooldownSystem.GetHandCounter();
             if (remaining <= 0)
             {
                 // No hands remain - reset everything to level 1 (game over / try again)
-                Debug.Log("[BattleStateManager] No hands remaining - resetting to Level 1...");
                 
                 // Reset progression to level 1
                 _progressionManager.ResetToLevelOne();
@@ -135,8 +132,6 @@ namespace DiceGame
             
             // Start a new hand
             onStartNewHand?.Invoke();
-            
-            Debug.Log("[BattleStateManager] Hand reset complete.");
         }
 
         /// <summary>
@@ -144,8 +139,6 @@ namespace DiceGame
         /// </summary>
         public void ContinueToNextLevel(System.Action onRefreshUI, System.Action<string, bool> onUpdateFeedback, System.Action onStartNewHand, System.Action onHideContinueButton)
         {
-            Debug.Log($"[BattleStateManager] Continuing to next level from Level {_progressionManager.CurrentLevel}...");
-
             // Hide continue button
             onHideContinueButton?.Invoke();
 
@@ -177,10 +170,8 @@ namespace DiceGame
         /// <summary>
         /// Reset game to initial state (called by SettingsPanel)
         /// </summary>
-        public void ResetGame(System.Action onRefreshUI, System.Action<string, bool> onUpdateFeedback, System.Action onStartNewHand, System.Action onHideContinueButton, System.Action onUpdateCooldownSystem, System.Action<RelicManager> onInitializeRelicSystem)
+        public void ResetGame(System.Action onRefreshUI, System.Action<string, bool> onUpdateFeedback, System.Action onStartNewHand, System.Action onHideContinueButton, System.Action onUpdateCooldownSystem)
         {
-            Debug.Log("[BattleStateManager] Resetting game to initial state...");
-            
             // Reset progression to level 1
             _progressionManager.ResetToLevelOne();
             
@@ -204,7 +195,7 @@ namespace DiceGame
             // Reset relic system and give new random starting relic
             _relicManager.ClearBackpack();
             _gameStateManager.SaveData.relicNames.Clear();
-            onInitializeRelicSystem?.Invoke(_relicManager);
+            InitializeRelicSystem();
             
             // Reset dice backpack (settings reset)
             if (_diceManager != null)
@@ -231,8 +222,6 @@ namespace DiceGame
             
             // Start a new hand
             onStartNewHand?.Invoke();
-            
-            Debug.Log("[BattleStateManager] Game reset complete");
         }
 
         /// <summary>
@@ -240,8 +229,6 @@ namespace DiceGame
         /// </summary>
         public void QuitGame()
         {
-            Debug.Log("[BattleStateManager] Quitting game...");
-            
             // Quit application (works in builds)
             // In editor, this will stop play mode
             #if UNITY_EDITOR
@@ -302,8 +289,6 @@ namespace DiceGame
                 
                 // Start first hand of Level 1
                 onStartNewHand?.Invoke();
-                
-                Debug.Log("[BattleStateManager] Tutorial completed - started Level 1");
             }
         }
 
@@ -337,6 +322,7 @@ namespace DiceGame
 
         /// <summary>
         /// Give player a random relic from the global pool as starting relic
+        /// Uses PlayerResourceManager to ensure persistence
         /// </summary>
         private void GiveRandomStartingRelic()
         {
@@ -353,15 +339,8 @@ namespace DiceGame
             
             if (startingRelic != null)
             {
-                bool success = _relicManager.AddRelicToBackpack(startingRelic);
-                if (success)
-                {
-                    Debug.Log($"[BattleStateManager] Gave player starting relic: {startingRelic.relicName} ({startingRelic.rarity})");
-                }
-                else
-                {
-                    Debug.LogWarning($"[BattleStateManager] Failed to add starting relic: {startingRelic.relicName}");
-                }
+                // Use PlayerResourceManager to add relic (automatically saves to SaveData)
+                PlayerResourceManager.Instance?.AddRelicToBackpack(startingRelic);
             }
         }
     }

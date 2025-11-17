@@ -160,13 +160,11 @@ namespace DiceGame
         /// </summary>
         public void RefreshAllUI()
         {
-            Debug.Log("[BattleUIUpdater] Refreshing all UI elements...");
             UpdateTargetScoreDisplay();
             UpdateLevelInfo();
             UpdateComboPreview();
             UpdateRollAndCastCount();
             UpdateMoneyDisplay();
-            Debug.Log("[BattleUIUpdater] UI refresh complete");
         }
     }
 }

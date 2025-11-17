@@ -1,6 +1,5 @@
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
@@ -150,65 +149,6 @@ namespace DiceGame
         }
         
         // All initialization methods have been moved to BattleInitializer service class
-        
-        /// <summary>
-        /// Initialize relic system: load from save data
-        /// (Still needed for reset operations)
-        /// </summary>
-        private void InitializeRelicSystem()
-        {
-            // Initialize global relic pool (all relics available this run)
-            _relicManager.InitializeGlobalRelicPool();
-            
-            // Load relics from save data
-            foreach (var relicName in _stateManager.SaveData.relicNames)
-            {
-                _relicManager.AddRelicToBackpackByName(relicName);
-            }
-            
-            // Give player a random starting relic if this is a new game (no relics and not continuing from reward)
-            if (_relicManager.PlayerBackpack.Count == 0 && !_stateManager.State.ContinuingFromReward)
-            {
-                GiveRandomStartingRelic();
-            }
-            
-            // Update relic display UI
-            if (relicDisplay != null)
-            {
-                relicDisplay.DisplayRelics(_relicManager);
-            }
-        }
-        
-        /// <summary>
-        /// Give player a random relic from the global pool as starting relic
-        /// (Still needed for reset operations)
-        /// </summary>
-        private void GiveRandomStartingRelic()
-        {
-            var globalPool = _relicManager.GlobalRelicPool;
-            if (globalPool == null || globalPool.Count == 0)
-            {
-                Debug.LogWarning("[BattleController] Cannot give starting relic - global pool is empty!");
-                return;
-            }
-
-            // Randomly select a relic from the global pool
-            int randomIndex = Random.Range(0, globalPool.Count);
-            var startingRelic = globalPool[randomIndex];
-            
-            if (startingRelic != null)
-            {
-                bool success = _relicManager.AddRelicToBackpack(startingRelic);
-                if (success)
-                {
-                    Debug.Log($"[BattleController] Gave player starting relic: {startingRelic.relicName} ({startingRelic.rarity})");
-                }
-                else
-                {
-                    Debug.LogWarning($"[BattleController] Failed to add starting relic: {startingRelic.relicName}");
-                }
-            }
-        }
 
         /// <summary>
         /// Add a relic to the player's backpack (called by shop, rewards, etc.)
@@ -274,47 +214,8 @@ namespace DiceGame
             
             // Update CooldownSystem
             cooldownSystem.SetPlayerBackpackDice(backpackDice);
-            
-            Debug.Log($"[BattleController] Updated CooldownSystem with {backpackDice.Count} dice from backpack");
         }
 
-        /// <summary>
-        /// Create a dice instance from type ID string
-        /// NOTE: This method is kept for backward compatibility but is now deprecated.
-        /// Use DiceManager.AddDiceToBackpackByName() instead.
-        /// </summary>
-        [System.Obsolete("Use DiceManager.AddDiceToBackpackByName() instead")]
-        private BaseDice CreateDiceFromTypeId(string typeId)
-        {
-            // Use DicePool to get all available dice prototypes
-            var allDice = DicePool.GetAll();
-            var prototype = allDice.FirstOrDefault(d => d.GetType().Name == typeId);
-
-            if (prototype != null)
-            {
-                // Create a new instance by cloning the prototype
-                var diceType = prototype.GetType();
-                var newDice = System.Activator.CreateInstance(diceType) as BaseDice;
-                
-                if (newDice != null)
-                {
-                    // Copy properties from prototype (since constructors might set these)
-                    newDice.diceName = prototype.diceName;
-                    newDice.description = prototype.description;
-                    newDice.tier = prototype.tier;
-                    newDice.cost = prototype.cost;
-                    newDice.cooldownAfterUse = prototype.cooldownAfterUse;
-                    newDice.cooldownRemain = 0;
-                    newDice.isLocked = false;
-                    newDice.lastRollValue = 0;
-                    
-                    return newDice;
-                }
-            }
-
-            Debug.LogWarning($"[BattleController] Could not create dice from typeId: {typeId}");
-            return null;
-        }
 
     /// <summary>
     /// Start a new hand (delegated to HandFlowController)
@@ -410,16 +311,6 @@ namespace DiceGame
         }
 
         /// <summary>
-        /// Sync MoneyManager with SaveData (useful when entering ShopScene after level completion)
-        /// NOTE: Now handled by PlayerResourceManager, kept for backward compatibility
-        /// </summary>
-        public void SyncMoneyFromSaveData()
-        {
-            PlayerResourceManager.Instance?.SyncMoneyFromSaveData();
-        }
-
-
-        /// <summary>
         /// Refresh all UI elements
         /// </summary>
         public void RefreshAllUI()
@@ -448,17 +339,7 @@ namespace DiceGame
             if (backpackManager != null)
             {
                 backpackManager.ShowBackpack(BackpackMode.ViewOnly);
-                Debug.Log("[BattleController] Backpack opened for viewing");
             }
-        }
-        
-        /// <summary>
-        /// Open backpack for viewing (not selection mode)
-        /// Internal method that can be called programmatically
-        /// </summary>
-        private void OpenBackpackForViewing()
-        {
-            OnBackpackButtonPressed();
         }
         
         /// <summary>
@@ -479,8 +360,7 @@ namespace DiceGame
                 UpdateFeedback,
                 StartNewHand,
                 hideContinueButton,
-                UpdateCooldownSystemFromBackpack,
-                (relicManager) => InitializeRelicSystem()
+                UpdateCooldownSystemFromBackpack
             );
         }
         
@@ -531,8 +411,6 @@ namespace DiceGame
         /// </summary>
         public void OnDicePoolRefresh()
         {
-            Debug.Log("[BattleController] Dice pool refreshed - starting new battle cycle!");
-            
             _handManager.Reset();
             _handManager.SetMaxRolls(maxRollsPerHand);
             
@@ -549,22 +427,7 @@ namespace DiceGame
         /// </summary>
         public void OnAvailableDiceChanged(List<BaseDice> availableDice)
         {
-            Debug.Log($"[BattleController] Available dice changed: {availableDice.Count} dice available");
-            
-            // Log details
-            var sb = new StringBuilder();
-            sb.AppendLine($"Available dice: {availableDice.Count}/8");
-            sb.AppendLine("Dice pool:");
-            foreach (var dice in availableDice)
-            {
-                sb.AppendLine($"  - {dice.diceName} ({dice.tier}, cost: {dice.cost})");
-            }
-            
-            // Add hand counter info to debug log
-            var (current, remaining) = cooldownSystem.GetHandCounter();
-            sb.AppendLine($"\nHands: {current + 1}/{current + remaining} ({remaining} remaining)");
-            
-            Debug.Log(sb.ToString());
+            // Dice availability changed - UI will update automatically
         }
 
         #endregion
@@ -586,7 +449,7 @@ namespace DiceGame
             // Clean up backpack button listener
             if (backpackManager != null && backpackManager.openBackpackButton != null)
             {
-                backpackManager.openBackpackButton.onClick.RemoveListener(OpenBackpackForViewing);
+                backpackManager.openBackpackButton.onClick.RemoveListener(OnBackpackButtonPressed);
             }
             
             // Clean up settings panel events

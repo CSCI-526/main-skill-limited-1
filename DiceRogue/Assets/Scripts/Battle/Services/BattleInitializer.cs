@@ -84,7 +84,6 @@ namespace DiceGame
             // Step 8: Start game
             StartGame(controller, stateManager, result);
 
-            Debug.Log("[BattleInitializer] Battle scene initialized with decoupled components.");
             return result;
         }
 
@@ -97,11 +96,6 @@ namespace DiceGame
             {
                 GameObject analyticsGO = new GameObject("UnityGameAnalytics");
                 analyticsGO.AddComponent<UnityGameAnalytics>();
-                Debug.Log("[BattleInitializer] Created UnityGameAnalytics GameObject");
-            }
-            else
-            {
-                Debug.Log("[BattleInitializer] UnityGameAnalytics already exists");
             }
         }
 
@@ -154,17 +148,6 @@ namespace DiceGame
             return handManager;
         }
 
-        /// <summary>
-        /// Initialize dice manager
-        /// NOTE: Now using PlayerResourceManager, this method is kept for compatibility but not used
-        /// </summary>
-        [System.Obsolete("Use PlayerResourceManager.Instance.DiceManager instead")]
-        private DiceManager InitializeDiceManager()
-        {
-            var diceManager = new DiceManager();
-            diceManager.InitializeGlobalDicePool();
-            return diceManager;
-        }
 
         /// <summary>
         /// Initialize UI components and link them together
@@ -249,13 +232,11 @@ namespace DiceGame
                 progressionManager = new ProgressionManager(baseTargetScore);
                 progressionManager.RestoreLevelState(stateManager.State.PendingLevel, stateManager.State.PendingTargetScore);
                 stateManager.State.ContinuingFromReward = false;
-                Debug.Log($"[BattleInitializer] Continuing from Reward Scene - Level {stateManager.State.PendingLevel}, Target: {stateManager.State.PendingTargetScore}");
             }
             else if (stateManager.State.IsTutorialMode)
             {
                 progressionManager = new ProgressionManager(baseTargetScore);
                 progressionManager.InitializeTutorialMode();
-                Debug.Log("[BattleInitializer] Initialized in Tutorial Mode (Level 0)");
             }
             else
             {
@@ -307,15 +288,7 @@ namespace DiceGame
 
             if (startingRelic != null)
             {
-                bool success = relicManager.AddRelicToBackpack(startingRelic);
-                if (success)
-                {
-                    Debug.Log($"[BattleInitializer] Gave player starting relic: {startingRelic.relicName} ({startingRelic.rarity})");
-                }
-                else
-                {
-                    Debug.LogWarning($"[BattleInitializer] Failed to add starting relic: {startingRelic.relicName}");
-                }
+                relicManager.AddRelicToBackpack(startingRelic);
             }
         }
 
@@ -348,8 +321,6 @@ namespace DiceGame
 
             // Update CooldownSystem
             controller.cooldownSystem.SetPlayerBackpackDice(backpackDice);
-
-            Debug.Log($"[BattleInitializer] Updated CooldownSystem with {backpackDice.Count} dice from backpack");
         }
 
         /// <summary>
@@ -360,24 +331,13 @@ namespace DiceGame
             // Check if there are pending reward dice
             if (stateManager.State.PendingDiceTypeIds.Count == 0)
             {
-                Debug.Log("[BattleInitializer] No pending reward dice to integrate");
                 return;
             }
-
-            Debug.Log($"[BattleInitializer] Found {stateManager.State.PendingDiceTypeIds.Count} reward dice to integrate");
 
             // Use DiceManager to add dice to backpack
             foreach (var typeId in stateManager.State.PendingDiceTypeIds)
             {
-                bool success = result.DiceManager.AddDiceToBackpackByName(typeId);
-                if (success)
-                {
-                    Debug.Log($"[BattleInitializer] Added reward dice to backpack: {typeId}");
-                }
-                else
-                {
-                    Debug.LogWarning($"[BattleInitializer] Failed to add reward dice: {typeId}");
-                }
+                result.DiceManager.AddDiceToBackpackByName(typeId);
             }
 
             // Clear pending list
@@ -389,8 +349,6 @@ namespace DiceGame
 
             // Update CooldownSystem with backpack dice
             UpdateCooldownSystemFromBackpack(controller, result);
-
-            Debug.Log($"[BattleInitializer] Integrated reward dice. Backpack size: {result.DiceManager.PlayerDiceBackpack.Count}");
         }
 
         /// <summary>
@@ -414,7 +372,6 @@ namespace DiceGame
             if (controller.sceneTransitionManager == null)
             {
                 controller.sceneTransitionManager = controller.gameObject.AddComponent<SceneTransitionManager>();
-                Debug.Log("[BattleInitializer] Created SceneTransitionManager component");
             }
 
             // Initialize combo preference panel
@@ -431,7 +388,6 @@ namespace DiceGame
             if (controller.handFlowController == null)
             {
                 controller.handFlowController = controller.gameObject.AddComponent<HandFlowController>();
-                Debug.Log("[BattleInitializer] Created HandFlowController component");
             }
         }
 
@@ -507,11 +463,6 @@ namespace DiceGame
                 if (tutorialController != null)
                 {
                     tutorialController.gameObject.SetActive(true);
-                    Debug.Log("[BattleInitializer] TutorialController activated for tutorial mode");
-                }
-                else
-                {
-                    Debug.LogWarning("[BattleInitializer] TutorialController not found - tutorial may not work!");
                 }
             }
         }

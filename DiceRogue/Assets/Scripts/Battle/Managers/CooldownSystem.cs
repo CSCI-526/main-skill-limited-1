@@ -65,35 +65,6 @@ namespace DiceGame
             Debug.Log("[CooldownSystem] NOTE: Dice pool will be populated by BattleController via DiceManager.");
         }
 
-        /// <summary>
-        /// Get dice from player's backpack/inventory
-        /// DEPRECATED: This method is no longer used. Dice are now provided via SetPlayerBackpackDice() from DiceManager.
-        /// Kept for backward compatibility only.
-        /// </summary>
-        [System.Obsolete("Use DiceManager and SetPlayerBackpackDice() instead. This method is deprecated.")]
-        private List<BaseDice> GetPlayerBackpackDice()
-        {
-            // Fallback: Create random pool from DicePool if called (for backward compatibility)
-            Debug.LogWarning("[CooldownSystem] GetPlayerBackpackDice() is deprecated. Use DiceManager and SetPlayerBackpackDice() instead.");
-            Debug.Log("[CooldownSystem] Generating fallback random dice pool from DicePool...");
-            
-            // Use DicePool to get all available dice types
-            var allDice = DicePool.GetNonFiller();
-            
-            // Shuffle and take random selection
-            var shuffled = allDice.OrderBy(x => Random.value).ToList();
-            var selectedDice = shuffled.Take(maxDicePool).ToList();
-            
-            // Set cooldown properties
-            foreach (var dice in selectedDice)
-            {
-                dice.cooldownAfterUse = cooldownTurns;
-                dice.cooldownRemain = 0;
-            }
-            
-            Debug.Log($"[CooldownSystem] Generated fallback pool of {selectedDice.Count} dice");
-            return selectedDice;
-        }
 
         /// <summary>
         /// Set dice from player's backpack/inventory system

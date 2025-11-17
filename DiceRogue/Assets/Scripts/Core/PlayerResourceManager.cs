@@ -68,7 +68,6 @@ namespace DiceGame
             // 初始化 MoneyManager（从 SaveData 加载）
             int initialMoney = _stateManager?.SaveData?.money ?? 0;
             _moneyManager = new MoneyManager(initialMoney);
-            Debug.Log($"[PlayerResourceManager] Initialized MoneyManager with {initialMoney} money");
 
             // 初始化 DiceManager
             _diceManager = new DiceManager();
@@ -77,7 +76,6 @@ namespace DiceGame
             {
                 _diceManager.LoadFromSaveData(_stateManager.SaveData);
             }
-            Debug.Log($"[PlayerResourceManager] Initialized DiceManager with {_diceManager.PlayerDiceBackpack.Count} dice in backpack");
 
             // 初始化 RelicManager
             _relicManager = new RelicManager();
@@ -89,9 +87,6 @@ namespace DiceGame
                     _relicManager.AddRelicToBackpackByName(relicName);
                 }
             }
-            Debug.Log($"[PlayerResourceManager] Initialized RelicManager with {_relicManager.PlayerBackpack.Count} relics");
-
-            Debug.Log("[PlayerResourceManager] All resource managers initialized successfully");
         }
 
         #region Money Methods
@@ -113,7 +108,6 @@ namespace DiceGame
             {
                 _moneyManager.Add(amount);
                 SaveMoneyToSaveData();
-                Debug.Log($"[PlayerResourceManager] Money added: +{amount}, Total: {GetMoney()}");
             }
         }
 
@@ -126,7 +120,6 @@ namespace DiceGame
             if (_moneyManager != null && _moneyManager.Subtract(amount))
             {
                 SaveMoneyToSaveData();
-                Debug.Log($"[PlayerResourceManager] Money spent: -{amount}, Remaining: {GetMoney()}");
                 return true;
             }
             return false;
@@ -141,7 +134,6 @@ namespace DiceGame
             {
                 _moneyManager.Set(amount);
                 SaveMoneyToSaveData();
-                Debug.Log($"[PlayerResourceManager] Money set to: {amount}");
             }
         }
 
@@ -157,7 +149,6 @@ namespace DiceGame
 
                 if (currentMoney != saveDataMoney)
                 {
-                    Debug.Log($"[PlayerResourceManager] Syncing MoneyManager: {currentMoney} -> {saveDataMoney}");
                     _moneyManager.Set(saveDataMoney);
                 }
             }
@@ -328,7 +319,6 @@ namespace DiceGame
                 }
             }
 
-            Debug.Log("[PlayerResourceManager] Synced all resources from SaveData");
         }
 
         /// <summary>
@@ -339,7 +329,6 @@ namespace DiceGame
             SaveMoneyToSaveData();
             SaveDiceToSaveData();
             SaveRelicsToSaveData();
-            Debug.Log("[PlayerResourceManager] Saved all resources to SaveData");
         }
 
         #endregion
@@ -367,7 +356,6 @@ namespace DiceGame
             }
 
             SaveAllToSaveData();
-            Debug.Log("[PlayerResourceManager] Reset all resources");
         }
 
         #endregion

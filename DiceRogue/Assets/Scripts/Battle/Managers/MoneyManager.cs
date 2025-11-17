@@ -28,7 +28,6 @@ namespace DiceGame
                 return;
             }
             _money += amount;
-            Debug.Log($"[MoneyManager] Money added: +{amount}, Total: {_money}");
         }
 
         /// <summary>
@@ -49,7 +48,6 @@ namespace DiceGame
             }
             
             _money -= amount;
-            Debug.Log($"[MoneyManager] Money subtracted: -{amount}, Remaining: {_money}");
             return true;
         }
 
@@ -59,7 +57,6 @@ namespace DiceGame
         public void Set(int amount)
         {
             _money = amount;
-            Debug.Log($"[MoneyManager] Money set to: {_money}");
         }
 
         /// <summary>
@@ -68,7 +65,6 @@ namespace DiceGame
         public void Reset()
         {
             _money = 0;
-            Debug.Log("[MoneyManager] Money reset to 0");
         }
     }
 }
