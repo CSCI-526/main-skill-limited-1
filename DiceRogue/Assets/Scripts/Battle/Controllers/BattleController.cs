@@ -212,22 +212,17 @@ namespace DiceGame
 
         /// <summary>
         /// Add a relic to the player's backpack (called by shop, rewards, etc.)
+        /// Uses PlayerResourceManager for cross-scene persistence
         /// </summary>
         /// <param name="relic">The relic to add</param>
         /// <returns>True if added successfully</returns>
         public bool AddRelicToPlayerBackpack(RelicBase relic)
         {
-            bool success = _relicManager.AddRelicToBackpack(relic);
+            // Use PlayerResourceManager to add relic (automatically saves to SaveData)
+            bool success = PlayerResourceManager.Instance?.AddRelicToBackpack(relic) ?? false;
             
             if (success)
             {
-                // Save to persistence
-                if (!_stateManager.SaveData.relicNames.Contains(relic.relicName))
-                {
-                    _stateManager.SaveData.relicNames.Add(relic.relicName);
-                    _stateManager.Save();
-                }
-                
                 if (relicDisplay != null)
                 {
                     // Refresh UI to show the new relic
@@ -240,22 +235,17 @@ namespace DiceGame
 
         /// <summary>
         /// Add a relic to the player's backpack by name (searches global pool)
+        /// Uses PlayerResourceManager for cross-scene persistence
         /// </summary>
         /// <param name="relicName">Name of the relic to add</param>
         /// <returns>True if added successfully</returns>
         public bool AddRelicToPlayerBackpackByName(string relicName)
         {
-            bool success = _relicManager.AddRelicToBackpackByName(relicName);
+            // Use PlayerResourceManager to add relic (automatically saves to SaveData)
+            bool success = PlayerResourceManager.Instance?.AddRelicToBackpackByName(relicName) ?? false;
             
             if (success)
             {
-                // Save to persistence
-                if (!_stateManager.SaveData.relicNames.Contains(relicName))
-                {
-                    _stateManager.SaveData.relicNames.Add(relicName);
-                    _stateManager.Save();
-                }
-                
                 if (relicDisplay != null)
                 {
                     // Refresh UI to show the new relic
@@ -387,40 +377,45 @@ namespace DiceGame
 
         /// <summary>
         /// Get current money amount (for shop, etc.)
+        /// Uses PlayerResourceManager for cross-scene access
         /// </summary>
         public int GetMoney()
         {
-            return _moneyManager?.Money ?? 0;
+            return PlayerResourceManager.Instance?.GetMoney() ?? 0;
         }
 
         /// <summary>
         /// Add money (for shop, rewards, etc.)
+        /// Uses PlayerResourceManager for cross-scene access
         /// </summary>
         public void AddMoney(int amount)
         {
-            if (_moneyManager != null)
-            {
-                _moneyManager.Add(amount);
-                _stateManager.SaveData.money = _moneyManager.Money;
-                _stateManager.Save();
-                UpdateMoneyDisplay();
-            }
+            PlayerResourceManager.Instance?.AddMoney(amount);
+            UpdateMoneyDisplay();
         }
 
         /// <summary>
         /// Spend money (for shop purchases, etc.)
+        /// Uses PlayerResourceManager for cross-scene access
         /// </summary>
         /// <returns>True if successful, false if insufficient funds</returns>
         public bool SpendMoney(int amount)
         {
-            if (_moneyManager != null && _moneyManager.Subtract(amount))
+            bool success = PlayerResourceManager.Instance?.SpendMoney(amount) ?? false;
+            if (success)
             {
-                _stateManager.SaveData.money = _moneyManager.Money;
-                _stateManager.Save();
                 UpdateMoneyDisplay();
-                return true;
             }
-            return false;
+            return success;
+        }
+
+        /// <summary>
+        /// Sync MoneyManager with SaveData (useful when entering ShopScene after level completion)
+        /// NOTE: Now handled by PlayerResourceManager, kept for backward compatibility
+        /// </summary>
+        public void SyncMoneyFromSaveData()
+        {
+            PlayerResourceManager.Instance?.SyncMoneyFromSaveData();
         }
 
 

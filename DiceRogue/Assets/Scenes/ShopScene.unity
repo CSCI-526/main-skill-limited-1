@@ -1264,8 +1264,8 @@ MonoBehaviour:
   weightLegendary: 0.08
   legendaryAppearChance: 0.15
   blindBoxNormalRate: 0.7
-  battleController: {fileID: 0}
-  useDebugGold: 1
+  _resourceManager: {fileID: 0}
+  useDebugGold: 0
   debugStartGold: 20
   walletText: {fileID: 395601428}
   backpackPanelRoot: {fileID: 1619142781}
@@ -1273,6 +1273,7 @@ MonoBehaviour:
   backpackEntryPrefab: {fileID: 3429122295233454620, guid: 3e9026d09b7c94be7b1f0f5910a8863a, type: 3}
   feedbackText: {fileID: 326077986}
   feedbackDuration: 5
+  continueButton: {fileID: 1864675801}
 --- !u!1 &641436410
 GameObject:
   m_ObjectHideFlags: 0

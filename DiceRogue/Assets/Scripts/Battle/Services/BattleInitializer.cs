@@ -55,12 +55,19 @@ namespace DiceGame
             result.HandManager = InitializeHandManager(controller.maxRollsPerHand);
             result.EffectHandler = new DiceEffectHandler();
             result.ViewFactory = new DiceViewFactory(controller.diceViewPrefab, controller.diceRowParent);
-            result.RelicManager = new RelicManager();
-            result.DiceManager = InitializeDiceManager();
+            
+            // Use PlayerResourceManager for cross-scene resources (money, dice, relics)
+            var resourceManager = PlayerResourceManager.Instance;
+            result.MoneyManager = resourceManager.MoneyManager;
+            result.DiceManager = resourceManager.DiceManager;
+            result.RelicManager = resourceManager.RelicManager;
+            
+            // Sync resources from SaveData (in case SaveData was updated in other scenes)
+            resourceManager.SyncAllFromSaveData();
+            
             result.ScoreCalculator = new ScoreCalculator();
             result.UIPresenter = new BattleUIPresenter();
             result.CompositionService = new HandCompositionService();
-            result.MoneyManager = new MoneyManager(stateManager.SaveData.money);
 
             // Step 4: Initialize UI components
             InitializeUI(controller, result);
@@ -149,7 +156,9 @@ namespace DiceGame
 
         /// <summary>
         /// Initialize dice manager
+        /// NOTE: Now using PlayerResourceManager, this method is kept for compatibility but not used
         /// </summary>
+        [System.Obsolete("Use PlayerResourceManager.Instance.DiceManager instead")]
         private DiceManager InitializeDiceManager()
         {
             var diceManager = new DiceManager();
@@ -258,22 +267,19 @@ namespace DiceGame
 
         /// <summary>
         /// Initialize relic system: load from save data
+        /// NOTE: RelicManager is now managed by PlayerResourceManager, but we still need to handle starting relic logic
         /// </summary>
         private void InitializeRelicSystem(BattleController controller, GameStateManager stateManager, InitializationResult result)
         {
-            // Initialize global relic pool (all relics available this run)
-            result.RelicManager.InitializeGlobalRelicPool();
-
-            // Load relics from save data
-            foreach (var relicName in stateManager.SaveData.relicNames)
-            {
-                result.RelicManager.AddRelicToBackpackByName(relicName);
-            }
-
+            // RelicManager is already initialized by PlayerResourceManager
+            // Relics are already loaded from SaveData in PlayerResourceManager
+            
             // Give player a random starting relic if this is a new game (no relics and not continuing from reward)
             if (result.RelicManager.PlayerBackpack.Count == 0 && !stateManager.State.ContinuingFromReward)
             {
                 GiveRandomStartingRelic(result.RelicManager);
+                // Save the new relic to SaveData
+                PlayerResourceManager.Instance.SaveAllToSaveData();
             }
 
             // Update relic display UI
@@ -315,15 +321,14 @@ namespace DiceGame
 
         /// <summary>
         /// Initialize dice system: load from save data and update cooldown system
+        /// NOTE: DiceManager is now managed by PlayerResourceManager, data is already synced
         /// </summary>
         private void InitializeDiceSystem(BattleController controller, GameStateManager stateManager, InitializationResult result)
         {
-            // Load player dice backpack from save data
+            // DiceManager is already initialized and synced by PlayerResourceManager
+            // Just update CooldownSystem with backpack dice
             if (result.DiceManager != null)
             {
-                result.DiceManager.LoadFromSaveData(stateManager.SaveData);
-
-                // Update CooldownSystem with backpack dice
                 UpdateCooldownSystemFromBackpack(controller, result);
             }
         }

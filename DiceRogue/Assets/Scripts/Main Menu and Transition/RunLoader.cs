@@ -60,6 +60,7 @@ namespace DiceRogue.Boot
         /// <summary>
         /// Reset game data for a new run (money and dice backpack)
         /// Preserves bestScore and hasCompletedTutorial
+        /// Uses PlayerResourceManager for cross-scene resource management
         /// </summary>
         private void ResetGameDataForNewRun()
         {
@@ -74,7 +75,7 @@ namespace DiceRogue.Boot
             int bestScore = stateManager.SaveData.bestScore;
             bool hasCompletedTutorial = stateManager.SaveData.hasCompletedTutorial;
             
-            // Reset money and dice backpack
+            // Reset money and dice backpack in SaveData
             stateManager.SaveData.money = 0;
             stateManager.SaveData.diceTypeIds.Clear();
             stateManager.SaveData.relicNames.Clear();
@@ -83,8 +84,20 @@ namespace DiceRogue.Boot
             stateManager.SaveData.bestScore = bestScore;
             stateManager.SaveData.hasCompletedTutorial = hasCompletedTutorial;
             
-            // Save the reset data
-            stateManager.Save();
+            // Reset PlayerResourceManager resources (if it exists)
+            var resourceManager = PlayerResourceManager.Instance;
+            if (resourceManager != null)
+            {
+                resourceManager.ResetAllResources();
+                Debug.Log("[RunLoader] Reset PlayerResourceManager resources");
+            }
+            else
+            {
+                // If PlayerResourceManager doesn't exist yet, it will be initialized with the reset SaveData
+                // Save the reset data so PlayerResourceManager can load it
+                stateManager.Save();
+                Debug.Log("[RunLoader] PlayerResourceManager not found yet - saved reset data to SaveData");
+            }
             
             Debug.Log("[RunLoader] Reset game data for new run - money and dice backpack cleared");
         }
@@ -168,15 +181,44 @@ namespace DiceRogue.Boot
             Debug.Log($"[RunLoader] Scene '{sceneName}' loaded successfully!");
 
             // Scene changed; fader may be under the persistent loader or scene—regrab it
+            // Wait a frame for scene to fully initialize
+            yield return null;
+            
             EnsureFader();
             if (wipeFader != null)
             {
                 Debug.Log("[RunLoader] Fading in...");
-                yield return wipeFader.FadeIn();
+                
+                // Start fade in with timeout protection
+                float fadeStartTime = Time.unscaledTime;
+                float maxFadeTime = 2f; // Maximum 2 seconds for fade in
+                
+                // Start fade in coroutine
+                StartCoroutine(wipeFader.FadeIn());
+                
+                // Wait for fade in with timeout protection
+                while (wipeFader != null && wipeFader.IsCovered() && (Time.unscaledTime - fadeStartTime) < maxFadeTime)
+                {
+                    yield return null;
+                }
+                
+                // If fade is taking too long or fader is still covered, force reveal
+                if (wipeFader != null && wipeFader.IsCovered())
+                {
+                    Debug.LogWarning("[RunLoader] Fade in taking too long or fader still covered - forcing reveal");
+                    wipeFader.ForceReveal();
+                }
             }
             else
             {
-                Debug.LogWarning("[RunLoader] No fader found after scene load - skipping fade in");
+                Debug.LogWarning("[RunLoader] No fader found after scene load - scene should be visible");
+                // Try to find and force reveal any fader in the scene
+                var faderInScene = FindObjectOfType<ScreenWipeFader>(true);
+                if (faderInScene != null)
+                {
+                    Debug.Log("[RunLoader] Found fader in scene - forcing reveal");
+                    faderInScene.ForceReveal();
+                }
             }
             
             Debug.Log($"[RunLoader] LoadSceneWithWipe completed for '{sceneName}'");
