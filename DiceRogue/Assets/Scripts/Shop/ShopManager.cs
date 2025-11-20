@@ -3,8 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using UnityEngine;
-using DiceGame;           // BaseDice, DiceTier
-using DiceGame.Core;
+using DiceGame;           // BaseDice, DiceTier, DiceManager
+using DiceGame.Core;      // GameStateManager
 using TMPro;
 using UnityEngine.UI;
 using UnityEngine.EventSystems;
@@ -81,16 +81,13 @@ public class ShopManager : MonoBehaviour
     [Range(0f, 1f)] public float legendaryAppearChance = 0.15f; // 傳奇出現機率
     [Range(0f, 1f)] public float blindBoxNormalRate = 0.7f;     // 盲盒 Common 機率（其餘為 Rare）
 
-    [Header("Player Refs")]
-    public PlayerInventory inventory;   // 背包
-
-    [Header("Battle Money")]
-    [Tooltip("從這裡讀取與扣除金錢（BattleController.GetMoney / SpendMoney）")]
+    [Header("Player Resource Manager")]
+    [Tooltip("玩家資源管理器（跨場景單例，管理金錢、骰子、遺物）")]
     [SerializeField, HideInInspector]
-    private BattleController battleController;
+    private PlayerResourceManager _resourceManager;
 
     [Header("Debug Gold (Temp for Testing)")]
-    public bool useDebugGold = true;
+    public bool useDebugGold = false;
     public int debugStartGold = 20;
     private int debugGold;
 
@@ -111,6 +108,10 @@ public class ShopManager : MonoBehaviour
     public float feedbackDuration = 1.5f;
     private Coroutine feedbackRoutine;
 
+    [Header("Continue Button")]
+    [Tooltip("Continue button to proceed to next level")]
+    public Button continueButton;
+
     // 狀態
     private List<BaseDice> _choiceDice;        // 這次商店的 3 個自選
     private BaseDice _legendaryOffering;       // 這次商店的傳奇（可能為 null）
@@ -118,8 +119,7 @@ public class ShopManager : MonoBehaviour
 
     private int _freeIndex = -1; // 本次商店中免費的那一格（其餘需付費）
 
-    // 在商店中用來顯示的背包快照（目前僅在本場景維護，未來可從真正的 PlayerInventory 讀取）
-    private readonly List<BaseDice> _backpackSnapshot = new List<BaseDice>();
+    // 注意：不再使用本地 _backpackSnapshot，直接從 DiceManager.PlayerDiceBackpack 讀取
 
     private float GetTierWeight(DiceTier tier)
     {
@@ -169,22 +169,36 @@ public class ShopManager : MonoBehaviour
 
     private void Awake()
     {
-        if (!inventory) inventory = PlayerInventory.I;
-
-        // 自動尋找 BattleController（若未在 Inspector 指定）
-        if (!battleController)
+        // 獲取 PlayerResourceManager 實例（跨場景單例）
+        _resourceManager = PlayerResourceManager.Instance;
+        
+        if (_resourceManager == null)
         {
-            battleController = FindObjectOfType<BattleController>();
-            if (!battleController)
-            {
-                Debug.LogWarning("[Shop] BattleController not found in scene. Money will stay at 0 unless debugGold is used.");
-            }
+            Debug.LogError("[Shop] PlayerResourceManager.Instance is null! Cannot initialize shop.");
+            return;
+        }
+
+        Debug.Log("[Shop] PlayerResourceManager found successfully. Money and dice systems integrated.");
+
+        // 同步資源管理器與 SaveData（確保數據是最新的）
+        if (!useDebugGold)
+        {
+            _resourceManager.SyncAllFromSaveData();
+            int currentMoney = _resourceManager.GetMoney();
+            int saveDataMoney = GameStateManager.Instance?.SaveData?.money ?? 0;
+            Debug.Log($"[Shop] Initial sync - PlayerResourceManager: ${currentMoney}, SaveData: ${saveDataMoney}");
         }
 
         // Temp debug gold for shop testing; 若不想用，將 useDebugGold 設為 false
+        // ⚠️ WARNING: If useDebugGold is enabled in Inspector, it will override the real money system!
         if (useDebugGold)
         {
             debugGold = debugStartGold;
+            Debug.LogWarning($"[Shop] ⚠️ DEBUG MODE ENABLED! Using debug gold ({debugGold}) instead of real money. To use real money, disable 'useDebugGold' in Inspector.");
+        }
+        else
+        {
+            Debug.Log("[Shop] Debug gold mode disabled. Using real money system from PlayerResourceManager.");
         }
 
         UpdateWalletUI();
@@ -196,6 +210,46 @@ public class ShopManager : MonoBehaviour
         if (backpackPanelRoot != null)
         {
             backpackPanelRoot.SetActive(true);
+        }
+
+        // 驗證並同步金錢系統狀態
+        if (!useDebugGold && _resourceManager != null)
+        {
+            int moneyFromResourceManager = _resourceManager.GetMoney();
+            int moneyFromSaveData = GameStateManager.Instance?.SaveData?.money ?? 0;
+            Debug.Log($"[Shop] Money verification - PlayerResourceManager: ${moneyFromResourceManager}, SaveData: ${moneyFromSaveData}");
+            
+            if (moneyFromResourceManager != moneyFromSaveData)
+            {
+                Debug.LogWarning($"[Shop] ⚠️ Money mismatch detected! PlayerResourceManager has ${moneyFromResourceManager} but SaveData has ${moneyFromSaveData}. Syncing...");
+                
+                // 同步 PlayerResourceManager 與 SaveData
+                _resourceManager.SyncMoneyFromSaveData();
+                
+                // 驗證同步後的值
+                int syncedMoney = _resourceManager.GetMoney();
+                Debug.Log($"[Shop] After sync - PlayerResourceManager: ${syncedMoney}, SaveData: ${moneyFromSaveData}");
+                
+                if (syncedMoney != moneyFromSaveData)
+                {
+                    Debug.LogError($"[Shop] ❌ Sync failed! PlayerResourceManager still has ${syncedMoney} but SaveData has ${moneyFromSaveData}");
+                }
+            }
+        }
+
+        // 更新錢包 UI（確保顯示正確的金額）
+        UpdateWalletUI();
+
+        // 設置繼續按鈕
+        if (continueButton != null)
+        {
+            continueButton.onClick.RemoveAllListeners();
+            continueButton.onClick.AddListener(OnContinueToNextLevel);
+            Debug.Log("[Shop] Continue button initialized");
+        }
+        else
+        {
+            Debug.LogWarning("[Shop] Continue button not assigned in Inspector!");
         }
 
         BuildShop();
@@ -279,22 +333,10 @@ public class ShopManager : MonoBehaviour
 
     private void BuildBackpackSnapshot()
     {
-        _backpackSnapshot.Clear();
-
-        // TODO: 將來若有真正的 PlayerInventory，可改成從 inventory 讀取，例如：
-        // if (inventory != null)
-        // {
-        //     var owned = inventory.GetAllDice();
-        //     if (owned != null) _backpackSnapshot.AddRange(owned);
-        // }
-        // 目前尚未與隊友的背包系統串接，因此預設為空，之後購買的骰子會動態加入。
-    }
-
-    private void AddToBackpackView(BaseDice die)
-    {
-        if (die == null) return;
-        _backpackSnapshot.Add(die);
-        RefreshBackpackUI();
+        // 不再需要本地快照，直接從 PlayerResourceManager.DiceManager.PlayerDiceBackpack 讀取
+        // 此方法保留以保持兼容性，但實際數據來源已改為 PlayerResourceManager
+        int diceCount = _resourceManager?.DiceManager?.PlayerDiceBackpack.Count ?? 0;
+        Debug.Log($"[Shop] Building backpack snapshot from PlayerResourceManager: {diceCount} dice");
     }
 
     // Helper to attach tooltip triggers to backpack entries and previews
@@ -330,14 +372,25 @@ public class ShopManager : MonoBehaviour
         Debug.Log("[Shop/Backpack] RefreshBackpackUI called");
         if (!backpackContentRoot || !backpackEntryPrefab) return;
 
+        // 檢查 PlayerResourceManager 是否已初始化
+        if (_resourceManager == null || _resourceManager.DiceManager == null)
+        {
+            Debug.LogWarning("[Shop/Backpack] PlayerResourceManager or DiceManager is null. Cannot refresh backpack UI.");
+            return;
+        }
+
         // 清空現有項目
         foreach (Transform child in backpackContentRoot)
         {
             Destroy(child.gameObject);
         }
 
+        // 從 PlayerResourceManager.DiceManager.PlayerDiceBackpack 讀取數據
+        var backpackDice = _resourceManager.DiceManager.PlayerDiceBackpack;
+        Debug.Log($"[Shop/Backpack] Displaying {backpackDice.Count} dice from PlayerResourceManager");
+
         // 重新建立列表
-        foreach (var die in _backpackSnapshot)
+        foreach (var die in backpackDice)
         {
             if (die == null) continue;
 
@@ -431,21 +484,21 @@ public class ShopManager : MonoBehaviour
 
         if (got != null)
         {
-            if (inventory != null)
+            // 使用 PlayerResourceManager 添加骰子到背包
+            bool success = _resourceManager?.AddDiceToBackpack(got) ?? false;
+            if (success)
             {
-                inventory.AddDie(got);
+                // 更新商店內背包顯示
+                RefreshBackpackUI();
+                
+                UpdateWalletUI();
+                Debug.Log($"[Shop] BlindBox => {got.diceName} ({got.tier})");
+                Debug.Log($"[Shop] Player purchased BlindBox result -> Name: {got.diceName}, Tier: {got.tier}, PricePaid: {blindBoxPrice}");
             }
             else
             {
-                Debug.LogWarning("[Shop] inventory is null, skipping AddDie for blind box (test mode)");
+                Debug.LogWarning($"[Shop] Failed to add dice to backpack: {got.diceName} (may be duplicate)");
             }
-
-            // 更新商店內背包顯示
-            AddToBackpackView(got);
-
-            UpdateWalletUI();
-            Debug.Log($"[Shop] BlindBox => {got.diceName} ({got.tier})");
-            Debug.Log($"[Shop] Player purchased BlindBox result -> Name: {got.diceName}, Tier: {got.tier}, PricePaid: {blindBoxPrice}");
         }
         else
         {
@@ -460,17 +513,18 @@ public class ShopManager : MonoBehaviour
         if (price > 0 && !Spend(price)) return false;
 
         var copy = CloneDice(die);
-        if (inventory != null)
+        
+        // 使用 PlayerResourceManager 添加骰子到背包
+        bool success = _resourceManager?.AddDiceToBackpack(copy) ?? false;
+        if (!success)
         {
-            inventory.AddDie(copy);
-        }
-        else
-        {
-            Debug.LogWarning("[Shop] inventory is null, skipping AddDie (test mode)");
+            Debug.LogWarning($"[Shop] Failed to add dice to backpack: {die.diceName} (may be duplicate)");
+            // 即使添加失敗，錢已經扣了，這裡可以選擇退款或繼續
+            // 目前選擇繼續，因為可能是重複購買的情況
         }
 
         // 更新商店內背包顯示
-        AddToBackpackView(copy);
+        RefreshBackpackUI();
 
         UpdateWalletUI();
 
@@ -485,17 +539,16 @@ public class ShopManager : MonoBehaviour
         if (!Spend(price)) return false;
 
         var copy = CloneDice(_legendaryOffering);
-        if (inventory != null)
+        
+        // 使用 PlayerResourceManager 添加骰子到背包
+        bool success = _resourceManager?.AddDiceToBackpack(copy) ?? false;
+        if (!success)
         {
-            inventory.AddDie(copy);
-        }
-        else
-        {
-            Debug.LogWarning("[Shop] inventory is null, skipping AddDie for legendary (test mode)");
+            Debug.LogWarning($"[Shop] Failed to add legendary dice to backpack: {_legendaryOffering.diceName} (may be duplicate)");
         }
 
         // 更新商店內背包顯示
-        AddToBackpackView(copy);
+        RefreshBackpackUI();
 
         UpdateWalletUI();
 
@@ -524,29 +577,25 @@ public class ShopManager : MonoBehaviour
             return true;
         }
 
-        // 2) BattleController 模式：從戰鬥流程取得金錢
-        if (!battleController)
+        // 2) PlayerResourceManager 模式：從跨場景資源管理器取得金錢
+        if (_resourceManager == null)
         {
-            Debug.LogError("[Shop] BattleController missing. Cannot spend money.");
+            Debug.LogError("[Shop] PlayerResourceManager missing. Cannot spend money.");
             ShowFeedback("Insufficient Funds!");
             return false;
         }
 
-        int currentMoney = battleController.GetMoney();
-        if (currentMoney < price)
+        // Use PlayerResourceManager.SpendMoney() to deduct money
+        // This will handle validation and persistence automatically
+        bool success = _resourceManager.SpendMoney(price);
+        if (!success)
         {
-            Debug.Log("[Shop] Not enough gold (battleController).");
+            Debug.Log($"[Shop] Not enough gold (PlayerResourceManager). Current: {_resourceManager.GetMoney()}, Required: {price}");
             ShowFeedback("Insufficient Funds!");
             return false;
         }
 
-        // TODO: 根據你隊友實作的 API 名稱來扣錢：
-        // 範例 1：若有 battleController.SpendMoney(int amount)
-        // battleController.SpendMoney(price);
-        //
-        // 範例 2：若有 battleController.AddMoney(int delta)
-        // battleController.AddMoney(-price);
-
+        Debug.Log($"[Shop] Money spent: {price}, Remaining: {_resourceManager.GetMoney()}");
         UpdateWalletUI();
         return true;
     }
@@ -594,15 +643,18 @@ public class ShopManager : MonoBehaviour
 
         if (useDebugGold)
         {
+            Debug.LogWarning("[Shop] ⚠️ DEBUG MODE ENABLED! Using debug gold instead of real money. Disable 'useDebugGold' in Inspector to use real money system.");
             walletText.text = "$ " + debugGold;
         }
-        else if (battleController)
+        else if (_resourceManager != null)
         {
-            int currentMoney = battleController.GetMoney();
+            int currentMoney = _resourceManager.GetMoney();
+            Debug.Log($"[Shop] Displaying money from PlayerResourceManager: ${currentMoney}");
             walletText.text = "$ " + currentMoney;
         }
         else
         {
+            Debug.LogWarning("[Shop] PlayerResourceManager not found. Displaying $0");
             walletText.text = "$ 0";
         }
     }
@@ -650,6 +702,36 @@ public class ShopManager : MonoBehaviour
     public void OnClickExitShop()
     {
         // 這邊改成你上一個場景的名稱
+        SceneManager.LoadScene("BattleScene");
+    }
+
+    /// <summary>
+    /// Continue to next level - loads BattleScene with next level state
+    /// </summary>
+    public void OnContinueToNextLevel()
+    {
+        var stateManager = GameStateManager.Instance;
+        if (stateManager == null)
+        {
+            Debug.LogError("[Shop] GameStateManager.Instance is null! Cannot continue to next level.");
+            return;
+        }
+
+        // Ensure ContinuingFromReward flag is set (should already be set by HandFlowController)
+        if (!stateManager.State.ContinuingFromReward)
+        {
+            Debug.LogWarning("[Shop] ContinuingFromReward flag not set! Setting it now.");
+            stateManager.State.ContinuingFromReward = true;
+        }
+
+        // Log next level info
+        int nextLevel = stateManager.State.PendingLevel;
+        int nextTarget = stateManager.State.PendingTargetScore;
+        Debug.Log($"[Shop] Continuing to next level: Level {nextLevel}, Target Score: {nextTarget}");
+
+        // BattleScene doesn't have a ScreenWipeFader, so we'll load it directly
+        // This avoids the black screen issue
+        Debug.Log("[Shop] Loading BattleScene directly (no fade animation needed)");
         SceneManager.LoadScene("BattleScene");
     }
 }

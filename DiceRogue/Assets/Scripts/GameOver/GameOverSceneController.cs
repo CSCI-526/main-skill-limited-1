@@ -32,9 +32,10 @@ namespace DiceRogue.GameOver
                 StartCoroutine(wipeFader.FadeIn());
             }
 
-            // Retrieve score data from BattleController
-            int finalScore = BattleController.GameOverFinalScore;
-            int targetScore = BattleController.GameOverTargetScore;
+            // Retrieve score data from GameStateManager
+            var stateManager = GameStateManager.Instance;
+            int finalScore = stateManager.State.GameOverFinalScore;
+            int targetScore = stateManager.State.GameOverTargetScore;
             int shortfall = targetScore - finalScore;
 
             // Update UI elements

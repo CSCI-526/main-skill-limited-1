@@ -7,8 +7,9 @@ using UnityEngine.SceneManagement;
 
 public class RewardSceneManager : MonoBehaviour
 {
-    // Static list to pass picked dice type ids across scenes
-    public static readonly List<string> PendingDiceTypeIds = new List<string>();
+    private GameStateManager _stateManager;
+    private DiceManager _diceManager;  // Dice manager for accessing global dice pool
+    
     [Header("Reference")]
     public List<BaseDice> allDicePool;
     [SerializeField] private Transform rewardParent;      // UI container (e.g., RewardPanel under Canvas)
@@ -40,7 +41,7 @@ public class RewardSceneManager : MonoBehaviour
 
         // Convert to a type identifier (e.g., "D8", "HeavyDice") to recreate later
         var typeId = _selectedDice.GetType().Name;
-        PendingDiceTypeIds.Add(typeId);
+        _stateManager.State.PendingDiceTypeIds.Add(typeId);
         Debug.Log($"[RewardScene] ========================================");
         Debug.Log($"[RewardScene] Reward confirmed!");
         Debug.Log($"[RewardScene] Selected: {_selectedDice.diceName} ({_selectedDice.tier})");
@@ -54,8 +55,25 @@ public class RewardSceneManager : MonoBehaviour
 
     void Start()
     {
-        // 1) Build a pool (default prototypes) and pick 3 non-filler dice
-        allDicePool = DicePool.GetAll();
+        _stateManager = GameStateManager.Instance;
+        
+        // Initialize DiceManager to access global dice pool
+        _diceManager = new DiceManager();
+        _diceManager.InitializeGlobalDicePool();
+        
+        // 1) Build a pool from DiceManager's global pool (or fallback to DicePool.GetNonFiller())
+        if (_diceManager != null && _diceManager.GlobalDicePool != null && _diceManager.GlobalDicePool.Count > 0)
+        {
+            allDicePool = _diceManager.GlobalDicePool.ToList();
+            Debug.Log($"[RewardSceneManager] Using DiceManager.GlobalDicePool: {allDicePool.Count} dice types");
+        }
+        else
+        {
+            // Fallback to DicePool.GetNonFiller() to avoid Filler dice
+            allDicePool = DicePool.GetNonFiller();
+            Debug.Log($"[RewardSceneManager] Fallback to DicePool.GetNonFiller(): {allDicePool.Count} dice types");
+        }
+        
         GenerateRewardOptions();   // fills rewardResult with 3 random non-filler dice
 
         // 2) Render UI cards
