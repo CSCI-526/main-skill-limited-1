@@ -92,6 +92,14 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 3946312254004097154, guid: 41776c4c897be4eb7b17d9717e277159, type: 3}
+      propertyPath: m_Type
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3946312254004097154, guid: 41776c4c897be4eb7b17d9717e277159, type: 3}
+      propertyPath: m_Sprite
+      value: 
+      objectReference: {fileID: 21300000, guid: 7c9822ecd072a794aadbfb7b665eb213, type: 3}
     - target: {fileID: 8449445330181396629, guid: 41776c4c897be4eb7b17d9717e277159, type: 3}
       propertyPath: m_text
       value: Lucky6
