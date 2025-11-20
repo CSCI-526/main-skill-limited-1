@@ -3165,6 +3165,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 832291b336269415188f4652661a522c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  enableDebug: 1
   raycaster: {fileID: 858710508}
   eventSystem: {fileID: 1445944861}
 --- !u!4 &1538925772
