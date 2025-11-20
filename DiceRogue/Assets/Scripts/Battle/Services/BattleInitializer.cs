@@ -173,8 +173,15 @@ namespace DiceGame
             // Initialize and hide continue button
             if (controller.continueButton != null)
             {
-                controller.continueButton.gameObject.SetActive(false);
-                controller.continueButton.onClick.AddListener(() => controller.OnContinue());
+                try
+                {
+                    controller.continueButton.gameObject.SetActive(false);
+                    controller.continueButton.onClick.AddListener(() => controller.OnContinue());
+                }
+                catch (System.Exception e)
+                {
+                    Debug.LogError($"[BattleInitializer] Failed to initialize continue button: {e.Message}");
+                }
             }
         }
 
@@ -459,10 +466,17 @@ namespace DiceGame
             // Activate TutorialController if in tutorial mode
             if (stateManager.State.IsTutorialMode)
             {
-                var tutorialController = Object.FindObjectOfType<DiceGame.Tutorial.TutorialController>(true);
-                if (tutorialController != null)
+                try
                 {
-                    tutorialController.gameObject.SetActive(true);
+                    var tutorialController = Object.FindObjectOfType<DiceGame.Tutorial.TutorialController>(true);
+                    if (tutorialController != null)
+                    {
+                        tutorialController.gameObject.SetActive(true);
+                    }
+                }
+                catch (System.Exception e)
+                {
+                    Debug.LogError($"[BattleInitializer] Failed to activate TutorialController: {e.Message}");
                 }
             }
         }

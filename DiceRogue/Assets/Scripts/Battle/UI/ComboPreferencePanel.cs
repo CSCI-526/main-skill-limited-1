@@ -16,25 +16,65 @@ namespace DiceGame
         public Button comboPreferenceCloseButton; // Close button (optional)
         
         private bool _isInitialized = false;
+        private bool _delayedInitScheduled = false;
+        private bool _needsDelayedInit = false;
         
         /// <summary>
         /// Initialize combo preference panel
+        /// Uses Start() method to delay SetActive calls for WebGL compatibility
         /// </summary>
         public void Initialize()
         {
             if (_isInitialized) return;
             _isInitialized = true;
             
+            // Set up button listeners immediately (these are safe)
+            if (comboPreferenceButton != null)
+            {
+                comboPreferenceButton.onClick.AddListener(Open);
+            }
+            
+            if (comboPreferenceCloseButton != null)
+            {
+                comboPreferenceCloseButton.onClick.AddListener(Close);
+            }
+            
+            // Mark that we need delayed initialization
+            // This will be handled in Start() which is guaranteed to run after MonoBehaviour is fully initialized
+            _needsDelayedInit = true;
+        }
+        
+        /// <summary>
+        /// Unity Start method - called after MonoBehaviour is fully initialized
+        /// </summary>
+        void Start()
+        {
+            // Perform delayed initialization if needed
+            if (_needsDelayedInit && !_delayedInitScheduled)
+            {
+                _delayedInitScheduled = true;
+                // Use Invoke to delay by one frame
+                try
+                {
+                    Invoke(nameof(DelayedInitialize), 0.01f);
+                }
+                catch (System.Exception)
+                {
+                    // If Invoke fails, try to do it synchronously with extra safety
+                    DelayedInitialize();
+                }
+            }
+        }
+        
+        /// <summary>
+        /// Delayed initialization - called after a short delay to ensure GameObjects are fully initialized
+        /// </summary>
+        private void DelayedInitialize()
+        {
             // Initialize combo preference panel (hidden by default)
             if (comboPreferencePanel != null)
             {
                 comboPreferencePanel.SetActive(false);
-            }
-            
-            // Set up combo preference button
-            if (comboPreferenceButton != null)
-            {
-                comboPreferenceButton.onClick.AddListener(Open);
             }
             
             // Setup overlay (just visual, not clickable)
@@ -64,12 +104,6 @@ namespace DiceGame
                 }
                 windowImage.raycastTarget = true;
             }
-            
-            // Setup close button if provided
-            if (comboPreferenceCloseButton != null)
-            {
-                comboPreferenceCloseButton.onClick.AddListener(Close);
-            }
         }
         
         /// <summary>
@@ -98,6 +132,9 @@ namespace DiceGame
         
         void OnDestroy()
         {
+            // Cancel any pending delayed initialization
+            CancelInvoke(nameof(DelayedInitialize));
+            
             // Clean up button listeners
             if (comboPreferenceButton != null)
             {
