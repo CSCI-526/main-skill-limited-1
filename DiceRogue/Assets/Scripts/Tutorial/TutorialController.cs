@@ -23,6 +23,9 @@ namespace DiceGame.Tutorial
         public DiceSelectionUI diceSelectionUI;
         public Transform diceRowParent;
         public ScoreAnimator scoreAnimator;
+        
+        [Header("Shop References (for Shop Tutorial Step)")]
+        public ShopManager shopManager;
 
         [Header("Gameplay Buttons")]
         public Button openBackpackButton;
@@ -65,6 +68,7 @@ namespace DiceGame.Tutorial
         private readonly List<TutorialStep> tutorialSteps = new();
         private readonly List<(Button button, UnityAction handler)> buttonHandlers = new();
         private readonly List<(Button button, UnityAction handler)> diceLockHandlers = new();
+        private readonly List<(ShopItemUI shopItem, System.Func<bool> originalCallback)> shopItemHandlers = new();
 
         private int currentStepIndex = -1;
         private bool isTutorialActive = true;
@@ -87,27 +91,196 @@ namespace DiceGame.Tutorial
         private readonly List<Coroutine> highlightCoroutines = new();
         private readonly Dictionary<Button, bool> originalButtonStates = new();
         private readonly List<Button> allButtons = new();
+        
+        private static TutorialController instance;
+
+        void Awake()
+        {
+            // Singleton pattern - only one TutorialController should exist
+            if (instance != null && instance != this)
+            {
+                Debug.Log("[TutorialController] Duplicate TutorialController found, destroying duplicate");
+                Destroy(gameObject);
+                return;
+            }
+            
+            instance = this;
+            // Persist across scenes so tutorial can continue in ShopScene
+            DontDestroyOnLoad(gameObject);
+            Debug.Log("[TutorialController] Awake() - TutorialController set to persist across scenes");
+            
+            // Subscribe to scene loaded event to handle ShopScene transition
+            UnityEngine.SceneManagement.SceneManager.sceneLoaded += OnSceneLoaded;
+        }
+        
+        void OnSceneLoaded(UnityEngine.SceneManagement.Scene scene, UnityEngine.SceneManagement.LoadSceneMode mode)
+        {
+            Debug.Log($"[TutorialController] OnSceneLoaded() called for scene: {scene.name}");
+            
+            if (scene.name == "ShopScene")
+            {
+                // Wait one frame for scene to fully initialize
+                StartCoroutine(InitializeShopSceneTutorial());
+            }
+        }
+        
+        IEnumerator InitializeShopSceneTutorial()
+        {
+            yield return null; // Wait one frame
+            
+            var stateManager = GameStateManager.Instance;
+            bool isTutorialMode = stateManager != null && stateManager.State.IsTutorialMode;
+            Debug.Log($"[TutorialController] In ShopScene (OnSceneLoaded), IsTutorialMode: {isTutorialMode}");
+            
+            if (isTutorialMode)
+            {
+                ResolveReferences();
+                
+                // Find shop manager
+                if (shopManager == null)
+                {
+                    shopManager = FindObjectOfType<ShopManager>();
+                    Debug.Log($"[TutorialController] ShopManager found: {shopManager != null}");
+                }
+                
+                // Initialize tutorial in ShopScene
+                BuildSteps();
+                Debug.Log($"[TutorialController] Built {tutorialSteps.Count} tutorial steps");
+                
+                InitializeTutorialUI();
+                Debug.Log($"[TutorialController] TutorialPromptPanel: {tutorialPromptPanel != null}, TutorialText: {tutorialText != null}, ContinueButton: {tutorialContinueButton != null}");
+                
+                if (tutorialPromptPanel == null)
+                {
+                    Debug.LogError("[TutorialController] TutorialPromptPanel is NULL! Make sure it exists in ShopScene with exact name 'TutorialPromptPanel'");
+                }
+                else
+                {
+                    // Enable the panel if it's disabled
+                    if (!tutorialPromptPanel.activeSelf)
+                    {
+                        Debug.Log("[TutorialController] TutorialPromptPanel was disabled, enabling it now");
+                        tutorialPromptPanel.SetActive(true);
+                    }
+                }
+                
+                if (tutorialText == null)
+                {
+                    Debug.LogError("[TutorialController] TutorialText is NULL! Make sure it exists as a child of TutorialPromptPanel");
+                }
+                
+                if (tutorialContinueButton == null)
+                {
+                    Debug.LogError("[TutorialController] TutorialContinueButton is NULL! Make sure NextButton exists in ShopScene");
+                }
+                else if (tutorialContinueButton.gameObject != null && !tutorialContinueButton.gameObject.activeSelf)
+                {
+                    Debug.Log("[TutorialController] NextButton was disabled, enabling it now");
+                    tutorialContinueButton.gameObject.SetActive(true);
+                }
+                
+                ConfigurePromptLayoutIfNeeded();
+                CollectAllButtons();
+                Debug.Log("[TutorialController] Starting shop tutorial step (index 8)");
+                StartTutorialStep(8); // Start at shop tutorial step (index 8)
+            }
+        }
 
         void Start()
         {
             ResolveReferences();
+            
+            string currentScene = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name;
+            Debug.Log($"[TutorialController] Start() called in scene: {currentScene}, GameObject active: {gameObject.activeSelf}, enabled: {enabled}");
+            
+            // Check if we're in ShopScene and continuing tutorial from battle
+            if (currentScene == "ShopScene")
+            {
+                var stateManager = GameStateManager.Instance;
+                bool isTutorialMode = stateManager != null && stateManager.State.IsTutorialMode;
+                Debug.Log($"[TutorialController] In ShopScene, IsTutorialMode: {isTutorialMode}, StateManager: {stateManager != null}");
+                
+                if (isTutorialMode)
+                {
+                    // Find shop manager
+                    if (shopManager == null)
+                    {
+                        shopManager = FindObjectOfType<ShopManager>();
+                        Debug.Log($"[TutorialController] ShopManager found: {shopManager != null}");
+                    }
+                    
+                    // Initialize tutorial in ShopScene
+                    BuildSteps();
+                    Debug.Log($"[TutorialController] Built {tutorialSteps.Count} tutorial steps");
+                    
+                    InitializeTutorialUI();
+                    Debug.Log($"[TutorialController] TutorialPromptPanel: {tutorialPromptPanel != null}, TutorialText: {tutorialText != null}, ContinueButton: {tutorialContinueButton != null}");
+                    
+                    if (tutorialPromptPanel == null)
+                    {
+                        Debug.LogError("[TutorialController] TutorialPromptPanel is NULL! Make sure it exists in ShopScene with exact name 'TutorialPromptPanel'");
+                    }
+                    else
+                    {
+                        // Enable the panel if it's disabled
+                        if (!tutorialPromptPanel.activeSelf)
+                        {
+                            Debug.Log("[TutorialController] TutorialPromptPanel was disabled, enabling it now");
+                            tutorialPromptPanel.SetActive(true);
+                        }
+                    }
+                    
+                    if (tutorialText == null)
+                    {
+                        Debug.LogError("[TutorialController] TutorialText is NULL! Make sure it exists as a child of TutorialPromptPanel");
+                    }
+                    
+                    if (tutorialContinueButton == null)
+                    {
+                        Debug.LogError("[TutorialController] TutorialContinueButton is NULL! Make sure NextButton exists in ShopScene");
+                    }
+                    else if (tutorialContinueButton.gameObject != null && !tutorialContinueButton.gameObject.activeSelf)
+                    {
+                        Debug.Log("[TutorialController] NextButton was disabled, enabling it now");
+                        tutorialContinueButton.gameObject.SetActive(true);
+                    }
+                    
+                    ConfigurePromptLayoutIfNeeded();
+                    CollectAllButtons();
+                    Debug.Log("[TutorialController] Starting shop tutorial step (index 8)");
+                    StartTutorialStep(8); // Start at shop tutorial step (index 8)
+                    return;
+                }
+                else
+                {
+                    // Not in tutorial mode, ensure tutorial UI is hidden and destroy this controller
+                    Debug.Log("[TutorialController] Not in tutorial mode, destroying controller");
+                    if (tutorialPromptPanel != null)
+                    {
+                        tutorialPromptPanel.SetActive(false);
+                    }
+                    Destroy(gameObject);
+                    return;
+                }
+            }
+            
+            // Normal tutorial start in BattleScene
+            Debug.Log("[TutorialController] Starting tutorial in BattleScene");
             BuildSteps();
             InitializeTutorialUI();
             ConfigurePromptLayoutIfNeeded();
             HookGlobalListeners();
             CollectAllButtons();
-            
-            // Debug: Log the actual value of actionPromptOffset
-            Debug.Log($"[TutorialController] Start() - actionPromptOffset value: {actionPromptOffset}");
-            
             StartTutorialStep(0);
         }
 
         void OnDestroy()
         {
+            UnityEngine.SceneManagement.SceneManager.sceneLoaded -= OnSceneLoaded;
             UnhookGlobalListeners();
             CleanupDiceViewListeners();
             UnhookDiceLockEvent();
+            UnhookShopPurchaseEvents();
             ClearHighlights();
             RestoreAllButtons();
         }
@@ -116,7 +289,66 @@ namespace DiceGame.Tutorial
 
         void ResolveReferences()
         {
-            if (battleController == null)
+            string currentScene = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name;
+            Debug.Log($"[TutorialController] ResolveReferences() in scene: {currentScene}");
+            
+            if (currentScene == "ShopScene")
+            {
+                if (shopManager == null)
+                {
+                    shopManager = FindObjectOfType<ShopManager>();
+                    Debug.Log($"[TutorialController] Resolved ShopManager: {shopManager != null}");
+                }
+                
+                // Find tutorial UI elements in ShopScene - search in active AND inactive objects
+                if (tutorialPromptPanel == null)
+                {
+                    tutorialPromptPanel = GameObject.Find("TutorialPromptPanel");
+                    if (tutorialPromptPanel == null)
+                    {
+                        // Try finding in all GameObjects including inactive
+                        // Last resort: search by name in scene
+                        Transform[] allTransforms = FindObjectsOfType<Transform>(true);
+                        foreach (var t in allTransforms)
+                        {
+                            if (t.name == "TutorialPromptPanel")
+                            {
+                                tutorialPromptPanel = t.gameObject;
+                                break;
+                            }
+                        }
+                    }
+                    Debug.Log($"[TutorialController] Resolved TutorialPromptPanel: {tutorialPromptPanel != null}");
+                }
+                
+                if (tutorialText == null && tutorialPromptPanel != null)
+                {
+                    tutorialText = tutorialPromptPanel.GetComponentInChildren<TMP_Text>(true); // Include inactive
+                    Debug.Log($"[TutorialController] Resolved TutorialText: {tutorialText != null}");
+                }
+                
+                if (tutorialContinueButton == null)
+                {
+                    var nextButton = GameObject.Find("NextButton");
+                    if (nextButton == null)
+                    {
+                        // Search in all objects including inactive
+                        Button[] allButtons = Resources.FindObjectsOfTypeAll<Button>();
+                        foreach (var btn in allButtons)
+                        {
+                            if (btn.name == "NextButton")
+                            {
+                                nextButton = btn.gameObject;
+                                break;
+                            }
+                        }
+                    }
+                    if (nextButton != null) tutorialContinueButton = nextButton.GetComponent<Button>();
+                    Debug.Log($"[TutorialController] Resolved TutorialContinueButton: {tutorialContinueButton != null}");
+                }
+            }
+            
+            if (battleController == null && currentScene == "BattleScene")
             {
                 battleController = GetComponent<BattleController>();
                 if (battleController == null)
@@ -255,6 +487,17 @@ namespace DiceGame.Tutorial
 
             tutorialSteps.Add(new TutorialStep
             {
+                title = "Shop Tutorial",
+                message = "Welcome to the shop! You can buy dice and relics here with your money. One dice is always free - try buying it!",
+                highlightElement = null, // Will be set dynamically for shop items
+                useNextButton = false,
+                waitForAction = true,
+                layout = StepLayout.ActionLeft,
+                requiredAction = TutorialAction.BuyDiceInShop
+            });
+
+            tutorialSteps.Add(new TutorialStep
+            {
                 title = "Tutorial Complete!",
                 message = "Great job! You've learned the basics. Click Next to claim your reward and start Level 1.",
                 useNextButton = true,
@@ -266,6 +509,7 @@ namespace DiceGame.Tutorial
 
         void InitializeTutorialUI()
         {
+            // Always start with prompt hidden - it will be shown when needed
             if (tutorialPromptPanel != null)
             {
                 tutorialPromptPanel.SetActive(false);
@@ -563,10 +807,19 @@ namespace DiceGame.Tutorial
 
             currentStepIndex = stepIndex;
             var step = tutorialSteps[stepIndex];
+            
+            Debug.Log($"[TutorialController] StartTutorialStep({stepIndex}) - Title: {step.title}, Panel: {tutorialPromptPanel != null}");
 
             ApplyLayoutForStep(step);
             SetNextButtonVisible(step.useNextButton);
             ShowPrompt(step.title, step.message);
+            
+            // Double-check prompt is visible after ShowPrompt
+            if (tutorialPromptPanel != null && !tutorialPromptPanel.activeSelf)
+            {
+                Debug.LogWarning("[TutorialController] Prompt panel became inactive after ShowPrompt, reactivating");
+                tutorialPromptPanel.SetActive(true);
+            }
             
             // Manage button states (disable non-required buttons)
             ManageButtonStates(step);
@@ -575,6 +828,10 @@ namespace DiceGame.Tutorial
             if (step.requiredAction == TutorialAction.LockDice)
             {
                 HighlightDiceViews();
+            }
+            else if (step.requiredAction == TutorialAction.BuyDiceInShop)
+            {
+                // Shop items will be highlighted in the action handler
             }
             else
             {
@@ -632,6 +889,11 @@ namespace DiceGame.Tutorial
                 {
                     awaitingSecondRoll = true;
                 }
+                else if (step.requiredAction == TutorialAction.BuyDiceInShop)
+                {
+                    // Wait a bit for shop to fully initialize, then hook events and highlight
+                    StartCoroutine(InitializeShopTutorialStep());
+                }
             }
             else
             {
@@ -641,9 +903,59 @@ namespace DiceGame.Tutorial
 
         void ShowPrompt(string title, string message)
         {
+            Debug.Log($"[TutorialController] ShowPrompt() called - title: {title}, panel: {tutorialPromptPanel != null}, panel active: {tutorialPromptPanel != null && tutorialPromptPanel.activeSelf}");
+            
             if (tutorialPromptPanel != null)
             {
+                // Ensure the panel and all its parents are active
+                Transform parent = tutorialPromptPanel.transform.parent;
+                while (parent != null)
+                {
+                    if (!parent.gameObject.activeSelf)
+                    {
+                        Debug.Log($"[TutorialController] Parent {parent.name} was inactive, enabling it");
+                        parent.gameObject.SetActive(true);
+                    }
+                    parent = parent.parent;
+                }
+                
                 tutorialPromptPanel.SetActive(true);
+                
+                // Ensure it's visible (check Canvas and CanvasGroup)
+                Canvas canvas = tutorialPromptPanel.GetComponentInParent<Canvas>();
+                if (canvas != null)
+                {
+                    canvas.gameObject.SetActive(true);
+                    // Ensure Canvas has high sorting order to appear on top
+                    if (canvas.sortingOrder < 999)
+                    {
+                        canvas.sortingOrder = 999;
+                        Debug.Log($"[TutorialController] Set Canvas sorting order to 999");
+                    }
+                    Debug.Log($"[TutorialController] Canvas found: {canvas.name}, sortingOrder: {canvas.sortingOrder}, active: {canvas.gameObject.activeSelf}");
+                }
+                else
+                {
+                    Debug.LogWarning("[TutorialController] No Canvas found in parent hierarchy!");
+                }
+                
+                CanvasGroup canvasGroup = tutorialPromptPanel.GetComponent<CanvasGroup>();
+                if (canvasGroup != null)
+                {
+                    canvasGroup.alpha = 1f;
+                    canvasGroup.interactable = true;
+                    canvasGroup.blocksRaycasts = true;
+                    Debug.Log($"[TutorialController] CanvasGroup found and configured - alpha: {canvasGroup.alpha}");
+                }
+                
+                // Force update the RectTransform to ensure it's visible
+                UnityEngine.UI.LayoutRebuilder.ForceRebuildLayoutImmediate(tutorialPromptPanel.GetComponent<RectTransform>());
+                
+                Debug.Log($"[TutorialController] TutorialPromptPanel activated, now active: {tutorialPromptPanel.activeSelf}, enabled: {tutorialPromptPanel.activeInHierarchy}, position: {tutorialPromptPanel.transform.position}");
+            }
+            else
+            {
+                Debug.LogError("[TutorialController] Cannot show prompt - TutorialPromptPanel is null!");
             }
 
             if (tutorialText != null)
@@ -651,6 +963,11 @@ namespace DiceGame.Tutorial
                 tutorialText.text = $"<b>{title}</b>\n\n{message}";
                 tutorialText.enableWordWrapping = true;
                 tutorialText.overflowMode = TextOverflowModes.Overflow;
+                Debug.Log($"[TutorialController] TutorialText updated with: {title}");
+            }
+            else
+            {
+                Debug.LogError("[TutorialController] Cannot show prompt - TutorialText is null!");
             }
         }
 
@@ -712,9 +1029,18 @@ namespace DiceGame.Tutorial
                 case StepLayout.ActionLeft:
                     promptRect.anchorMin = promptRect.anchorMax = actionPromptAnchor;
                     promptRect.pivot = actionPromptPivot;
-                    promptRect.sizeDelta = actionPromptSize;
+                    // Use larger size for shop tutorial step (index 8)
+                    if (currentStepIndex == 8 && step.requiredAction == TutorialAction.BuyDiceInShop)
+                    {
+                        promptRect.sizeDelta = new Vector2(900f, 450f); // Larger size for shop tutorial
+                        Debug.Log("[TutorialController] Using larger size for shop tutorial step");
+                    }
+                    else
+                    {
+                        promptRect.sizeDelta = actionPromptSize;
+                    }
                     promptRect.anchoredPosition = actionPromptOffset;
-                    Debug.Log($"[TutorialController] Applied ActionLeft layout - Offset: {actionPromptOffset}, Actual Position: {promptRect.anchoredPosition}");
+                    Debug.Log($"[TutorialController] Applied ActionLeft layout - Size: {promptRect.sizeDelta}, Offset: {actionPromptOffset}, Actual Position: {promptRect.anchoredPosition}");
                     if (tutorialText != null)
                     {
                         tutorialText.alignment = TextAlignmentOptions.TopLeft;
@@ -1025,6 +1351,21 @@ namespace DiceGame.Tutorial
                     }
                     break;
                     
+                case TutorialAction.BuyDiceInShop:
+                    // Allow shop purchase buttons
+                    if (shopManager != null && shopManager.choiceSlots != null)
+                    {
+                        foreach (var slot in shopManager.choiceSlots)
+                        {
+                            if (slot != null && slot.buyBtn != null && slot.gameObject.activeSelf)
+                            {
+                                allowedButtons.Add(slot.buyBtn);
+                            }
+                        }
+                    }
+                    // Also allow continue button (if present) and tutorial UI buttons
+                    break;
+                    
                 case TutorialAction.None:
                     // For intro/outro steps, only allow Next button (plus combo rules which was already added)
                     break;
@@ -1331,6 +1672,215 @@ namespace DiceGame.Tutorial
             }
         }
 
+        void HookShopPurchaseEvents()
+        {
+            UnhookShopPurchaseEvents();
+
+            if (shopManager == null)
+            {
+                shopManager = FindObjectOfType<ShopManager>();
+            }
+
+            if (shopManager == null) return;
+
+            // Hook into shop item buttons by finding all ShopItemUI components
+            ShopItemUI[] shopItems = FindObjectsOfType<ShopItemUI>(true);
+            foreach (var shopItem in shopItems)
+            {
+                if (shopItem == null || shopItem.buyBtn == null) continue;
+                if (!shopItem.gameObject.activeSelf) continue;
+                
+                Button buyButton = shopItem.buyBtn;
+                
+                // Store original interactable state
+                bool wasInteractable = buyButton.interactable;
+                
+                UnityAction wrappedHandler = () =>
+                {
+                    // Wait a frame to check if purchase was successful
+                    StartCoroutine(CheckShopPurchaseAfterClick(shopItem, buyButton, wasInteractable));
+                };
+                
+                // Add our handler alongside existing listeners
+                buyButton.onClick.AddListener(wrappedHandler);
+                shopItemHandlers.Add((shopItem, null)); // Store reference
+            }
+        }
+
+        IEnumerator CheckShopPurchaseAfterClick(ShopItemUI shopItem, Button buyButton, bool wasInteractable)
+        {
+            yield return null; // Wait one frame for purchase to complete
+            
+            // Check if purchase was successful by checking button state or sold overlay
+            bool purchaseSuccessful = false;
+            if (buyButton != null && !buyButton.interactable && wasInteractable)
+            {
+                // Button became non-interactable, likely sold
+                purchaseSuccessful = true;
+            }
+            else if (shopItem != null && shopItem.soldOverlay != null && shopItem.soldOverlay.activeSelf)
+            {
+                // Sold overlay is active
+                purchaseSuccessful = true;
+            }
+            
+            if (purchaseSuccessful && currentRequiredAction == TutorialAction.BuyDiceInShop)
+            {
+                RegisterActionCompletion(TutorialAction.BuyDiceInShop);
+            }
+        }
+
+        void UnhookShopPurchaseEvents()
+        {
+            // Note: We don't remove listeners here as they're part of ShopItemUI's normal flow
+            // The shop items will be cleaned up when scene changes
+            shopItemHandlers.Clear();
+        }
+
+        void HighlightShopItems()
+        {
+            ClearHighlights();
+            
+            if (shopManager == null)
+            {
+                shopManager = FindObjectOfType<ShopManager>();
+            }
+
+            if (shopManager == null)
+            {
+                // Retry after a short delay if shop manager not found yet
+                StartCoroutine(RetryHighlightShopItems());
+                return;
+            }
+
+            // Find all shop item UI components
+            ShopItemUI[] shopItems = FindObjectsOfType<ShopItemUI>(true);
+            
+            if (shopItems == null || shopItems.Length == 0)
+            {
+                // Retry after a short delay if shop items not found yet
+                StartCoroutine(RetryHighlightShopItems());
+                return;
+            }
+
+            // Only highlight the free dice
+            GameObject freeItem = null;
+            
+            foreach (var shopItem in shopItems)
+            {
+                if (shopItem == null || shopItem.gameObject == null) continue;
+                if (!shopItem.gameObject.activeSelf) continue;
+                
+                // Check if this is the free item (price text shows "FREE")
+                if (shopItem.priceText != null && shopItem.priceText.text == "FREE")
+                {
+                    freeItem = shopItem.gameObject;
+                    break; // Found the free item, no need to continue
+                }
+            }
+            
+            // Only highlight the free item
+            if (freeItem != null)
+            {
+                highlightedElements.Add(freeItem);
+                Coroutine highlightCoroutine = StartCoroutine(PulseHighlight(freeItem));
+                highlightCoroutines.Add(highlightCoroutine);
+                Debug.Log("[TutorialController] Highlighted free dice item");
+            }
+            else
+            {
+                Debug.LogWarning("[TutorialController] No free dice item found to highlight");
+            }
+        }
+
+        IEnumerator RetryHighlightShopItems()
+        {
+            float timeout = 2f;
+            while (timeout > 0f)
+            {
+                yield return new WaitForSeconds(0.1f);
+                timeout -= 0.1f;
+                
+                if (shopManager == null)
+                {
+                    shopManager = FindObjectOfType<ShopManager>();
+                }
+                
+                if (shopManager != null)
+                {
+                    ShopItemUI[] shopItems = FindObjectsOfType<ShopItemUI>(true);
+                    if (shopItems != null && shopItems.Length > 0)
+                    {
+                        HighlightShopItems();
+                        yield break;
+                    }
+                }
+            }
+        }
+
+        IEnumerator InitializeShopTutorialStep()
+        {
+            Debug.Log("[TutorialController] InitializeShopTutorialStep() started");
+            
+            // Wait for shop to fully initialize (items rendered, buttons created)
+            yield return new WaitForSeconds(0.5f);
+            
+            // Resolve shop manager if needed
+            if (shopManager == null)
+            {
+                shopManager = FindObjectOfType<ShopManager>();
+            }
+            
+            // Retry if shop manager or items not found yet
+            float timeout = 3f;
+            while (timeout > 0f && (shopManager == null || FindObjectsOfType<ShopItemUI>(true).Length == 0))
+            {
+                yield return new WaitForSeconds(0.1f);
+                timeout -= 0.1f;
+                if (shopManager == null)
+                {
+                    shopManager = FindObjectOfType<ShopManager>();
+                }
+            }
+            
+            Debug.Log($"[TutorialController] Shop initialized - ShopManager: {shopManager != null}, ShopItems: {FindObjectsOfType<ShopItemUI>(true).Length}");
+            
+            // Hook into shop purchase events
+            HookShopPurchaseEvents();
+            
+            // Collect buttons after shop is initialized
+            CollectAllButtons();
+            
+            // Update button states for shop step
+            if (currentStepIndex >= 0 && currentStepIndex < tutorialSteps.Count)
+            {
+                ManageButtonStates(tutorialSteps[currentStepIndex]);
+            }
+            
+            // Highlight shop items, especially the free one
+            HighlightShopItems();
+            
+            // Ensure prompt is visible after shop initialization
+            if (tutorialPromptPanel != null)
+            {
+                if (!tutorialPromptPanel.activeSelf)
+                {
+                    Debug.LogWarning("[TutorialController] Prompt panel was inactive after shop init, reactivating");
+                    if (currentStepIndex >= 0 && currentStepIndex < tutorialSteps.Count)
+                    {
+                        ShowPrompt(tutorialSteps[currentStepIndex].title, tutorialSteps[currentStepIndex].message);
+                    }
+                    else
+                    {
+                        tutorialPromptPanel.SetActive(true);
+                    }
+                }
+                Debug.Log($"[TutorialController] InitializeShopTutorialStep() completed - Panel active: {tutorialPromptPanel.activeSelf}, enabled: {tutorialPromptPanel.activeInHierarchy}");
+            }
+            
+            Debug.Log($"[TutorialController] InitializeShopTutorialStep() completed - Panel active: {tutorialPromptPanel != null && tutorialPromptPanel.activeSelf}");
+        }
+
         void OnDiceLockStateChanged()
         {
             if (!isTutorialActive || lockStepCompleted) return;
@@ -1513,7 +2063,27 @@ namespace DiceGame.Tutorial
         {
             // Wait for score to be fully added and UI to update, plus extra time to view the score
             yield return new WaitForSeconds(2f);
-            StartTutorialStep(currentStepIndex + 1);
+            
+            // Check if next step is shop tutorial - if so, transition to ShopScene
+            if (currentStepIndex + 1 < tutorialSteps.Count)
+            {
+                var nextStep = tutorialSteps[currentStepIndex + 1];
+                if (nextStep.requiredAction == TutorialAction.BuyDiceInShop)
+                {
+                    // Transition to ShopScene for shop tutorial step
+                    CompleteTutorialAndGoToReward();
+                }
+                else
+                {
+                    // Continue with next step in current scene
+                    StartTutorialStep(currentStepIndex + 1);
+                }
+            }
+            else
+            {
+                // No more steps, complete tutorial
+                CompleteTutorialAndGoToReward();
+            }
         }
 
         /// <summary>
@@ -1533,36 +2103,64 @@ namespace DiceGame.Tutorial
         }
 
         /// <summary>
-        /// Complete tutorial and transition to ShopScene, then return to Level 1
+        /// Transition to ShopScene for shop tutorial step, then complete tutorial
         /// </summary>
         void CompleteTutorialAndGoToReward()
         {
             if (!isTutorialActive) return;
 
-            isTutorialActive = false;
-            CleanupTutorialState();
-            
-            // Save tutorial completion
-            PlayerPrefs.SetInt("HasCompletedTutorial", 1);
-            PlayerPrefs.Save();
-
-            // Prepare Level 1 state for when returning from ShopScene
-            int targetScore = battleController != null ? battleController.baseTargetScore : 200;
-            
-            var stateManager = GameStateManager.Instance;
-            stateManager.State.PendingLevel = 1;
-            stateManager.State.PendingTargetScore = targetScore;
-            stateManager.State.ContinuingFromReward = true;
-            stateManager.State.IsTutorialMode = false;
-            
-            if (battleController == null)
+            // Check if we've completed the shop tutorial step
+            if (currentStepIndex >= 0 && currentStepIndex < tutorialSteps.Count)
             {
-                Debug.LogWarning("[TutorialController] BattleController not found - using fallback values");
+                var currentStep = tutorialSteps[currentStepIndex];
+                if (currentStep.title == "Tutorial Complete!")
+                {
+                    // Final completion - actually finish the tutorial
+                    isTutorialActive = false;
+                    CleanupTutorialState();
+                    
+                    // Save tutorial completion
+                    PlayerPrefs.SetInt("HasCompletedTutorial", 1);
+                    PlayerPrefs.Save();
+
+                    // Prepare Level 1 state for when returning from ShopScene
+                    int targetScore = battleController != null ? battleController.baseTargetScore : 200;
+                    
+                    var stateManager = GameStateManager.Instance;
+                    if (stateManager != null)
+                    {
+                        stateManager.State.PendingLevel = 1;
+                        stateManager.State.PendingTargetScore = targetScore;
+                        stateManager.State.ContinuingFromReward = true;
+                        stateManager.State.IsTutorialMode = false;
+                    }
+                    
+                    if (battleController == null)
+                    {
+                        Debug.LogWarning("[TutorialController] BattleController not found - using fallback values");
+                    }
+                    
+                    Debug.Log("[TutorialController] Tutorial fully completed - transitioning to Level 1");
+                    SceneManager.LoadScene("BattleScene");
+                    return;
+                }
             }
             
-            Debug.Log("[TutorialController] Tutorial completed - transitioning to ShopScene, then Level 1");
+            // Transition to ShopScene for shop tutorial step (keep tutorial active)
+            var stateManager2 = GameStateManager.Instance;
+            if (stateManager2 != null)
+            {
+                stateManager2.State.PendingLevel = 1;
+                int targetScore = battleController != null ? battleController.baseTargetScore : 200;
+                stateManager2.State.PendingTargetScore = targetScore;
+                stateManager2.State.ContinuingFromReward = true;
+                stateManager2.State.IsTutorialMode = true; // Keep tutorial mode active
+            }
+            
+            Debug.Log("[TutorialController] Transitioning to ShopScene for shop tutorial step");
             SceneManager.LoadScene("ShopScene");
         }
+
 
         #endregion
     }
@@ -1587,7 +2185,8 @@ namespace DiceGame.Tutorial
         LockDice,
         SecondRoll,
         SubmitHand,
-        ScoreAnimationComplete
+        ScoreAnimationComplete,
+        BuyDiceInShop
     }
 
     public enum StepLayout
