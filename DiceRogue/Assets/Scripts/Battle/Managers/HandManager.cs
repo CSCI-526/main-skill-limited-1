@@ -46,6 +46,18 @@ namespace DiceGame
         }
 
         /// <summary>
+        /// Add bonus rolls to the total roll budget (for relics that grant extra rerolls)
+        /// </summary>
+        public void AddBonusRolls(int bonus)
+        {
+            if (bonus > 0)
+            {
+                _totalRollBudget += bonus;
+                Debug.Log($"[HandManager] Added {bonus} bonus rolls. New budget: {_totalRollBudget}");
+            }
+        }
+
+        /// <summary>
         /// Start a new hand
         /// </summary>
         public void StartHand()

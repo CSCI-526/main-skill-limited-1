@@ -18,6 +18,7 @@ namespace DiceGame.Relics
         public int rollsUsed = 0;
         public int maxRollsPerHand = 3;
         public bool hasFillerInHand = false;
+        public int handsRemaining = 0; // Number of hands remaining after this cast
 
         // Intermediate state (relics modify these)
         public int additionalBase = 0;      // adds to (Base + Sum)

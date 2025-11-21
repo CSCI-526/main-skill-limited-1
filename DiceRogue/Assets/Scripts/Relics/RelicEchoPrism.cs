@@ -1,10 +1,9 @@
-using System.Linq;
 using UnityEngine;
 
 namespace DiceGame.Relics
 {
     /// <summary>
-    /// Echo Prism: duplicate highest dice value for sum only
+    /// Echo Prism: duplicate dice sum for base score
     /// </summary>
     [CreateAssetMenu(menuName = "DiceRogue/Relics/Echo Prism", fileName = "Relic_EchoPrism")]
     public class RelicEchoPrism : RelicBase
@@ -13,14 +12,14 @@ namespace DiceGame.Relics
         {
             relicName = "Echo Prism";
             rarity = RelicRarity.Rare;
-            description = "Highest dice value added to base score again.";
+            description = "Dice sum added to base score again.";
         }
 
         public override void Apply(ScoringContext context)
         {
             if (context.submittedValues.Count == 0) return;
-            int max = context.submittedValues.Max();
-            context.additionalBase += max; // adds to Base+Sum as an additive
+            int sum = context.Sum;
+            context.additionalBase += sum; // adds to Base+Sum as an additive
         }
     }
 }
