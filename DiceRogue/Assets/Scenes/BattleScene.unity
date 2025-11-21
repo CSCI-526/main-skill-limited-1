@@ -8815,13 +8815,13 @@ MonoBehaviour:
     prefab: {fileID: 5602322474802131011, guid: e51b5bce23f5a447e827ad8070eb4cda, type: 3}
   - diceTypeName: GoldenDice
     prefab: {fileID: 25429699377671649, guid: bbaab2b9a47324041bb832192d0806e2, type: 3}
-  - diceTypeName: HeadyDice
+  - diceTypeName: HeavyDice
     prefab: {fileID: 6991659731088425943, guid: 27ee2818482ea401fb076a7961f46197, type: 3}
   - diceTypeName: LightDice
     prefab: {fileID: 6903781222598366013, guid: 50625ca1e187c4306be009604440e89b, type: 3}
   - diceTypeName: LuckySix
     prefab: {fileID: 2386944844200110386, guid: 71e7fdfebd8584368a83428ff163fa09, type: 3}
-  - diceTypeName: MirrowDice
+  - diceTypeName: MirrorDice
     prefab: {fileID: 9073407540994985480, guid: 10f694294d6364e0a8831296c34b3199, type: 3}
   - diceTypeName: OddDice
     prefab: {fileID: 827659953011252389, guid: 12acc763bd08a45f5ac4e175ed2cc1a0, type: 3}
@@ -8832,7 +8832,7 @@ MonoBehaviour:
   - diceTypeName: TwinBond
     prefab: {fileID: 4166644211606902553, guid: b163b733df41b4145965cd17615f7e07, type: 3}
   - diceTypeName: WeightedEdge
-    prefab: {fileID: 0}
+    prefab: {fileID: 3633151153814014509, guid: 587456138b50e44239f42ce75916f6a9, type: 3}
   - diceTypeName: ZombieDice
     prefab: {fileID: 7486055314305587676, guid: 47fcae46745ac44d4a143ddb05055240, type: 3}
   - diceTypeName: CounterDice
@@ -9527,6 +9527,7 @@ MonoBehaviour:
   diceSelectionUI: {fileID: 0}
   diceRowParent: {fileID: 0}
   scoreAnimator: {fileID: 0}
+  shopManager: {fileID: 0}
   openBackpackButton: {fileID: 0}
   rollButton: {fileID: 0}
   submitComboButton: {fileID: 0}
