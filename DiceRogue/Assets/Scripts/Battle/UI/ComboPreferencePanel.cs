@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.Events;
 
 namespace DiceGame
 {
@@ -18,42 +19,63 @@ namespace DiceGame
         private bool _isInitialized = false;
         private bool _delayedInitScheduled = false;
         private bool _needsDelayedInit = false;
+
+        private void RegisterButton(Button button, UnityAction handler, string buttonDescription)
+        {
+            if (button == null || handler == null)
+            {
+                return;
+            }
+
+            try
+            {
+                // Unity's Button.onClick is always initialized, so we can directly add listeners
+                // Creating a new ButtonClickedEvent can cause memory issues in WebGL
+                button.onClick.AddListener(handler);
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogError($"[ComboPreferencePanel] Failed to register {buttonDescription}: {ex.Message}");
+            }
+        }
         
         /// <summary>
         /// Initialize combo preference panel
-        /// Uses Start() method to delay SetActive calls for WebGL compatibility
+        /// Marks for delayed initialization to ensure WebGL compatibility
         /// </summary>
         public void Initialize()
         {
             if (_isInitialized) return;
             _isInitialized = true;
             
-            // Set up button listeners immediately (these are safe)
-            if (comboPreferenceButton != null)
-            {
-                comboPreferenceButton.onClick.AddListener(Open);
-            }
-            
-            if (comboPreferenceCloseButton != null)
-            {
-                comboPreferenceCloseButton.onClick.AddListener(Close);
-            }
-            
             // Mark that we need delayed initialization
-            // This will be handled in Start() which is guaranteed to run after MonoBehaviour is fully initialized
+            // Button registration will happen in Start() when components are fully initialized
             _needsDelayedInit = true;
         }
         
         /// <summary>
         /// Unity Start method - called after MonoBehaviour is fully initialized
+        /// This is when we safely register button listeners in WebGL
         /// </summary>
         void Start()
         {
-            // Perform delayed initialization if needed
-            if (_needsDelayedInit && !_delayedInitScheduled)
+            // Register button listeners now that components are fully initialized
+            // This prevents memory access errors in WebGL
+            if (_isInitialized && !_delayedInitScheduled)
             {
+                // Set up button listeners (only if buttons are assigned, they're optional)
+                if (comboPreferenceButton != null)
+                {
+                    RegisterButton(comboPreferenceButton, Open, "open button");
+                }
+                if (comboPreferenceCloseButton != null)
+                {
+                    RegisterButton(comboPreferenceCloseButton, Close, "close button");
+                }
+                
                 _delayedInitScheduled = true;
-                // Use Invoke to delay by one frame
+                
+                // Use Invoke to delay SetActive calls by one frame for WebGL compatibility
                 try
                 {
                     Invoke(nameof(DelayedInitialize), 0.01f);
@@ -136,15 +158,14 @@ namespace DiceGame
             CancelInvoke(nameof(DelayedInitialize));
             
             // Clean up button listeners
-            if (comboPreferenceButton != null)
+            if (comboPreferenceButton != null && comboPreferenceButton.onClick != null)
             {
-                comboPreferenceButton.onClick.RemoveAllListeners();
+                comboPreferenceButton.onClick.RemoveListener(Open);
             }
-            if (comboPreferenceCloseButton != null)
+            if (comboPreferenceCloseButton != null && comboPreferenceCloseButton.onClick != null)
             {
-                comboPreferenceCloseButton.onClick.RemoveAllListeners();
+                comboPreferenceCloseButton.onClick.RemoveListener(Close);
             }
         }
     }
 }
-

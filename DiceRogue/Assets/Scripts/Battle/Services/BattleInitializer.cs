@@ -300,13 +300,47 @@ namespace DiceGame
         }
 
         /// <summary>
+        /// Give player a random common dice from the global pool as starting dice
+        /// </summary>
+        private void GiveRandomStartingCommonDice(DiceManager diceManager)
+        {
+            // Get all common dice from the global pool
+            var commonDice = DicePool.GetByTier(DiceTier.Common);
+            
+            if (commonDice == null || commonDice.Count == 0)
+            {
+                Debug.LogWarning("[BattleInitializer] Cannot give starting common dice - no common dice found in pool!");
+                return;
+            }
+
+            // Randomly select a common dice
+            int randomIndex = Random.Range(0, commonDice.Count);
+            var startingDice = commonDice[randomIndex];
+
+            if (startingDice != null)
+            {
+                diceManager.AddDiceToBackpack(startingDice);
+                Debug.Log($"[BattleInitializer] Gave starting common dice: {startingDice.diceName}");
+            }
+        }
+
+        /// <summary>
         /// Initialize dice system: load from save data and update cooldown system
         /// NOTE: DiceManager is now managed by PlayerResourceManager, data is already synced
         /// </summary>
         private void InitializeDiceSystem(BattleController controller, GameStateManager stateManager, InitializationResult result)
         {
             // DiceManager is already initialized and synced by PlayerResourceManager
-            // Just update CooldownSystem with backpack dice
+            
+            // Give player a random common dice if this is a new game (no dice and not continuing from reward)
+            if (result.DiceManager.PlayerDiceBackpack.Count == 0 && !stateManager.State.ContinuingFromReward)
+            {
+                GiveRandomStartingCommonDice(result.DiceManager);
+                // Save the new dice to SaveData
+                PlayerResourceManager.Instance.SaveAllToSaveData();
+            }
+            
+            // Update CooldownSystem with backpack dice
             if (result.DiceManager != null)
             {
                 UpdateCooldownSystemFromBackpack(controller, result);
@@ -384,7 +418,14 @@ namespace DiceGame
             // Initialize combo preference panel
             if (controller.comboPreferencePanel != null)
             {
-                controller.comboPreferencePanel.Initialize();
+                try
+                {
+                    controller.comboPreferencePanel.Initialize();
+                }
+                catch (System.Exception e)
+                {
+                    Debug.LogError($"[BattleInitializer] ComboPreferencePanel initialization failed: {e.Message}");
+                }
             }
             else
             {
@@ -491,4 +532,3 @@ namespace DiceGame
         }
     }
 }
-
