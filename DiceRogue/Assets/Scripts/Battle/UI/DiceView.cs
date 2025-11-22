@@ -169,6 +169,15 @@ namespace DiceGame
             transform.localScale = originalScale;
         }
         /// <summary>
+        /// Trigger a visual effect to show this dice was influenced by another dice
+        /// </summary>
+        public void TriggerInfluencedEffect(Color effectColor)
+        {
+            // Visual effect can be added here (e.g., color flash, glow, etc.)
+            // For now, this is a placeholder to prevent compilation errors
+        }
+
+        /// <summary>
         /// 播放掷骰动画：在固定显示最终点数前快速闪动随机数值
         /// </summary>
         public void PlayRollAnimation(int finalValue, float duration = 0.5f)
@@ -190,7 +199,9 @@ namespace DiceGame
                     elapsed += Time.deltaTime;
                     yield return null;
                 }
-                valueText.text = finalValue.ToString();
+                // Use current model value (may have been updated by golden dice or other effects)
+                int displayValue = model != null ? model.lastRollValue : finalValue;
+                valueText.text = displayValue.ToString();
                 yield break;
             }
 
@@ -203,9 +214,19 @@ namespace DiceGame
                 yield return new WaitForSeconds(0.05f);
             }
 
-            // 最终固定显示真实点数
-            ornamentAnimator.SetFace(finalValue);
-            model.lastRollValue = finalValue;
+            // 最终固定显示真实点数 - use current model value (may have been updated by golden dice or other effects)
+            // This ensures that if golden dice updates the value during animation, we show the updated value
+            int finalDisplayValue = model != null ? model.lastRollValue : finalValue;
+            ornamentAnimator.SetFace(finalDisplayValue);
+            // Don't overwrite model.lastRollValue here - it may have been updated by effects
+            if (model != null && model.lastRollValue == 0)
+            {
+                // Only set if it wasn't already set (shouldn't happen, but safety check)
+                model.lastRollValue = finalValue;
+            }
+            
+            // Refresh the view to ensure text display matches the final value (in case golden dice updated it)
+            Refresh();
         }
         //{
         //    Vector3 originalScale = transform.localScale;

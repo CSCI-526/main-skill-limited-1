@@ -8,27 +8,25 @@ namespace DiceGame.Relics
     [CreateAssetMenu(menuName = "DiceRogue/Relics/Momentum Gyro", fileName = "Relic_MomentumGyro")]
     public class RelicMomentumGyro : RelicBase
     {
-        public int baseBonus = 10;
-        public float multBonus = 1.15f;
-        public float earlyPenalty = 0.9f;
+        public float fullBonus = 1.5f;
+        public float partialPenalty = 0.8f;
 
         private void Reset()
         {
             relicName = "Momentum Gyro";
             rarity = RelicRarity.Common;
-            description = "Max rolls used: +10 base, ×1.15 mult. Early submit (≤1 roll): ×0.9 mult.";
+            description = "If all rolls used: ×1.5 mult. If not: ×0.8 mult.";
         }
 
         public override void Apply(ScoringContext context)
         {
             if (context.rollsUsed >= context.maxRollsPerHand)
             {
-                context.additionalBase += baseBonus;
-                context.multiplier *= multBonus;
+                context.multiplier *= fullBonus;
             }
-            else if (context.rollsUsed <= 1)
+            else
             {
-                context.multiplier *= earlyPenalty;
+                context.multiplier *= partialPenalty;
             }
         }
     }

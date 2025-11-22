@@ -16,11 +16,13 @@ namespace DiceGame
         public Button settingsResetButton;   // Reset button in settings
         public Button settingsQuitButton;    // Quit button in settings
         public Button settingsCloseButton;   // Close button (optional)
-        
+        public Button settingsCheatButton;  // NEW Cheat button
+
         // Events
         public System.Action OnResetRequested;
         public System.Action OnQuitRequested;
-        
+        public System.Action OnCheatRequested;  // NEW event
+
         private bool _isInitialized = false;
         
         /// <summary>
@@ -90,8 +92,15 @@ namespace DiceGame
             {
                 settingsCloseButton.onClick.AddListener(Close);
             }
+
+            // Setup cheat button
+            if (settingsCheatButton != null)
+            {
+                settingsCheatButton.onClick.AddListener(OnCheatClicked);
+            }
+
         }
-        
+
         /// <summary>
         /// Open settings panel
         /// </summary>
@@ -135,7 +144,14 @@ namespace DiceGame
             Close();
             OnQuitRequested?.Invoke();
         }
-        
+
+        private void OnCheatClicked()
+        {
+            Debug.Log("[SettingsPanel] Cheat button clicked");
+            Close();
+            OnCheatRequested?.Invoke();
+        }
+
         void OnDestroy()
         {
             // Clean up button listeners
@@ -154,6 +170,10 @@ namespace DiceGame
             if (settingsCloseButton != null)
             {
                 settingsCloseButton.onClick.RemoveAllListeners();
+            }
+            if (settingsCheatButton != null)
+            {
+                settingsCheatButton.onClick.RemoveAllListeners();
             }
         }
     }

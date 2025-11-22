@@ -4,39 +4,33 @@ using UnityEngine;
 namespace DiceGame.Relics
 {
     /// <summary>
-    /// Pair Bond: rewards any pair with base, bigger mult for two pair/full house, penalty if no pair
+    /// Pair Bond: one pair ×1.2 mult, two pair ×1.5 mult
     /// </summary>
     [CreateAssetMenu(menuName = "DiceRogue/Relics/Pair Bond", fileName = "Relic_PairBond")]
     public class RelicPairBond : RelicBase
     {
-        public int baseOnAnyPair = 10;
-        public float multOnTwoPlus = 1.15f;
-        public float missPenalty = 0.95f;
+        public float onePairMult = 1.2f;
+        public float twoPairMult = 1.5f;
 
         private void Reset()
         {
             relicName = "Pair Bond";
             rarity = RelicRarity.Common;
-            description = "Any pair: +10 base. Two Pair/Full House: ×1.15 mult. No pairs: ×0.95 mult.";
+            description = "One pair: ×1.2 mult. Two pair: ×1.5 mult.";
         }
 
         public override void Apply(ScoringContext context)
         {
-            var counts = context.submittedValues.GroupBy(v => v).Select(g => g.Count()).OrderByDescending(x => x).ToList();
-            bool anyPair = counts.Any(c => c >= 2);
-            bool twoPairOrFH = counts.Count(c => c >= 2) >= 2 || (counts.Contains(3) && counts.Contains(2));
+            var counts = context.submittedValues.GroupBy(v => v).Select(g => g.Count()).ToList();
+            int pairCount = counts.Count(c => c >= 2);
 
-            if (anyPair)
+            if (pairCount == 1)
             {
-                context.additionalBase += baseOnAnyPair;
-                if (twoPairOrFH)
-                {
-                    context.multiplier *= multOnTwoPlus;
-                }
+                context.multiplier *= onePairMult;
             }
-            else
+            else if (pairCount >= 2)
             {
-                context.multiplier *= missPenalty;
+                context.multiplier *= twoPairMult;
             }
         }
     }

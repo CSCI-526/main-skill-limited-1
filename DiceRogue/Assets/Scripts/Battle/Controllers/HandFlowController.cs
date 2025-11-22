@@ -168,6 +168,29 @@ namespace DiceGame
                 _scoreAnimator.SetDiceViews(_views);
             }
 
+            // Check for filler dice and apply bonus rerolls from relics
+            bool hasFiller = _dice.Any(d => d is NormalDice);
+            if (hasFiller && _relicManager != null)
+            {
+                // Create a temporary context to check for bonus rerolls
+                var tempContext = new ScoringContext
+                {
+                    hasFillerInHand = true,
+                    submittedDice = _dice,
+                    submittedValues = new List<int>()
+                };
+                
+                // Apply all relics to get bonus rerolls
+                _relicManager.ApplyAll(tempContext);
+                
+                // Apply bonus rerolls to HandManager
+                if (tempContext.bonusRerolls > 0)
+                {
+                    _handManager.AddBonusRolls(tempContext.bonusRerolls);
+                    Debug.Log($"[HandFlowController] Applied {tempContext.bonusRerolls} bonus rerolls from relics (filler dice detected)");
+                }
+            }
+
             // Start new hand in hand manager
             _handManager.StartHand();
             
@@ -213,17 +236,30 @@ namespace DiceGame
                 }
             }
 
-            // Apply all special dice effects using effect handler
-            _effectHandler.ApplyRollEffects(_dice);
-
-            // Refresh all views using factory
-            _viewFactory.RefreshViews(_views);
+            // Wait for roll animations to complete, then apply effects and show golden dice animation
+            StartCoroutine(WaitForRollAnimationsThenApplyEffects(0.5f));
             
             // Update combo preview after rolling
             OnComboPreviewUpdate?.Invoke();
             
             // Note: Don't update roll count - this is a free roll
             // Note: Don't update feedback - keep "Roll or Lock Dice" message
+        }
+        
+        /// <summary>
+        /// Wait for roll animations to complete, then apply dice effects (golden dice, etc.)
+        /// This ensures roll animations finish before golden dice effect shows
+        /// </summary>
+        private System.Collections.IEnumerator WaitForRollAnimationsThenApplyEffects(float animationDuration)
+        {
+            // Wait for roll animations to complete
+            yield return new WaitForSeconds(animationDuration + 0.1f); // Add small buffer
+            
+            // Now apply all special dice effects (golden dice will trigger its animation)
+            _effectHandler.ApplyRollEffects(_dice, _views);
+            
+            // Refresh all views to show final values (including golden dice bonuses)
+            _viewFactory.RefreshViews(_views);
         }
         
         /// <summary>
@@ -275,11 +311,8 @@ namespace DiceGame
                 }
             }
 
-            // Apply all special dice effects using effect handler
-            _effectHandler.ApplyRollEffects(_dice);
-
-            // Refresh all views using factory
-            _viewFactory.RefreshViews(_views);
+            // Wait for roll animations to complete, then apply effects and show golden dice animation
+            StartCoroutine(WaitForRollAnimationsThenApplyEffects(0.5f));
             
             // Update combo preview after rolling
             OnComboPreviewUpdate?.Invoke();
@@ -352,6 +385,12 @@ namespace DiceGame
                 // Calculate score breakdown (but final score will come from animation)
                 // This handles: combo evaluation, dice multipliers, and relic effects
                 var scoreResult = _scoreCalculator.CalculateScore(submittedDice, submittedValues, _relicManager, context);
+                
+                // Apply extra cooldown for next hand (from relics like Cooldown Radiator)
+                if (context.nextHandExtraCooldown > 0)
+                {
+                    _cooldownSystem.SetNextHandExtraCooldown(context.nextHandExtraCooldown);
+                }
                 
                 // Trigger animated score display - animation calculates the final score step-by-step
                 if (_scoreAnimator != null)
@@ -658,6 +697,8 @@ namespace DiceGame
         /// </summary>
         private ScoringContext CreateScoringContext(List<BaseDice> submittedDice, List<int> submittedValues)
         {
+            var (current, remaining) = _cooldownSystem.GetHandCounter();
+            
             var context = new ScoringContext
             {
                 submittedValues = new List<int>(submittedValues),
@@ -666,7 +707,8 @@ namespace DiceGame
                 totalSelectedCost = submittedDice.Sum(d => d.cost),
                 rollsUsed = _handManager.RollsUsed,
                 maxRollsPerHand = _maxRollsPerHand,
-                hasFillerInHand = submittedDice.Any(d => d is NormalDice)
+                hasFillerInHand = submittedDice.Any(d => d is NormalDice),
+                handsRemaining = remaining // Number of hands remaining after this submission
             };
             
             return context;
