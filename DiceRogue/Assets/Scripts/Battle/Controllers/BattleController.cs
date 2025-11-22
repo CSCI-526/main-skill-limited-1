@@ -50,7 +50,7 @@ namespace DiceGame
         [Header("Config")]
         public int diceCount = 5;         // Fixed 5 dice per hand
         public int maxRollsPerHand = 5;   // Shared roll budget across all hands
-        public int baseTargetScore = 200; // Starting target score
+        public int baseTargetScore = 300; // Starting target score
 
         [Header("Cooldown System")]
         public CooldownSystem cooldownSystem; // Reference to cooldown system
@@ -74,6 +74,19 @@ namespace DiceGame
         // Current hand state (shared with HandFlowController)
         public readonly List<BaseDice> _dice = new();
         public readonly List<DiceView> _views = new();
+
+        void Awake()
+        {
+            // Auto-wire optional combo panel so initialization does not crash on missing inspector references
+            if (comboPreferencePanel == null)
+            {
+                comboPreferencePanel = GetComponentInChildren<ComboPreferencePanel>(true);
+                if (comboPreferencePanel == null)
+                {
+                    comboPreferencePanel = Object.FindObjectOfType<ComboPreferencePanel>(true);
+                }
+            }
+        }
 
         void Start()
         {

@@ -29,6 +29,7 @@ namespace DiceGame
         
         // State tracking
         private bool _isInitialized = false;
+        private int _nextHandExtraCooldown = 0; // Extra cooldown from relics (e.g., Cooldown Radiator)
         
         /// <summary>
         /// Event triggered when dice pool needs refresh (all hands used)
@@ -211,11 +212,14 @@ namespace DiceGame
             // Dice that were selected but not submitted should NOT go on cooldown
             if (submittedDice != null && submittedDice.Count > 0)
             {
-                Debug.Log($"[CooldownSystem] Applying cooldown to {submittedDice.Count} submitted dice:");
+                int extraCooldown = _nextHandExtraCooldown;
+                _nextHandExtraCooldown = 0; // Clear after use
+                
+                Debug.Log($"[CooldownSystem] Applying cooldown to {submittedDice.Count} submitted dice{(extraCooldown > 0 ? $" (+{extraCooldown} extra from relic)" : "")}:");
                 foreach (var dice in submittedDice)
                 {
-                    dice.cooldownRemain = dice.cooldownAfterUse + 1; // Set to 2 turns (1 + 1)
-                    Debug.Log($"  - {dice.diceName} cooldown: 0 → {dice.cooldownRemain} (will be unavailable for 1 hand)");
+                    dice.cooldownRemain = dice.cooldownAfterUse + 1 + extraCooldown;
+                    Debug.Log($"  - {dice.diceName} cooldown: 0 → {dice.cooldownRemain} (will be unavailable for {dice.cooldownRemain} hand(s))");
                 }
             }
             else
@@ -391,6 +395,14 @@ namespace DiceGame
         }
 
         /// <summary>
+        /// Set extra cooldown to apply to dice in the next hand (called by relics)
+        /// </summary>
+        public void SetNextHandExtraCooldown(int extraCooldown)
+        {
+            _nextHandExtraCooldown = Mathf.Max(_nextHandExtraCooldown, extraCooldown);
+        }
+
+        /// <summary>
         /// Reset the entire system to initial state
         /// </summary>
         public void ResetSystem()
@@ -408,6 +420,7 @@ namespace DiceGame
                 dice.ResetLockAndValue();
             }
             
+            _nextHandExtraCooldown = 0; // Reset extra cooldown
             UpdateAvailableDice();
             
             Debug.Log("[CooldownSystem] System reset complete");

@@ -173,8 +173,15 @@ namespace DiceGame
             // Initialize and hide continue button
             if (controller.continueButton != null)
             {
-                controller.continueButton.gameObject.SetActive(false);
-                controller.continueButton.onClick.AddListener(() => controller.OnContinue());
+                try
+                {
+                    controller.continueButton.gameObject.SetActive(false);
+                    controller.continueButton.onClick.AddListener(() => controller.OnContinue());
+                }
+                catch (System.Exception e)
+                {
+                    Debug.LogError($"[BattleInitializer] Failed to initialize continue button: {e.Message}");
+                }
             }
         }
 
@@ -293,13 +300,47 @@ namespace DiceGame
         }
 
         /// <summary>
+        /// Give player a random common dice from the global pool as starting dice
+        /// </summary>
+        private void GiveRandomStartingCommonDice(DiceManager diceManager)
+        {
+            // Get all common dice from the global pool
+            var commonDice = DicePool.GetByTier(DiceTier.Common);
+            
+            if (commonDice == null || commonDice.Count == 0)
+            {
+                Debug.LogWarning("[BattleInitializer] Cannot give starting common dice - no common dice found in pool!");
+                return;
+            }
+
+            // Randomly select a common dice
+            int randomIndex = Random.Range(0, commonDice.Count);
+            var startingDice = commonDice[randomIndex];
+
+            if (startingDice != null)
+            {
+                diceManager.AddDiceToBackpack(startingDice);
+                Debug.Log($"[BattleInitializer] Gave starting common dice: {startingDice.diceName}");
+            }
+        }
+
+        /// <summary>
         /// Initialize dice system: load from save data and update cooldown system
         /// NOTE: DiceManager is now managed by PlayerResourceManager, data is already synced
         /// </summary>
         private void InitializeDiceSystem(BattleController controller, GameStateManager stateManager, InitializationResult result)
         {
             // DiceManager is already initialized and synced by PlayerResourceManager
-            // Just update CooldownSystem with backpack dice
+            
+            // Give player a random common dice if this is a new game (no dice and not continuing from reward)
+            if (result.DiceManager.PlayerDiceBackpack.Count == 0 && !stateManager.State.ContinuingFromReward)
+            {
+                GiveRandomStartingCommonDice(result.DiceManager);
+                // Save the new dice to SaveData
+                PlayerResourceManager.Instance.SaveAllToSaveData();
+            }
+            
+            // Update CooldownSystem with backpack dice
             if (result.DiceManager != null)
             {
                 UpdateCooldownSystemFromBackpack(controller, result);
@@ -378,7 +419,14 @@ namespace DiceGame
             // Initialize combo preference panel
             if (controller.comboPreferencePanel != null)
             {
-                controller.comboPreferencePanel.Initialize();
+                try
+                {
+                    controller.comboPreferencePanel.Initialize();
+                }
+                catch (System.Exception e)
+                {
+                    Debug.LogError($"[BattleInitializer] ComboPreferencePanel initialization failed: {e.Message}");
+                }
             }
             else
             {
@@ -460,10 +508,17 @@ namespace DiceGame
             // Activate TutorialController if in tutorial mode
             if (stateManager.State.IsTutorialMode)
             {
-                var tutorialController = Object.FindObjectOfType<DiceGame.Tutorial.TutorialController>(true);
-                if (tutorialController != null)
+                try
                 {
-                    tutorialController.gameObject.SetActive(true);
+                    var tutorialController = Object.FindObjectOfType<DiceGame.Tutorial.TutorialController>(true);
+                    if (tutorialController != null)
+                    {
+                        tutorialController.gameObject.SetActive(true);
+                    }
+                }
+                catch (System.Exception e)
+                {
+                    Debug.LogError($"[BattleInitializer] Failed to activate TutorialController: {e.Message}");
                 }
             }
         }
@@ -478,4 +533,3 @@ namespace DiceGame
         }
     }
 }
-

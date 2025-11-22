@@ -169,6 +169,29 @@ namespace DiceGame
                 _scoreAnimator.SetDiceViews(_views);
             }
 
+            // Check for filler dice and apply bonus rerolls from relics
+            bool hasFiller = _dice.Any(d => d is NormalDice);
+            if (hasFiller && _relicManager != null)
+            {
+                // Create a temporary context to check for bonus rerolls
+                var tempContext = new ScoringContext
+                {
+                    hasFillerInHand = true,
+                    submittedDice = _dice,
+                    submittedValues = new List<int>()
+                };
+                
+                // Apply all relics to get bonus rerolls
+                _relicManager.ApplyAll(tempContext);
+                
+                // Apply bonus rerolls to HandManager
+                if (tempContext.bonusRerolls > 0)
+                {
+                    _handManager.AddBonusRolls(tempContext.bonusRerolls);
+                    Debug.Log($"[HandFlowController] Applied {tempContext.bonusRerolls} bonus rerolls from relics (filler dice detected)");
+                }
+            }
+
             // Start new hand in hand manager
             _handManager.StartHand();
             
@@ -461,6 +484,12 @@ namespace DiceGame
                 // Calculate score breakdown (but final score will come from animation)
                 // This handles: combo evaluation, dice multipliers, and relic effects
                 var scoreResult = _scoreCalculator.CalculateScore(submittedDice, submittedValues, _relicManager, context);
+                
+                // Apply extra cooldown for next hand (from relics like Cooldown Radiator)
+                if (context.nextHandExtraCooldown > 0)
+                {
+                    _cooldownSystem.SetNextHandExtraCooldown(context.nextHandExtraCooldown);
+                }
                 
                 // Trigger animated score display - animation calculates the final score step-by-step
                 if (_scoreAnimator != null)
@@ -767,6 +796,8 @@ namespace DiceGame
         /// </summary>
         private ScoringContext CreateScoringContext(List<BaseDice> submittedDice, List<int> submittedValues)
         {
+            var (current, remaining) = _cooldownSystem.GetHandCounter();
+            
             var context = new ScoringContext
             {
                 submittedValues = new List<int>(submittedValues),
@@ -775,7 +806,8 @@ namespace DiceGame
                 totalSelectedCost = submittedDice.Sum(d => d.cost),
                 rollsUsed = _handManager.RollsUsed,
                 maxRollsPerHand = _maxRollsPerHand,
-                hasFillerInHand = submittedDice.Any(d => d is NormalDice)
+                hasFillerInHand = submittedDice.Any(d => d is NormalDice),
+                handsRemaining = remaining // Number of hands remaining after this submission
             };
             
             return context;

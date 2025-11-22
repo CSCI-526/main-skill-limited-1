@@ -49,8 +49,8 @@ namespace DiceGame.Relics
                 CreateRelicPairBond(),
                 CreateRelicFillerBattery(),
                 CreateRelicLoadedCoin(),
-                CreateRelicCooldownRadiator(),
-                CreateRelicCrownOfExcess(),
+                // TEMPORARILY BANNED: CreateRelicCooldownRadiator(),
+                // TEMPORARILY BANNED: CreateRelicCrownOfExcess(),
                 CreateRelicEchoPrism(),
                 CreateRelicCollectorsSeal()
             };
@@ -74,9 +74,9 @@ namespace DiceGame.Relics
             var relic = ScriptableObject.CreateInstance<RelicTightPurse>();
             relic.relicName = "Tight Purse";
             relic.rarity = RelicRarity.Rare;
-            relic.description = "+1 hand budget. Unspent budget ≥1: ×0.95 mult.";
+            relic.description = "Last cast: ×3 mult.";
             relic.unique = true;
-            relic.unspentPenalty = 0.95f;
+            relic.lastCastMult = 3.0f;
             return relic;
         }
 
@@ -85,11 +85,10 @@ namespace DiceGame.Relics
             var relic = ScriptableObject.CreateInstance<RelicStraightEdge>();
             relic.relicName = "Straight Edge";
             relic.rarity = RelicRarity.Common;
-            relic.description = "Straights: +15 base, ×1.2 mult. Three/Four of a Kind: ×0.9 mult.";
+            relic.description = "Small straight: ×1.2 mult. Large straight: ×1.5 mult.";
             relic.unique = true;
-            relic.baseBonus = 15;
-            relic.straightMult = 1.2f;
-            relic.setKindPenalty = 0.9f;
+            relic.smallStraightMult = 1.2f;
+            relic.largeStraightMult = 1.5f;
             return relic;
         }
 
@@ -98,11 +97,10 @@ namespace DiceGame.Relics
             var relic = ScriptableObject.CreateInstance<RelicMomentumGyro>();
             relic.relicName = "Momentum Gyro";
             relic.rarity = RelicRarity.Common;
-            relic.description = "Max rolls used: +10 base, ×1.15 mult. Early submit (≤1 roll): ×0.9 mult.";
+            relic.description = "If all rolls used: ×1.5 mult. If not: ×0.8 mult.";
             relic.unique = true;
-            relic.baseBonus = 10;
-            relic.multBonus = 1.15f;
-            relic.earlyPenalty = 0.9f;
+            relic.fullBonus = 1.5f;
+            relic.partialPenalty = 0.8f;
             return relic;
         }
 
@@ -111,11 +109,10 @@ namespace DiceGame.Relics
             var relic = ScriptableObject.CreateInstance<RelicPairBond>();
             relic.relicName = "Pair Bond";
             relic.rarity = RelicRarity.Common;
-            relic.description = "Any pair: +10 base. Two Pair/Full House: ×1.15 mult. No pairs: ×0.95 mult.";
+            relic.description = "One pair: ×1.2 mult. Two pair: ×1.5 mult.";
             relic.unique = true;
-            relic.baseOnAnyPair = 10;
-            relic.multOnTwoPlus = 1.15f;
-            relic.missPenalty = 0.95f;
+            relic.onePairMult = 1.2f;
+            relic.twoPairMult = 1.5f;
             return relic;
         }
 
@@ -124,10 +121,9 @@ namespace DiceGame.Relics
             var relic = ScriptableObject.CreateInstance<RelicFillerBattery>();
             relic.relicName = "Filler Battery";
             relic.rarity = RelicRarity.Rare;
-            relic.description = "With filler dice: +1 reroll. Next hand: -1 budget.";
+            relic.description = "With filler dice: +1 reroll charge.";
             relic.unique = true;
-            relic.rerolls = 1;
-            relic.nextHandBudgetCost = -1;
+            relic.rerollCharge = 1;
             return relic;
         }
 
@@ -136,11 +132,10 @@ namespace DiceGame.Relics
             var relic = ScriptableObject.CreateInstance<RelicLoadedCoin>();
             relic.relicName = "Loaded Coin";
             relic.rarity = RelicRarity.Rare;
-            relic.description = "Each 6: +5% mult (max +25%). Any 1s: mult capped at ×0.85.";
+            relic.description = "When submitted: Each 6 adds +25% multiplier. If any 1 is submitted, multiplier becomes ×0.8.";
             relic.unique = true;
-            relic.perSix = 0.05f;
-            relic.maxBonus = 0.25f;
-            relic.floorOnOne = 0.85f;
+            relic.perSix = 0.25f;
+            relic.multiplierOnOne = 0.8f;
             return relic;
         }
 
@@ -172,7 +167,7 @@ namespace DiceGame.Relics
             var relic = ScriptableObject.CreateInstance<RelicEchoPrism>();
             relic.relicName = "Echo Prism";
             relic.rarity = RelicRarity.Rare;
-            relic.description = "Highest dice value added to base score again.";
+            relic.description = "Dice sum added to base score again.";
             relic.unique = true;
             return relic;
         }
@@ -182,11 +177,11 @@ namespace DiceGame.Relics
             var relic = ScriptableObject.CreateInstance<RelicCollectorsSeal>();
             relic.relicName = "Collector's Seal";
             relic.rarity = RelicRarity.Legendary;
-            relic.description = "Three of a Kind: +15 base, ×1.1 mult. Four/Five of a Kind: +25 base.";
+            relic.description = "Three of a Kind: ×1.25 mult. Four of a Kind: ×1.5 mult. Five of a Kind: ×2 mult.";
             relic.unique = true;
-            relic.baseOnThreePlus = 15;
-            relic.multOnThreePlus = 1.1f;
-            relic.baseOnFourPlus = 25;
+            relic.multOnThree = 1.25f;
+            relic.multOnFour = 1.5f;
+            relic.multOnFive = 2.0f;
             return relic;
         }
 

@@ -3,36 +3,33 @@ using UnityEngine;
 namespace DiceGame.Relics
 {
     /// <summary>
-    /// Straight Edge: Straight buffs; set-kind nerf
+    /// Straight Edge: Small straight ×1.2 mult, Large straight ×1.5 mult
     /// </summary>
     [CreateAssetMenu(menuName = "DiceRogue/Relics/Straight Edge", fileName = "Relic_StraightEdge")]
     public class RelicStraightEdge : RelicBase
     {
-        public int baseBonus = 15;
-        public float straightMult = 1.2f;
-        public float setKindPenalty = 0.9f;
+        public float smallStraightMult = 1.2f;
+        public float largeStraightMult = 1.5f;
 
         private void Reset()
         {
             relicName = "Straight Edge";
             rarity = RelicRarity.Common;
-            description = "Straights: +15 base, ×1.2 mult. Three/Four of a Kind: ×0.9 mult.";
+            description = "Small straight: ×1.2 mult. Large straight: ×1.5 mult.";
         }
 
         public override void Apply(ScoringContext context)
         {
             bool large = RelicUtils.IsLargeStraight(context.submittedValues);
             bool small = !large && RelicUtils.IsSmallStraight(context.submittedValues);
-            var most = RelicUtils.MostFrequent(context.submittedValues);
 
-            if (large || small)
+            if (large)
             {
-                context.additionalBase += baseBonus;
-                context.multiplier *= straightMult;
+                context.multiplier *= largeStraightMult;
             }
-            else if (most.count >= 3) // three or four of a kind presence
+            else if (small)
             {
-                context.multiplier *= setKindPenalty;
+                context.multiplier *= smallStraightMult;
             }
         }
     }
