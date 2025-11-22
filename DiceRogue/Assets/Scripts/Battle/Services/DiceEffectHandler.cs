@@ -44,6 +44,8 @@ namespace DiceGame
                     var v = bc._views[idx];
                     v.TriggerInfluencedEffect(color);
                     v.PopEffect(1.25f);
+                    // Refresh the view to show updated value (golden dice bonus)
+                    v.Refresh();
                 }
             }
         }
@@ -151,6 +153,7 @@ namespace DiceGame
 
         /// <summary>
         /// Handle GoldenDice - add +1 to all dice values
+        /// Note: Applies to all dice with rolled values, including locked dice
         /// </summary>
         private void HandleGoldenDice(List<BaseDice> dice)
         {
@@ -174,18 +177,18 @@ namespace DiceGame
 
             List<int> targets = new List<int>();
 
-            // compute new values first
+            // compute new values first - apply to ALL dice with rolled values (including locked dice)
             for (int i = 0; i < dice.Count; i++)
             {
                 if (i == goldenIndex) continue;
                 var d = dice[i];
                 if (d.tier == DiceTier.Filler) continue;
                 if (d.lastRollValue <= 0) continue;
-                if (d.isLocked) continue;
+                // Removed: if (d.isLocked) continue; - locked dice should also get +1 bonus
 
                 int old = d.lastRollValue;
                 d.lastRollValue = golden.ApplyBonus(old);
-                Debug.Log($"    - {d.diceName}: {old} -> {d.lastRollValue}");
+                Debug.Log($"    - {d.diceName}: {old} -> {d.lastRollValue} (locked: {d.isLocked})");
                 targets.Add(i);
             }
 

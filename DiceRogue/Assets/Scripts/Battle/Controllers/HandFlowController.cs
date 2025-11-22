@@ -40,7 +40,6 @@ namespace DiceGame
         private List<BaseDice> _dice;
         private List<DiceView> _views;
         private bool _isSubmitting = false;
-        private bool _isRolling = false;
         
         // Callbacks for UI updates
         public System.Action OnComboPreviewUpdate;
@@ -210,67 +209,19 @@ namespace DiceGame
             // Auto-roll all dice once (free roll - doesn't count toward roll budget)
             PerformAutoRoll();
         }
-
-        private IEnumerator DelayedRefreshViews()
-        {
-            yield return new WaitForSeconds(0.25f);   // 等待特效完成
-            _viewFactory.RefreshViews(_views);
-        }
-
+        
         /// <summary>
         /// Perform auto-roll when hand starts (free roll - doesn't count toward budget)
         /// </summary>
         private void PerformAutoRoll()
         {
-            if (_isRolling) return;              // 防止重复
-            StartCoroutine(AutoRollRoutine());
-            //Debug.Log("[HandFlowController] Performing auto-initial roll (free roll)");
-
-            //// Roll all dice (they start unlocked)
-            //for (int i = 0; i < _dice.Count; i++)
-            //{
-            //    var d = _dice[i];
-            //    var v = _views[i]; 
-
-            //    if (d.tier != DiceTier.Filler)
-            //    {
-            //        _effectHandler.SetupPlusOneDice(d, i, _dice);
-
-            //        int result = d.Roll();
-            //        Debug.Log($"  - {d.diceName} auto-rolled: {result}");
-
-            //        // Play roll animation
-            //        if (v != null)
-            //            v.PlayRollAnimation(result, 0.5f);
-            //    }
-            //}
-
-            //// Apply all special dice effects using effect handler
-            //_effectHandler.ApplyRollEffects(_dice, _views);
-
-            //// Refresh all views using factory
-            //_viewFactory.RefreshViews(_views);
-
-            //// Update combo preview after rolling
-            //OnComboPreviewUpdate?.Invoke();
-
-            //// Note: Don't update roll count - this is a free roll
-            //// Note: Don't update feedback - keep "Roll or Lock Dice" message
-        }
-
-        private IEnumerator AutoRollRoutine()
-        {
-            _isRolling = true;
-
             Debug.Log("[HandFlowController] Performing auto-initial roll (free roll)");
-
-            float animDuration = 0.5f;
-
-            // STEP 1：先掷骰子 + 播放 roll 动画（不应用传奇效果）
+            
+            // Roll all dice (they start unlocked)
             for (int i = 0; i < _dice.Count; i++)
             {
                 var d = _dice[i];
-                var v = _views[i];
+                var v = _views[i]; 
 
                 if (d.tier != DiceTier.Filler)
                 {
@@ -279,30 +230,38 @@ namespace DiceGame
                     int result = d.Roll();
                     Debug.Log($"  - {d.diceName} auto-rolled: {result}");
 
+                    // Play roll animation
                     if (v != null)
-                        v.PlayRollAnimation(result, animDuration);
+                        v.PlayRollAnimation(result, 0.5f);
                 }
             }
 
-            // ⭐ 等待 roll 动画播放完
-            yield return new WaitForSeconds(animDuration);
-
-            // STEP 2：现在再应用所有传奇效果（Zombie / Golden 等）
-            _effectHandler.ApplyRollEffects(_dice, _views);
-
-            // 如果你在 ApplyRollEffects 里也做了特效，可以在里面自己加小的 Wait，
-            // 或者这里再额外 Wait 一点时间：
-             yield return new WaitForSeconds(0.25f);
-
-            _viewFactory.RefreshViews(_views);
-
-            // 更新 UI
+            // Wait for roll animations to complete, then apply effects and show golden dice animation
+            StartCoroutine(WaitForRollAnimationsThenApplyEffects(0.5f));
+            
+            // Update combo preview after rolling
             OnComboPreviewUpdate?.Invoke();
-            // 自动 roll 不占用预算，所以不更新 Roll 计数
-
-            _isRolling = false;
+            
+            // Note: Don't update roll count - this is a free roll
+            // Note: Don't update feedback - keep "Roll or Lock Dice" message
         }
-
+        
+        /// <summary>
+        /// Wait for roll animations to complete, then apply dice effects (golden dice, etc.)
+        /// This ensures roll animations finish before golden dice effect shows
+        /// </summary>
+        private System.Collections.IEnumerator WaitForRollAnimationsThenApplyEffects(float animationDuration)
+        {
+            // Wait for roll animations to complete
+            yield return new WaitForSeconds(animationDuration + 0.1f); // Add small buffer
+            
+            // Now apply all special dice effects (golden dice will trigger its animation)
+            _effectHandler.ApplyRollEffects(_dice, _views);
+            
+            // Refresh all views to show final values (including golden dice bonuses)
+            _viewFactory.RefreshViews(_views);
+        }
+        
         /// <summary>
         /// Roll unlocked dice once
         /// </summary>
@@ -325,67 +284,15 @@ namespace DiceGame
                 return;
             }
 
-            if (_isRolling) return;        // 正在 rolling，就别再次启动
-
-            StartCoroutine(RollOnceRoutine());
-            //// Increment roll counter
-            //int rollNumber = _handManager.IncrementRoll();
-            //Debug.Log($"[HandFlowController] Rolling dice (hand roll {rollNumber}, total {_handManager.TotalRollsUsed}/{_maxRollsPerHand})");
-
-            //// Roll only unlocked dice (skip placeholder dice)
-            //for (int i = 0; i < _dice.Count; i++)
-            //{
-            //    var d = _dice[i];
-            //    var v = _views[i]; 
-
-            //    if (!d.isLocked && d.tier != DiceTier.Filler)
-            //    {
-            //        _effectHandler.SetupPlusOneDice(d, i, _dice);
-
-            //        int result = d.Roll();
-            //        Debug.Log($"  - {d.diceName} rolled: {result}");
-
-            //        // play animation
-            //        if (v != null)
-            //            v.PlayRollAnimation(result, 0.5f); // second parameter is lasting time
-            //    }
-            //    else if (d.isLocked)
-            //    {
-            //        Debug.Log($"  - {d.diceName} locked at: {d.lastRollValue}");
-            //    }
-            //}
-
-            //// Apply all special dice effects using effect handler
-            //_effectHandler.ApplyRollEffects(_dice, _views);
-
-            //// Refresh all views using factory
-            //_viewFactory.RefreshViews(_views);
-
-            //// Update combo preview after rolling
-            //OnComboPreviewUpdate?.Invoke();
-
-            //// Update roll count display
-            //OnRollAndCastCountUpdate?.Invoke();
-
-            //// Show idle message after rolling
-            //OnFeedbackUpdate?.Invoke("Roll or Lock Dice", false);
-        }
-
-        private IEnumerator RollOnceRoutine()
-        {
-            _isRolling = true;
-
-            // 原来 OnRollOnce 里的这部分放进来：
+            // Increment roll counter
             int rollNumber = _handManager.IncrementRoll();
             Debug.Log($"[HandFlowController] Rolling dice (hand roll {rollNumber}, total {_handManager.TotalRollsUsed}/{_maxRollsPerHand})");
 
-            float animDuration = 0.5f;
-
-            // STEP 1：掷骰子 + 播放 roll 动画
+            // Roll only unlocked dice (skip placeholder dice)
             for (int i = 0; i < _dice.Count; i++)
             {
                 var d = _dice[i];
-                var v = _views[i];
+                var v = _views[i]; 
 
                 if (!d.isLocked && d.tier != DiceTier.Filler)
                 {
@@ -394,8 +301,9 @@ namespace DiceGame
                     int result = d.Roll();
                     Debug.Log($"  - {d.diceName} rolled: {result}");
 
+                    // play animation
                     if (v != null)
-                        v.PlayRollAnimation(result, animDuration);
+                        v.PlayRollAnimation(result, 0.5f); // second parameter is lasting time
                 }
                 else if (d.isLocked)
                 {
@@ -403,26 +311,19 @@ namespace DiceGame
                 }
             }
 
-            // ⭐ 等待 roll 动画结束
-            yield return new WaitForSeconds(animDuration);
-
-            // STEP 2：再应用传奇效果（里面可以做 Zombie / Golden 的特效）
-            _effectHandler.ApplyRollEffects(_dice, _views);
-
-            // （可选）如果你在 ApplyRollEffects 里有额外的高亮/抖动动画，
-            // 可以在那边用小协程自己 Wait；或者这里再额外等：
-            // yield return new WaitForSeconds(0.25f);
-
-            StartCoroutine(DelayedRefreshViews());
-
-            // 更新 UI：这三行和你原来的 OnRollOnce 尾部一样
+            // Wait for roll animations to complete, then apply effects and show golden dice animation
+            StartCoroutine(WaitForRollAnimationsThenApplyEffects(0.5f));
+            
+            // Update combo preview after rolling
             OnComboPreviewUpdate?.Invoke();
+            
+            // Update roll count display
             OnRollAndCastCountUpdate?.Invoke();
+            
+            // Show idle message after rolling
             OnFeedbackUpdate?.Invoke("Roll or Lock Dice", false);
-
-            _isRolling = false;
         }
-
+        
         /// <summary>
         /// Submit combo for scoring
         /// </summary>
