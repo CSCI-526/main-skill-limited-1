@@ -403,6 +403,7 @@ namespace DiceGame
                 controller.settingsPanel.Initialize();
                 controller.settingsPanel.OnResetRequested += () => controller.OnSettingsResetClicked();
                 controller.settingsPanel.OnQuitRequested += () => controller.OnSettingsQuitClicked();
+                controller.settingsPanel.OnCheatRequested += () => controller.OnSettingsCheatClicked();
             }
             else
             {

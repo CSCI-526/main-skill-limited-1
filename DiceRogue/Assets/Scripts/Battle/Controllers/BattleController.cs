@@ -384,7 +384,35 @@ namespace DiceGame
         {
             _stateManagerService?.QuitGame();
         }
-        
+
+        public void OnSettingsCheatClicked()
+        {
+            Debug.Log("[BattleController] Cheat mode activated!");
+
+            // 1. Add ALL relics
+            var allRelics = _relicManager.GlobalRelicPool;
+            foreach (var relic in allRelics)
+            {
+                PlayerResourceManager.Instance.AddRelicToBackpack(relic);
+            }
+
+            // 2. Add ALL dice
+            var allDice = _diceManager.GlobalDicePool;
+            foreach (var d in allDice)
+            {
+                PlayerResourceManager.Instance.AddDiceToBackpack(d);
+            }
+
+            // 3. Refresh UI and backpack
+            if (relicDisplay != null)
+                relicDisplay.DisplayRelics(_relicManager);
+
+            UpdateCooldownSystemFromBackpack();
+            RefreshAllUI();
+
+            Debug.Log("[BattleController] Cheat completed: All dice + relics granted.");
+        }
+
         /// <summary>
         /// Update combo preview display based on currently locked dice
         /// Shows default combo values only (no dice/relic effects)
@@ -470,6 +498,7 @@ namespace DiceGame
             {
                 settingsPanel.OnResetRequested -= OnSettingsResetClicked;
                 settingsPanel.OnQuitRequested -= OnSettingsQuitClicked;
+                settingsPanel.OnCheatRequested -= OnSettingsCheatClicked;
             }
         }
     }

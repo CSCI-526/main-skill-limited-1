@@ -1,5 +1,6 @@
 using UnityEngine;
 using TMPro;
+using UnityEngine.UI;
 
 namespace DiceGame.Core
 {
@@ -29,12 +30,46 @@ namespace DiceGame.Core
                 RectTransformUtility.ScreenPointToLocalPointInRectangle(
                     transform as RectTransform,
                     Input.mousePosition, null, out pos);
-                panelRect.anchoredPosition = pos + new Vector2(20f, -20f);
+
+                RectTransform canvasRect = transform as RectTransform;
+                Vector2 tooltipSize = panelRect.sizeDelta;
+                Vector2 offset = new Vector2(20f, -20f);
+                Vector2 anchoredPos = pos + offset;
+
+                float mouseXNorm = Input.mousePosition.x / Screen.width;
+                float mouseYNorm = Input.mousePosition.y / Screen.height;
+
+                if (mouseXNorm > 0.7f)
+                    anchoredPos.x -= tooltipSize.x + 40f;
+                if (mouseYNorm < 0.3f)
+                    anchoredPos.y += tooltipSize.y + 40f;
+
+                float maxX = canvasRect.rect.width / 2f - 10f;
+                float minX = -maxX;
+                float maxY = canvasRect.rect.height / 2f - 10f;
+                float minY = -maxY;
+
+                anchoredPos.x = Mathf.Clamp(anchoredPos.x, minX, maxX);
+                anchoredPos.y = Mathf.Clamp(anchoredPos.y, minY, maxY);
+
+                panelRect.anchoredPosition = anchoredPos;
             }
         }
 
+
+
+
         public void ShowTooltip(BaseDice dice)
         {
+            descText.enableWordWrapping = true;
+            descText.overflowMode = TextOverflowModes.Overflow;
+            descText.rectTransform.sizeDelta = new Vector2(400, descText.rectTransform.sizeDelta.y);
+
+            // 确保宽度限制存在
+            var le = descText.GetComponent<LayoutElement>();
+            if (le == null) le = descText.gameObject.AddComponent<LayoutElement>();
+            le.preferredWidth = 400f;
+
             // Default
             Color nameColor = Color.white;
             Color rarityColor = Color.white;
@@ -80,7 +115,13 @@ namespace DiceGame.Core
             //extraText.text = $"Rarity: <color=#{ColorUtility.ToHtmlStringRGB(rarityColor)}>{rarityText}</color>   Cost: {dice.cost}";
             extraText.text = $"Rarity: <color=#{ColorUtility.ToHtmlStringRGB(rarityColor)}>{rarityText}</color>";
 
+
+
             tooltipPanel.SetActive(true);
+
+            // 强制刷新全部子布局（关键）
+            LayoutRebuilder.ForceRebuildLayoutImmediate(panelRect);
+            LayoutRebuilder.ForceRebuildLayoutImmediate(tooltipPanel.transform as RectTransform);
         }
 
         private string Rainbowify(string text)

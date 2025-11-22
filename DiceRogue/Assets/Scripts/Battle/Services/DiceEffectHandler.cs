@@ -12,13 +12,43 @@ namespace DiceGame
         /// <summary>
         /// Apply all special dice effects in the correct order
         /// </summary>
-        public void ApplyRollEffects(List<BaseDice> dice)
+        public void ApplyRollEffects(List<BaseDice> dice, List<DiceView> views)
         {
             HandlePlusOne(dice);
             HandleTwinBond(dice);
             HandleZombieInfection(dice);
             HandleGoldenDice(dice);
         }
+
+        private System.Collections.IEnumerator PlaySequentialFX(int triggerIndex, List<int> targetIndices, Color color)
+        {
+            BattleController bc = GameObject.FindObjectOfType<BattleController>();
+            if (bc == null || bc._views == null) yield break;
+
+            // 1) trigger dice pop first
+            if (triggerIndex >= 0 && triggerIndex < bc._views.Count)
+            {
+                var tr = bc._views[triggerIndex];
+                tr.TriggerInfluencedEffect(color);
+                tr.PopEffect(1.35f);
+            }
+
+            // 2) wait so player is sure "this dice caused the effect"
+            yield return new WaitForSeconds(0.25f);
+
+            // 3) all target dice pop together (simultaneous)
+            foreach (int idx in targetIndices)
+            {
+                if (idx >= 0 && idx < bc._views.Count)
+                {
+                    var v = bc._views[idx];
+                    v.TriggerInfluencedEffect(color);
+                    v.PopEffect(1.25f);
+                }
+            }
+        }
+
+
 
         /// <summary>
         /// Handle PlusOne dice - needs previous dice value before rolling
@@ -81,81 +111,92 @@ namespace DiceGame
         /// </summary>
         private void HandleZombieInfection(List<BaseDice> dice)
         {
+            BattleController bc = GameObject.FindObjectOfType<BattleController>();
+            if (bc == null) return;
+
             for (int i = 0; i < dice.Count; i++)
             {
-                var d = dice[i];
-                if (d is ZombieDice zombie && !d.isLocked && d.tier != DiceTier.Filler)
+                if (dice[i] is ZombieDice zombie && !dice[i].isLocked && dice[i].tier != DiceTier.Filler)
                 {
-                    if (zombie.ShouldInfectNeighbors())
-                    {
-                        Debug.Log($"  - {zombie.diceName} is infecting neighbors with value {zombie.GetInfectionValue()}!");
-                        
-                        // Infect left neighbor (only if not locked)
-                        if (i > 0 && dice[i - 1].tier != DiceTier.Filler && !dice[i - 1].isLocked)
-                        {
-                            zombie.InfectDice(dice[i - 1]);
-                            Debug.Log($"    - Infected {dice[i - 1].diceName} (left)");
-                        }
-                        else if (i > 0 && dice[i - 1].isLocked)
-                        {
-                            Debug.Log($"    - Cannot infect {dice[i - 1].diceName} (left) - dice is locked");
-                        }
+                    if (!zombie.ShouldInfectNeighbors())
+                        continue;
 
-                        // Infect right neighbor (only if not locked)
-                        if (i < dice.Count - 1 && dice[i + 1].tier != DiceTier.Filler && !dice[i + 1].isLocked)
-                        {
-                            zombie.InfectDice(dice[i + 1]);
-                            Debug.Log($"    - Infected {dice[i + 1].diceName} (right)");
-                        }
-                        else if (i < dice.Count - 1 && dice[i + 1].isLocked)
-                        {
-                            Debug.Log($"    - Cannot infect {dice[i + 1].diceName} (right) - dice is locked");
-                        }
+                    List<int> targets = new List<int>();
+
+                    // left
+                    if (i > 0 && dice[i - 1].tier != DiceTier.Filler && !dice[i - 1].isLocked)
+                    {
+                        zombie.InfectDice(dice[i - 1]);
+                        targets.Add(i - 1);
                     }
+
+                    // right
+                    if (i < dice.Count - 1 && dice[i + 1].tier != DiceTier.Filler && !dice[i + 1].isLocked)
+                    {
+                        zombie.InfectDice(dice[i + 1]);
+                        targets.Add(i + 1);
+                    }
+
+                    // animate: trigger first → delay → all targets
+                    bc.StartCoroutine(PlaySequentialFX(
+                        i,
+                        targets,
+                        new Color32(0, 255, 100, 255)
+                    ));
                 }
             }
         }
+
+
 
         /// <summary>
         /// Handle GoldenDice - add +1 to all dice values
         /// </summary>
         private void HandleGoldenDice(List<BaseDice> dice)
         {
-            // Check if GoldenDice is present in hand
-            GoldenDice goldenDice = null;
-            
-            foreach (var d in dice)
+            BattleController bc = GameObject.FindObjectOfType<BattleController>();
+            if (bc == null) return;
+
+            int goldenIndex = -1;
+            GoldenDice golden = null;
+
+            for (int i = 0; i < dice.Count; i++)
             {
-                if (d is GoldenDice golden && d.tier != DiceTier.Filler)
+                if (dice[i] is GoldenDice g && dice[i].tier != DiceTier.Filler)
                 {
-                    goldenDice = golden;
+                    golden = g;
+                    goldenIndex = i;
                     break;
                 }
             }
 
-            // If GoldenDice is present, apply +1 to all dice (except itself and locked dice)
-            if (goldenDice != null)
+            if (golden == null) return;
+
+            List<int> targets = new List<int>();
+
+            // compute new values first
+            for (int i = 0; i < dice.Count; i++)
             {
-                Debug.Log($"  - {goldenDice.diceName} is adding +1 to all other dice!");
-                
-                foreach (var d in dice)
-                {
-                    if (d != goldenDice && d.tier != DiceTier.Filler && d.lastRollValue > 0)
-                    {
-                        if (!d.isLocked)
-                        {
-                            int oldValue = d.lastRollValue;
-                            d.lastRollValue = goldenDice.ApplyBonus(d.lastRollValue);
-                            Debug.Log($"    - {d.diceName}: {oldValue} -> {d.lastRollValue}");
-                        }
-                        else
-                        {
-                            Debug.Log($"    - {d.diceName}: skipped (locked at {d.lastRollValue})");
-                        }
-                    }
-                }
+                if (i == goldenIndex) continue;
+                var d = dice[i];
+                if (d.tier == DiceTier.Filler) continue;
+                if (d.lastRollValue <= 0) continue;
+                if (d.isLocked) continue;
+
+                int old = d.lastRollValue;
+                d.lastRollValue = golden.ApplyBonus(old);
+                Debug.Log($"    - {d.diceName}: {old} -> {d.lastRollValue}");
+                targets.Add(i);
             }
+
+            // play animation after computing ALL dice values
+            bc.StartCoroutine(PlaySequentialFX(
+                goldenIndex,
+                targets,
+                new Color32(255, 215, 0, 255)
+            ));
         }
+
     }
 }
 

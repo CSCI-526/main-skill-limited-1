@@ -236,5 +236,76 @@ namespace DiceGame
         //    // 可选：轻微弹跳效果（沿用你原来的 PopEffect）
         //    yield return StartCoroutine(PopEffectCoroutine(1f));
         //}
+        public IEnumerator FlashEffect(Color flashColor, float duration = 0.2f)
+        {
+            Image bg = GetComponent<Image>();
+            if (bg == null) yield break;
+
+            Color original = bg.color;
+            float t = 0f;
+
+            while (t < duration)
+            {
+                t += Time.deltaTime;
+                float lerp = Mathf.PingPong(t * 8f, 1f);
+                bg.color = Color.Lerp(original, flashColor, lerp);
+                yield return null;
+            }
+
+            bg.color = original;
+        }
+
+        public IEnumerator InfluencePop(float scaleMul = 1.25f, float duration = 0.15f)
+        {
+            RectTransform rt = GetComponent<RectTransform>();
+            Vector3 original = rt.localScale;
+            Vector3 big = original * scaleMul;
+
+            float t = 0f;
+            while (t < duration)
+            {
+                t += Time.deltaTime;
+                rt.localScale = Vector3.Lerp(original, big, t / duration);
+                yield return null;
+            }
+
+            t = 0f;
+            while (t < duration)
+            {
+                t += Time.deltaTime;
+                rt.localScale = Vector3.Lerp(big, original, t / duration);
+                yield return null;
+            }
+
+            rt.localScale = original;
+        }
+
+        public void TriggerInfluencedEffect(Color c)
+        {
+            StopAllCoroutines();
+            StartCoroutine(InfluencedEffectCoroutine(c));
+        }
+
+        private IEnumerator InfluencedEffectCoroutine(Color c)
+        {
+            Image bg = GetComponent<Image>();
+            if (bg == null) yield break;
+
+            Color original = bg.color;
+
+            float flashDuration = 0.25f;
+
+            // 3 次闪烁
+            for (int i = 0; i < 3; i++)
+            {
+                bg.color = c;
+                yield return new WaitForSeconds(flashDuration);
+
+                bg.color = original;
+                yield return new WaitForSeconds(flashDuration);
+            }
+        }
+
+
     }
 }

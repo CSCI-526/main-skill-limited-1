@@ -1,6 +1,7 @@
 using UnityEngine;
 using TMPro;
 using DiceGame.Relics;
+using UnityEngine.UI;
 
 namespace DiceGame.Core
 {
@@ -33,12 +34,46 @@ namespace DiceGame.Core
                 RectTransformUtility.ScreenPointToLocalPointInRectangle(
                     transform as RectTransform,
                     Input.mousePosition, null, out pos);
-                panelRect.anchoredPosition = pos + new Vector2(20f, -20f);
+
+                RectTransform canvasRect = transform as RectTransform;
+                Vector2 tooltipSize = panelRect.sizeDelta;
+                Vector2 offset = new Vector2(20f, -20f);
+                Vector2 anchoredPos = pos + offset;
+
+                float mouseXNorm = Input.mousePosition.x / Screen.width;
+                float mouseYNorm = Input.mousePosition.y / Screen.height;
+
+                if (mouseXNorm > 0.7f)
+                    anchoredPos.x -= tooltipSize.x + 40f;
+                if (mouseYNorm < 0.3f)
+                    anchoredPos.y += tooltipSize.y + 40f;
+
+                float maxX = canvasRect.rect.width / 2f - 10f;
+                float minX = -maxX;
+                float maxY = canvasRect.rect.height / 2f - 10f;
+                float minY = -maxY;
+
+                anchoredPos.x = Mathf.Clamp(anchoredPos.x, minX, maxX);
+                anchoredPos.y = Mathf.Clamp(anchoredPos.y, minY, maxY);
+
+                panelRect.anchoredPosition = anchoredPos;
             }
         }
 
+
+
+
         public void ShowTooltip(BaseDice dice)
         {
+            descText.enableWordWrapping = true;
+            descText.overflowMode = TextOverflowModes.Overflow;
+            descText.rectTransform.sizeDelta = new Vector2(400, descText.rectTransform.sizeDelta.y);
+
+            // 确保宽度限制存在
+            var le = descText.GetComponent<LayoutElement>();
+            if (le == null) le = descText.gameObject.AddComponent<LayoutElement>();
+            le.preferredWidth = 400f;
+
             // Default
             Color nameColor = Color.white;
             Color rarityColor = Color.white;
@@ -68,20 +103,41 @@ namespace DiceGame.Core
                     break;
 
                 case DiceTier.Legendary:
-                    // Gold
-                    nameColor = new Color32(255, 215, 0, 255);  // Gold
-                    rarityColor = new Color32(255, 215, 0, 255);
+                    // Rainbow
+                    string rainbow = "<color=#FFD700>L</color><color=#FF8C00>e</color><color=#FF4500>g</color><color=#FF1493>e</color><color=#9400D3>n</color><color=#4B0082>d</color><color=#1E90FF>a</color><color=#00CED1>r</color><color=#32CD32>y</color>";
+                    rarityText = rainbow;
+                    nameTextColored = Rainbowify(dice.diceName);
                     break;
             }
 
-            nameText.text = $"<color=#{ColorUtility.ToHtmlStringRGB(nameColor)}>{dice.diceName}</color>";
+            if (dice.tier != DiceTier.Legendary)
+                nameText.text = $"<color=#{ColorUtility.ToHtmlStringRGB(nameColor)}>{dice.diceName}</color>";
+            else
+                nameText.text = nameTextColored;
 
             descText.text = dice.description;
-            
-            extraText.text = $"Rarity: <color=#{ColorUtility.ToHtmlStringRGB(rarityColor)}>{rarityText}</color>";
             //extraText.text = $"Rarity: <color=#{ColorUtility.ToHtmlStringRGB(rarityColor)}>{rarityText}</color>   Cost: {dice.cost}";
+            extraText.text = $"Rarity: <color=#{ColorUtility.ToHtmlStringRGB(rarityColor)}>{rarityText}</color>";
+
+
 
             tooltipPanel.SetActive(true);
+
+            // 强制刷新全部子布局（关键）
+            LayoutRebuilder.ForceRebuildLayoutImmediate(panelRect);
+            LayoutRebuilder.ForceRebuildLayoutImmediate(tooltipPanel.transform as RectTransform);
+        }
+
+        private string Rainbowify(string text)
+        {
+            string[] colors = { "#FFD700", "#FF8C00", "#FF4500", "#FF1493", "#9400D3", "#1E90FF", "#00CED1", "#32CD32" };
+            System.Text.StringBuilder sb = new System.Text.StringBuilder();
+            for (int i = 0; i < text.Length; i++)
+            {
+                string c = colors[i % colors.Length];
+                sb.Append($"<color={c}>{text[i]}</color>");
+            }
+            return sb.ToString();
         }
 
         /// <summary>
