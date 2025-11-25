@@ -19,9 +19,15 @@ namespace DiceGame.Relics
 
         public override void Apply(ScoringContext context)
         {
+            Debug.Log($"[RelicFillerBattery] Apply called: hasFillerInHand={context.hasFillerInHand}, rerollCharge={rerollCharge}, currentBonusRerolls={context.bonusRerolls}");
             if (context.hasFillerInHand)
             {
                 context.bonusRerolls += rerollCharge;
+                Debug.Log($"[RelicFillerBattery] Added {rerollCharge} bonus rerolls. New bonusRerolls={context.bonusRerolls}");
+            }
+            else
+            {
+                Debug.Log($"[RelicFillerBattery] No filler dice in hand, skipping bonus reroll");
             }
         }
     }

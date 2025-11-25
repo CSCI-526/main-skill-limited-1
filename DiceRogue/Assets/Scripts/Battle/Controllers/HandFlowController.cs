@@ -170,6 +170,7 @@ namespace DiceGame
 
             // Check for filler dice and apply bonus rerolls from relics
             bool hasFiller = _dice.Any(d => d is NormalDice);
+            Debug.Log($"[HandFlowController] Checking for filler dice: hasFiller={hasFiller}, diceCount={_dice.Count}");
             if (hasFiller && _relicManager != null)
             {
                 // Create a temporary context to check for bonus rerolls
@@ -180,15 +181,33 @@ namespace DiceGame
                     submittedValues = new List<int>()
                 };
                 
+                Debug.Log($"[HandFlowController] Created temp context with hasFillerInHand={tempContext.hasFillerInHand}, relicCount={_relicManager.PlayerBackpack.Count}");
+                
                 // Apply all relics to get bonus rerolls
                 _relicManager.ApplyAll(tempContext);
+                
+                Debug.Log($"[HandFlowController] After applying relics, bonusRerolls={tempContext.bonusRerolls}");
                 
                 // Apply bonus rerolls to HandManager
                 if (tempContext.bonusRerolls > 0)
                 {
+                    int oldBudget = _handManager.TotalRollBudget;
                     _handManager.AddBonusRolls(tempContext.bonusRerolls);
-                    Debug.Log($"[HandFlowController] Applied {tempContext.bonusRerolls} bonus rerolls from relics (filler dice detected)");
+                    int newBudget = _handManager.TotalRollBudget;
+                    Debug.Log($"[HandFlowController] Applied {tempContext.bonusRerolls} bonus rerolls from relics (filler dice detected). Budget: {oldBudget} -> {newBudget}");
                 }
+                else
+                {
+                    Debug.LogWarning($"[HandFlowController] No bonus rerolls applied despite filler dice present. bonusRerolls={tempContext.bonusRerolls}");
+                }
+            }
+            else if (!hasFiller)
+            {
+                Debug.Log("[HandFlowController] No filler dice detected, skipping bonus reroll check");
+            }
+            else if (_relicManager == null)
+            {
+                Debug.LogWarning("[HandFlowController] RelicManager is null, cannot apply bonus rerolls");
             }
 
             // Start new hand in hand manager

@@ -58,8 +58,9 @@ namespace DiceGame
         {
             if (_battleUI == null) return;
             
+            // Use TotalRollBudget instead of _maxRollsPerHand to account for bonus rerolls from relics
             int remainingRolls = _handManager != null 
-                ? Mathf.Max(0, _maxRollsPerHand - _handManager.TotalRollsUsed) 
+                ? Mathf.Max(0, _handManager.TotalRollBudget - _handManager.TotalRollsUsed) 
                 : 0;
             
             int remainingCasts = 0;
