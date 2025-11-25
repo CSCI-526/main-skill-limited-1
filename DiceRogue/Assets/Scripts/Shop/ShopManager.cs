@@ -2,27 +2,33 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Text;
 using UnityEngine;
 using DiceGame;           // BaseDice, DiceTier, DiceManager
 using DiceGame.Core;      // GameStateManager
+using DiceGame.Relics;    // RelicBase, RelicManager, RelicRarity
 using TMPro;
 using UnityEngine.UI;
 using UnityEngine.EventSystems;
 using Random = UnityEngine.Random;
 using UnityEngine.SceneManagement;
 
+public enum BuyResult
+{
+    Success,
+    NotEnoughMoney,
+    BackpackFull
+}
+
 public class ShopManager : MonoBehaviour
 {
     [Header("UI References")]
-    public ShopItemUI blindBoxSlot;     // 盲盒（便宜抽）
     public ShopItemUI[] choiceSlots;    // 自選 3 格（Normal/Rare）
-    public ShopItemUI legendarySlot;    // 傳奇（偶發、限購 1）
-    public Sprite blindBoxIcon;         // 盲盒圖示（?）
-    public Sprite defaultDiceIcon;        // 當骰子沒有專屬 icon 時的後備圖
 
-    [Header("UI Prefab Previews")]
-    [Tooltip("可選：盲盒在卡片上的預覽 prefab（如果不設，仍會使用盲盒圖示）")] public GameObject blindBoxPreviewPrefab;
-    [Tooltip("可選：傳奇項目的外框/預覽 prefab（若不設，仍會使用文字/圖示")] public GameObject legendaryPreviewFrame;
+    [Header("Relic Shop UI")]
+    [Tooltip("Relic 商店用的 4 個欄位（對應 ShopScene 中的 Relic_Row 裡的 ShopItemCard）")]
+    public ShopItemUI[] relicSlots;    // 4 個遺物欄位，preview anchor 內已放 relic prefab
+
 
     [System.Serializable]
     public class DiceUiMap
@@ -37,23 +43,6 @@ public class ShopManager : MonoBehaviour
     [Header("Dice UI Prefabs Mapping")]
     [Tooltip("把 BaseDice 子類名 → Dice UI 變體 prefab 的對照填在這裡")] public List<DiceUiMap> diceUiMaps = new List<DiceUiMap>();
 
-    // runtime fallback icon (generated if neither candidate nor default provided)
-    private Sprite _runtimeFallbackIcon;
-
-    private Sprite SafeIcon(Sprite candidate)
-    {
-        if (candidate != null) return candidate;
-        if (defaultDiceIcon != null) return defaultDiceIcon;
-        if (_runtimeFallbackIcon == null)
-        {
-            // create a tiny transparent sprite as a last-resort fallback
-            var tex = new Texture2D(2, 2, TextureFormat.RGBA32, false);
-            tex.SetPixels(new[] { Color.clear, Color.clear, Color.clear, Color.clear });
-            tex.Apply();
-            _runtimeFallbackIcon = Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f), 100f);
-        }
-        return _runtimeFallbackIcon;
-    }
 
     private static string SafeText(string s)
     {
@@ -66,20 +55,31 @@ public class ShopManager : MonoBehaviour
     }
 
     [Header("Pricing")]
-    public int blindBoxPrice = 5;
     public int normalPrice = 6;         // 自選 Common 價
-    public int rarePrice = 12;          // 自選 Rare 價
-    public int legendaryPrice = 30;     // 傳奇價
+    public int rarePrice = 10;          // 自選 Rare 價
+    public int legendaryPrice = 15;     // 傳奇價
+
+    [Header("Relic Pricing")]
+    [Tooltip("Common 遺物價格（比骰子高）")]
+    public int relicCommonPrice = 10;
+    [Tooltip("Rare 遺物價格（明顯比骰子貴）")]
+    public int relicRarePrice = 15;
+    [Tooltip("Legendary 遺物價格（極高價）")]
+    public int relicLegendaryPrice = 20;
+
+    [Header("Relic Tier Weights (抽選機率)")]
+    [Tooltip("Common 遺物權重（最常出現）")] public float relicWeightCommon = 1.0f;
+    [Tooltip("Rare 遺物權重（中等機率）")] public float relicWeightRare = 0.4f;
+    [Tooltip("Legendary 遺物權重（非常低，確保稀有）")] public float relicWeightLegendary = 0.1f;
 
     [Header("Tier Weights (抽選機率)")]
     [Tooltip("Common 的權重（數值越大越常出現）")] public float weightCommon = 1.0f;
     [Tooltip("Normal 的權重（有的專案與 Common 等價，仍獨立提供以便調整）")] public float weightNormal = 1.0f;
-    [Tooltip("Rare 的權重（建議 < 1）")] public float weightRare = 0.35f;
-    [Tooltip("Legendary 的權重（建議很小，確保機率最低）")] public float weightLegendary = 0.08f;
+    [Tooltip("Rare 的權重（建議 < 1）")] public float weightRare = 0.3f;
+    [Tooltip("Legendary 的權重（建議很小，確保機率最低）")] public float weightLegendary = 0.1f;
 
     [Header("Probabilities")]
     [Range(0f, 1f)] public float legendaryAppearChance = 0.15f; // 傳奇出現機率
-    [Range(0f, 1f)] public float blindBoxNormalRate = 0.7f;     // 盲盒 Common 機率（其餘為 Rare）
 
     [Header("Player Resource Manager")]
     [Tooltip("玩家資源管理器（跨場景單例，管理金錢、骰子、遺物）")]
@@ -100,13 +100,14 @@ public class ShopManager : MonoBehaviour
     public Transform backpackContentRoot;
     [Tooltip("用來顯示單個骰子資訊的簡單文字 prefab")]
     public GameObject backpackEntryPrefab;
+    [Tooltip("切換 Dice / Relic 的按鈕（背包模式切換）")]
+    public Button backpackSwitchButton;
+    [Tooltip("切換按鈕上顯示的文字（預設顯示 RELIC，代表點擊後切換到遺物模式）")]
+    public TMP_Text backpackSwitchLabel;
 
-    [Header("Feedback UI")]
-    [Tooltip("Purchase Failed feedback Text")]
-    public TMP_Text feedbackText;
-    [Tooltip("Duration to show feedback message")]
-    public float feedbackDuration = 1.5f;
-    private Coroutine feedbackRoutine;
+    // 當前背包顯示模式：false = Dice（預設），true = Relic
+    private bool _showingRelics = false;
+
 
     [Header("Continue Button")]
     [Tooltip("Continue button to proceed to next level")]
@@ -119,6 +120,9 @@ public class ShopManager : MonoBehaviour
 
     private int _freeIndex = -1; // 本次商店中免費的那一格（其餘需付費）
 
+    // 本次商店的遺物候選（Relic_Row 顯示的 4 個遺物）
+    private List<RelicBase> _relicChoices = new List<RelicBase>();
+
     // 注意：不再使用本地 _backpackSnapshot，直接從 DiceManager.PlayerDiceBackpack 讀取
 
     private float GetTierWeight(DiceTier tier)
@@ -130,6 +134,55 @@ public class ShopManager : MonoBehaviour
             case DiceTier.Common:
             default: return Mathf.Max(0f, weightCommon);
         }
+    }
+
+    private float GetRelicWeight(RelicRarity rarity)
+    {
+        switch (rarity)
+        {
+            case RelicRarity.Legendary: return Mathf.Max(0f, relicWeightLegendary);
+            case RelicRarity.Rare: return Mathf.Max(0f, relicWeightRare);
+            case RelicRarity.Common:
+            default: return Mathf.Max(0f, relicWeightCommon);
+        }
+    }
+
+    private List<RelicBase> DrawWeightedUniqueRelics(List<RelicBase> pool, int count)
+    {
+        var remaining = new List<RelicBase>(pool);
+        var result = new List<RelicBase>(Mathf.Min(count, remaining.Count));
+        for (int pick = 0; pick < count && remaining.Count > 0; pick++)
+        {
+            float total = 0f;
+            for (int i = 0; i < remaining.Count; i++)
+            {
+                total += GetRelicWeight(remaining[i].rarity);
+            }
+            if (total <= 0f)
+            {
+                int k = Random.Range(0, remaining.Count);
+                result.Add(remaining[k]);
+                remaining.RemoveAt(k);
+                continue;
+            }
+
+            float r = Random.value * total;
+            float acc = 0f;
+            int chosen = 0;
+            for (int i = 0; i < remaining.Count; i++)
+            {
+                acc += GetRelicWeight(remaining[i].rarity);
+                if (r <= acc)
+                {
+                    chosen = i;
+                    break;
+                }
+            }
+
+            result.Add(remaining[chosen]);
+            remaining.RemoveAt(chosen);
+        }
+        return result;
     }
 
     private List<BaseDice> DrawWeightedUnique(List<BaseDice> pool, int count)
@@ -171,7 +224,7 @@ public class ShopManager : MonoBehaviour
     {
         // 獲取 PlayerResourceManager 實例（跨場景單例）
         _resourceManager = PlayerResourceManager.Instance;
-        
+
         if (_resourceManager == null)
         {
             Debug.LogError("[Shop] PlayerResourceManager.Instance is null! Cannot initialize shop.");
@@ -218,18 +271,18 @@ public class ShopManager : MonoBehaviour
             int moneyFromResourceManager = _resourceManager.GetMoney();
             int moneyFromSaveData = GameStateManager.Instance?.SaveData?.money ?? 0;
             Debug.Log($"[Shop] Money verification - PlayerResourceManager: ${moneyFromResourceManager}, SaveData: ${moneyFromSaveData}");
-            
+
             if (moneyFromResourceManager != moneyFromSaveData)
             {
                 Debug.LogWarning($"[Shop] ⚠️ Money mismatch detected! PlayerResourceManager has ${moneyFromResourceManager} but SaveData has ${moneyFromSaveData}. Syncing...");
-                
+
                 // 同步 PlayerResourceManager 與 SaveData
                 _resourceManager.SyncMoneyFromSaveData();
-                
+
                 // 驗證同步後的值
                 int syncedMoney = _resourceManager.GetMoney();
                 Debug.Log($"[Shop] After sync - PlayerResourceManager: ${syncedMoney}, SaveData: ${moneyFromSaveData}");
-                
+
                 if (syncedMoney != moneyFromSaveData)
                 {
                     Debug.LogError($"[Shop] ❌ Sync failed! PlayerResourceManager still has ${syncedMoney} but SaveData has ${moneyFromSaveData}");
@@ -254,6 +307,11 @@ public class ShopManager : MonoBehaviour
 
         BuildShop();
         BuildBackpackSnapshot();
+
+        // 初始化背包模式（預設顯示 Dice），並設定切換按鈕
+        _showingRelics = false; // 預設顯示骰子
+        SetupBackpackSwitchButton();
+
         RefreshBackpackUI();
         RenderShop();
     }
@@ -268,32 +326,172 @@ public class ShopManager : MonoBehaviour
         var selectable = DicePool.GetNonFiller().ToList();
         _choiceDice = DrawWeightedUnique(selectable, 5);
 
-        // 指定其中一格為免費，但「Legendary 不能免費」
+        // 確保本次商店中至少有一顆不是 Legendary 的骰子，才能保證一定有 FREE reward
+        bool hasNonLegendary = _choiceDice.Any(d => d != null && d.tier != DiceTier.Legendary);
+        if (!hasNonLegendary)
+        {
+            // 從整個池子裡找非 Legendary 的骰子進行替換
+            var nonLegendPool = selectable.Where(d => d != null && d.tier != DiceTier.Legendary).ToList();
+            if (nonLegendPool.Count > 0)
+            {
+                var replacement = nonLegendPool[Random.Range(0, nonLegendPool.Count)];
+                if (_choiceDice.Count > 0)
+                    _choiceDice[0] = replacement;   // 用第一格替換成非 Legendary
+                else
+                    _choiceDice.Add(replacement);
+            }
+            // 如果整個池子真的全部都是 Legendary，就沒辦法保證 FREE（極端情況），沿用原本結果
+        }
+
+        // 現在保證 _choiceDice 中至少有一顆非 Legendary，
+        // 找到第一個非 Legendary 並把它換到 index 0，作為固定的 FREE 位置。
         _freeIndex = -1;
         if (_choiceDice.Count > 0)
         {
-            // 蒐集可免費的索引（非 Legendary）
-            var freeCandidates = new List<int>();
+            int firstNonLegendIdx = -1;
             for (int i = 0; i < _choiceDice.Count; i++)
             {
-                if (_choiceDice[i].tier != DiceTier.Legendary)
-                    freeCandidates.Add(i);
+                var d = _choiceDice[i];
+                if (d != null && d.tier != DiceTier.Legendary)
+                {
+                    firstNonLegendIdx = i;
+                    break;
+                }
             }
-            if (freeCandidates.Count > 0)
+
+            if (firstNonLegendIdx >= 0)
             {
-                int k = Random.Range(0, freeCandidates.Count);
-                _freeIndex = freeCandidates[k];
+                if (firstNonLegendIdx != 0)
+                {
+                    var tmp = _choiceDice[0];
+                    _choiceDice[0] = _choiceDice[firstNonLegendIdx];
+                    _choiceDice[firstNonLegendIdx] = tmp;
+                }
+                _freeIndex = 0; // 第一格永遠是 FREE
             }
+        }
+
+        // Log this shop's dice lineup for debugging
+        if (_choiceDice != null && _choiceDice.Count > 0)
+        {
+            var sb = new StringBuilder();
+            sb.Append("[Shop] Dice offerings: ");
+            for (int i = 0; i < _choiceDice.Count; i++)
+            {
+                var d = _choiceDice[i];
+                if (d == null) continue;
+
+                int price;
+                if (i == _freeIndex)
+                {
+                    price = 0;
+                }
+                else
+                {
+                    price = d.tier == DiceTier.Legendary ? legendaryPrice :
+                            d.tier == DiceTier.Rare ? rarePrice :
+                            normalPrice;
+                }
+
+                if (i > 0) sb.Append(" | ");
+                sb.AppendFormat("#{0}: {1} (Tier={2}, Price={3}{4})",
+                    i,
+                    SafeName(d.diceName),
+                    d.tier,
+                    price,
+                    (i == _freeIndex ? ", FREE SLOT" : string.Empty));
+            }
+            Debug.Log(sb.ToString());
+        }
+
+        // 同時建立本次商店要販售的遺物（Relic_Row）
+        BuildRelicShop();
+    }
+
+    /// <summary>
+    /// 生成本次商店要販售的遺物（從 RelicManager 的 GlobalRelicPool 中加權抽 4 個）。
+    /// </summary>
+    private void BuildRelicShop()
+    {
+        _relicChoices.Clear();
+
+        if (_resourceManager == null)
+        {
+            Debug.LogWarning("[Shop/Relic] PlayerResourceManager is null. Cannot build relic shop.");
+            return;
+        }
+
+        if (_resourceManager.RelicManager == null)
+        {
+            Debug.LogWarning("[Shop/Relic] RelicManager is null on PlayerResourceManager. Cannot build relic shop.");
+            return;
+        }
+
+        var relicManager = _resourceManager.RelicManager;
+
+        // 初始 debug：檢查 GlobalRelicPool 狀態
+        var globalPool = relicManager.GlobalRelicPool;
+        int initialCount = (globalPool != null) ? globalPool.Count : -1;
+        Debug.Log($"[Shop/Relic] BuildRelicShop start. GlobalRelicPool initial count = {initialCount}");
+
+        // 若 GlobalRelicPool 為空，嘗試重新初始化一次（防止其他地方忘記呼叫 InitializeGlobalRelicPool）
+        if (globalPool == null || globalPool.Count == 0)
+        {
+            Debug.LogWarning("[Shop/Relic] GlobalRelicPool is empty. Attempting to re-initialize from code...");
+            relicManager.InitializeGlobalRelicPool();
+
+            globalPool = relicManager.GlobalRelicPool;
+            int afterInitCount = (globalPool != null) ? globalPool.Count : -1;
+            Debug.Log($"[Shop/Relic] After InitializeGlobalRelicPool, GlobalRelicPool count = {afterInitCount}");
+
+            if (globalPool == null || globalPool.Count == 0)
+            {
+                Debug.LogWarning("[Shop/Relic] GlobalRelicPool still empty after re-init. No relics to sell.");
+                return;
+            }
+        }
+
+        // 過濾掉 null，並轉成 List
+        var poolList = globalPool.Where(r => r != null).ToList();
+        if (poolList.Count == 0)
+        {
+            Debug.LogWarning("[Shop/Relic] All relics in pool are null. Cannot build relic shop.");
+            return;
+        }
+
+        int relicCount = (relicSlots != null && relicSlots.Length > 0) ? relicSlots.Length : 4;
+        _relicChoices = DrawWeightedUniqueRelics(poolList, relicCount);
+
+        Debug.Log($"[Shop/Relic] Built relic shop with {_relicChoices.Count} offerings.");
+
+        // Log this shop's relic lineup for debugging
+        if (_relicChoices != null && _relicChoices.Count > 0)
+        {
+            var sb = new StringBuilder();
+            sb.Append("[Shop/Relic] Relic offerings: ");
+            for (int i = 0; i < _relicChoices.Count; i++)
+            {
+                var relic = _relicChoices[i];
+                if (relic == null) continue;
+
+                int relicPrice = relic.rarity == RelicRarity.Legendary
+                    ? relicLegendaryPrice
+                    : (relic.rarity == RelicRarity.Rare ? relicRarePrice : relicCommonPrice);
+
+                if (i > 0) sb.Append(" | ");
+                sb.AppendFormat("#{0}: {1} (Rarity={2}, Price={3})",
+                    i,
+                    relic.relicName,
+                    relic.rarity,
+                    relicPrice);
+            }
+            Debug.Log(sb.ToString());
         }
     }
 
     /// <summary>把商品綁到 UI。</summary>
     private void RenderShop()
     {
-        // 盲盒、傳奇專區暫不顯示（基本商店）
-        if (blindBoxSlot) blindBoxSlot.gameObject.SetActive(false);
-        if (legendarySlot) legendarySlot.gameObject.SetActive(false);
-
         // 綁定 5 個商品（若 choiceSlots 少於 5，則顯示可用數量）
         for (int i = 0; i < choiceSlots.Length; i++)
         {
@@ -327,6 +525,49 @@ public class ShopManager : MonoBehaviour
             else
             {
                 choiceSlots[i].gameObject.SetActive(false);
+            }
+        }
+
+        // ======= Render Relic Shop (Relic_Row) =======
+        if (relicSlots != null && relicSlots.Length > 0)
+        {
+            for (int i = 0; i < relicSlots.Length; i++)
+            {
+                var slot = relicSlots[i];
+                if (slot == null) continue;
+
+                if (_relicChoices != null && i < _relicChoices.Count)
+                {
+                    var relic = _relicChoices[i];
+                    if (relic == null)
+                    {
+                        slot.gameObject.SetActive(false);
+                        continue;
+                    }
+
+                    int relicPrice = relic.rarity == RelicRarity.Legendary
+                        ? relicLegendaryPrice
+                        : (relic.rarity == RelicRarity.Rare ? relicRarePrice : relicCommonPrice);
+
+                    // 先標記這張卡是「遺物卡片」，讓 ShopItemUI / SetPreview 可以讀到 relic
+                    slot.die = null;
+                    slot.relic = relic;
+
+                    // 對於遺物欄位，目前不傳專屬 preview prefab（傳 null 讓 SetPreview 依稀有度上色）
+                    slot.gameObject.SetActive(true);
+                    slot.Bind(
+                        null,
+                        relic.relicName,
+                        relicPrice,
+                        () => OnBuyRelic(relic, relicPrice, slot)
+                    );
+
+                    Debug.Log($"[Shop/Relic] Rendered relic slot {i} -> {relic.relicName} ({relic.rarity}), price={relicPrice}");
+                }
+                else
+                {
+                    slot.gameObject.SetActive(false);
+                }
             }
         }
     }
@@ -367,22 +608,60 @@ public class ShopManager : MonoBehaviour
         hover.die = die;
     }
 
+    private void AttachRelicBackpackTooltipTrigger(GameObject targetGo, RelicBase relic)
+    {
+        if (!targetGo || relic == null) return;
+
+        var graphic = targetGo.GetComponent<Graphic>();
+        if (graphic == null)
+        {
+            var img = targetGo.AddComponent<Image>();
+            img.color = new Color(0f, 0f, 0f, 0f);
+            img.raycastTarget = true;
+            graphic = img;
+        }
+        else
+        {
+            graphic.raycastTarget = true;
+        }
+
+        var hover = targetGo.GetComponent<ShopBackpackHover>();
+        if (!hover)
+        {
+            hover = targetGo.AddComponent<ShopBackpackHover>();
+        }
+
+        hover.relic = relic;
+    }
+
     private void RefreshBackpackUI()
     {
         Debug.Log("[Shop/Backpack] RefreshBackpackUI called");
         if (!backpackContentRoot || !backpackEntryPrefab) return;
 
-        // 檢查 PlayerResourceManager 是否已初始化
-        if (_resourceManager == null || _resourceManager.DiceManager == null)
-        {
-            Debug.LogWarning("[Shop/Backpack] PlayerResourceManager or DiceManager is null. Cannot refresh backpack UI.");
-            return;
-        }
-
-        // 清空現有項目
+        // 先清空現有項目
         foreach (Transform child in backpackContentRoot)
         {
             Destroy(child.gameObject);
+        }
+
+        if (_showingRelics)
+        {
+            RefreshRelicBackpackUI();
+        }
+        else
+        {
+            RefreshDiceBackpackUI();
+        }
+    }
+
+    private void RefreshDiceBackpackUI()
+    {
+        // 檢查 PlayerResourceManager 是否已初始化
+        if (_resourceManager == null || _resourceManager.DiceManager == null)
+        {
+            Debug.LogWarning("[Shop/Backpack] PlayerResourceManager or DiceManager is null. Cannot refresh dice backpack.");
+            return;
         }
 
         // 從 PlayerResourceManager.DiceManager.PlayerDiceBackpack 讀取數據
@@ -394,7 +673,6 @@ public class ShopManager : MonoBehaviour
         {
             if (die == null) continue;
 
-            // 建立一個背包欄位（可是一個空的 Panel / 卡片容器）
             var entry = Instantiate(backpackEntryPrefab, backpackContentRoot);
 
             // 1) 產生視覺預覽：使用和商店一樣的骰子 UI prefab
@@ -406,7 +684,7 @@ public class ShopManager : MonoBehaviour
                 previewInstance.transform.localScale = Vector3.one;
             }
 
-            // 2) 若背包 entry 內有 TMP_Text，顯示名稱 + 稀有度（可選）
+            // 2) 若背包 entry 內有 TMP_Text，顯示骰子名稱
             var label = entry.GetComponentInChildren<TMP_Text>();
             if (label)
             {
@@ -414,12 +692,9 @@ public class ShopManager : MonoBehaviour
             }
 
             // 3) 在背包 entry 與實際顯示的骰子圖像上掛 Tooltip 事件
-            //    注意：隊友的骰子 prefab 結構通常是 Root -> DiceUI_Base(Image) -> Text 等，
-            //    真正吃到 raycast 的往往是 DiceUI_Base，因此優先在該子物件上掛 EventTrigger。
             AttachBackpackTooltipTrigger(entry.gameObject, die);
             if (previewInstance != null)
             {
-                // 優先尋找名為 "DiceUI_Base" 的子物件來做 hover 目標
                 Transform hoverTarget = previewInstance.transform.Find("DiceUI_Base");
                 if (hoverTarget != null)
                 {
@@ -427,11 +702,106 @@ public class ShopManager : MonoBehaviour
                 }
                 else
                 {
-                    // 找不到就 fallback 到整個 previewInstance
                     AttachBackpackTooltipTrigger(previewInstance, die);
                 }
             }
         }
+    }
+
+    private void RefreshRelicBackpackUI()
+    {
+        if (_resourceManager == null)
+        {
+            Debug.LogWarning("[Shop/Backpack] PlayerResourceManager is null. Cannot display relic backpack.");
+            return;
+        }
+
+        // 透過 PlayerResourceManager 取得玩家遺物背包
+        var playerRelics = _resourceManager.GetPlayerRelics();
+        if (playerRelics == null || playerRelics.Count == 0)
+        {
+            Debug.Log("[Shop/Backpack] No relics in player backpack (this does NOT affect shop offerings).");
+            return;
+        }
+
+        Debug.Log($"[Shop/Backpack] Displaying {playerRelics.Count} relics from PlayerResourceManager");
+
+        foreach (var relic in playerRelics)
+        {
+            if (relic == null) continue;
+
+            var entry = Instantiate(backpackEntryPrefab, backpackContentRoot);
+
+            // 這裡暫時用純文字顯示遺物名稱，未來可改為專用遺物 UI prefab
+            var label = entry.GetComponentInChildren<TMP_Text>();
+            if (label)
+            {
+                label.text = $"{relic.relicName}";
+            }
+
+            // 掛上遺物的 tooltip（DiceTooltipManager 有 overload ShowTooltip(RelicBase)）
+            AttachRelicBackpackTooltipTrigger(entry.gameObject, relic);
+
+            // 根據遺物稀有度改變背包色塊顏色（Common / Rare / Legendary）
+            var bgImage = entry.GetComponentInChildren<Image>();
+            if (bgImage == null)
+            {
+                // 若 prefab 上沒有 Image，就在根物件加一個當背景用色塊
+                bgImage = entry.AddComponent<Image>();
+                bgImage.raycastTarget = false;
+            }
+
+            Color rarityColor;
+            switch (relic.rarity)
+            {
+                case RelicRarity.Common:
+                    rarityColor = new Color32(143, 238, 143, 255);   // Light Green
+                    break;
+                case RelicRarity.Rare:
+                    rarityColor = new Color32(147, 112, 219, 255);   // Purple
+                    break;
+                case RelicRarity.Legendary:
+                    rarityColor = new Color32(255, 215, 0, 255);     // Gold
+                    break;
+                default:
+                    rarityColor = Color.white;
+                    break;
+            }
+
+            bgImage.color = rarityColor;
+        }
+    }
+
+    private void SetupBackpackSwitchButton()
+    {
+        if (backpackSwitchButton != null)
+        {
+            backpackSwitchButton.onClick.RemoveAllListeners();
+            backpackSwitchButton.onClick.AddListener(OnClickToggleBackpackMode);
+        }
+
+        UpdateBackpackSwitchLabel();
+    }
+
+    private void UpdateBackpackSwitchLabel()
+    {
+        if (backpackSwitchLabel == null) return;
+
+        // 規則：
+        //  - 當前顯示 Dice 時，按鈕顯示 "RELIC"（代表點擊會切換到遺物）
+        //  - 當前顯示 Relic 時，按鈕顯示 "DICE"
+        backpackSwitchLabel.text = _showingRelics ? "DICE" : "RELIC";
+    }
+
+    /// <summary>
+    /// 點擊切換背包顯示模式（Dice / Relic）
+    /// </summary>
+    public void OnClickToggleBackpackMode()
+    {
+        _showingRelics = !_showingRelics;
+        Debug.Log($"[Shop/Backpack] Toggle mode -> now showing: {(_showingRelics ? "Relics" : "Dice")}");
+        UpdateBackpackSwitchLabel();
+        RefreshBackpackUI();
     }
 
     private GameObject GetUiPreviewPrefab(BaseDice die)
@@ -466,71 +836,96 @@ public class ShopManager : MonoBehaviour
 
     // ================= 購買邏輯 =================
 
-    private bool OnBuyBlindBox()
+
+    private BuyResult OnBuySpecificDie(BaseDice die, int price, ShopItemUI ui)
     {
-        if (!Spend(blindBoxPrice)) return false;
-
-        BaseDice got = null;
-        if (Random.value < blindBoxNormalRate)
+        if (die == null)
         {
-            var normals = DicePool.GetByTier(DiceTier.Common);
-            if (normals.Count > 0) got = CloneDice(normals[Random.Range(0, normals.Count)]);
-        }
-        else
-        {
-            var rares = DicePool.GetByTier(DiceTier.Rare);
-            if (rares.Count > 0) got = CloneDice(rares[Random.Range(0, rares.Count)]);
+            Debug.LogWarning("[Shop] OnBuySpecificDie called with null die.");
+            return BuyResult.NotEnoughMoney; // fallback: treat as failed purchase
         }
 
-        if (got != null)
+        // 背包最多只能有 8 顆骰子（重複沒關係，只限制數量）
+        if (_resourceManager != null && _resourceManager.DiceManager != null)
         {
-            // 使用 PlayerResourceManager 添加骰子到背包
-            bool success = _resourceManager?.AddDiceToBackpack(got) ?? false;
-            if (success)
+            var backpackList = _resourceManager.DiceManager.PlayerDiceBackpack;
+            int currentCount = backpackList != null ? backpackList.Count : 0;
+            if (currentCount >= 8)
             {
-                // 更新商店內背包顯示
-                RefreshBackpackUI();
-                
-                UpdateWalletUI();
-                Debug.Log($"[Shop] BlindBox => {got.diceName} ({got.tier})");
-                Debug.Log($"[Shop] Player purchased BlindBox result -> Name: {got.diceName}, Tier: {got.tier}, PricePaid: {blindBoxPrice}");
-            }
-            else
-            {
-                Debug.LogWarning($"[Shop] Failed to add dice to backpack: {got.diceName} (may be duplicate)");
+                Debug.Log("[Shop] Backpack is full (8 dice). Cannot buy more.");
+                return BuyResult.BackpackFull;
             }
         }
         else
         {
-            Debug.LogWarning("[Shop] BlindBox => pool empty?");
+            Debug.LogWarning("[Shop] ResourceManager or DiceManager is null when buying specific die.");
+            // 視為購買失敗（不區分原因），回傳 NotEnoughMoney 讓 UI 顯示通用錯誤
+            return BuyResult.NotEnoughMoney;
         }
 
-        return true;
-    }
+        // 處理金額：價格大於 0 才扣錢
+        if (price > 0 && !Spend(price))
+        {
+            // Spend() 會自行印出金額不足的 log
+            return BuyResult.NotEnoughMoney;
+        }
 
-    private bool OnBuySpecificDie(BaseDice die, int price, ShopItemUI ui)
-    {
-        if (price > 0 && !Spend(price)) return false;
-
+        // 建立骰子實例
         var copy = CloneDice(die);
-        
+
         // 使用 PlayerResourceManager 添加骰子到背包
-        bool success = _resourceManager?.AddDiceToBackpack(copy) ?? false;
+        bool success = _resourceManager.AddDiceToBackpack(copy);
         if (!success)
         {
             Debug.LogWarning($"[Shop] Failed to add dice to backpack: {die.diceName} (may be duplicate)");
-            // 即使添加失敗，錢已經扣了，這裡可以選擇退款或繼續
-            // 目前選擇繼續，因為可能是重複購買的情況
+            // 即使添加失敗，錢已經扣了，維持購買成功的流程，避免卡住 UI
         }
 
         // 更新商店內背包顯示
         RefreshBackpackUI();
 
+        // 更新錢包 UI
         UpdateWalletUI();
 
         Debug.Log($"[Shop] Bought: {die.diceName}");
         Debug.Log($"[Shop] Player purchased dice -> Name: {die.diceName}, Tier: {die.tier}, PricePaid: {price}");
-        return true;
+        return BuyResult.Success;
+    }
+
+    private BuyResult OnBuyRelic(RelicBase relic, int price, ShopItemUI ui)
+    {
+        if (relic == null)
+        {
+            Debug.LogWarning("[Shop/Relic] OnBuyRelic called with null relic.");
+            return BuyResult.NotEnoughMoney;
+        }
+
+        // 先確認金錢是否足夠
+        if (price > 0 && !Spend(price))
+        {
+            // Spend() 會自行印出金額不足 log
+            return BuyResult.NotEnoughMoney;
+        }
+
+        if (_resourceManager == null)
+        {
+            Debug.LogError("[Shop/Relic] PlayerResourceManager is null. Cannot add relic to backpack.");
+            return BuyResult.NotEnoughMoney;
+        }
+
+        bool success = _resourceManager.AddRelicToBackpack(relic);
+        if (!success)
+        {
+            Debug.LogWarning($"[Shop/Relic] Failed to add relic to backpack: {relic.relicName} (may be unique duplicate)");
+            // 即使添加失敗，錢已經扣了，維持購買成功流程避免卡住 UI
+        }
+
+        // 更新背包顯示 & 金錢顯示
+        RefreshBackpackUI();
+        UpdateWalletUI();
+
+        Debug.Log($"[Shop/Relic] Bought relic: {relic.relicName} ({relic.rarity}), PricePaid: {price}");
+        return BuyResult.Success;
     }
 
     private bool OnBuyLegendary(int price)
@@ -539,7 +934,7 @@ public class ShopManager : MonoBehaviour
         if (!Spend(price)) return false;
 
         var copy = CloneDice(_legendaryOffering);
-        
+
         // 使用 PlayerResourceManager 添加骰子到背包
         bool success = _resourceManager?.AddDiceToBackpack(copy) ?? false;
         if (!success)
@@ -568,7 +963,6 @@ public class ShopManager : MonoBehaviour
             if (debugGold < price)
             {
                 Debug.Log("[Shop] Not enough gold (debug).");
-                ShowFeedback("Insufficient Funds!");
                 return false;
             }
 
@@ -581,7 +975,6 @@ public class ShopManager : MonoBehaviour
         if (_resourceManager == null)
         {
             Debug.LogError("[Shop] PlayerResourceManager missing. Cannot spend money.");
-            ShowFeedback("Insufficient Funds!");
             return false;
         }
 
@@ -591,7 +984,6 @@ public class ShopManager : MonoBehaviour
         if (!success)
         {
             Debug.Log($"[Shop] Not enough gold (PlayerResourceManager). Current: {_resourceManager.GetMoney()}, Required: {price}");
-            ShowFeedback("Insufficient Funds!");
             return false;
         }
 
@@ -659,30 +1051,6 @@ public class ShopManager : MonoBehaviour
         }
     }
 
-    private void ShowFeedback(string msg)
-    {
-        if (!feedbackText) return;
-
-        if (feedbackRoutine != null)
-        {
-            StopCoroutine(feedbackRoutine);
-            feedbackRoutine = null;
-        }
-
-        feedbackText.gameObject.SetActive(true);
-        feedbackText.text = msg;
-        feedbackRoutine = StartCoroutine(ClearFeedbackAfterDelay());
-    }
-
-    private IEnumerator ClearFeedbackAfterDelay()
-    {
-        yield return new WaitForSeconds(feedbackDuration);
-        if (feedbackText)
-        {
-            feedbackText.gameObject.SetActive(false);
-        }
-        feedbackRoutine = null;
-    }
 
     public void OnClickToggleBackpack()
     {
@@ -741,14 +1109,22 @@ public class ShopBackpackHover : MonoBehaviour, IPointerEnterHandler, IPointerEx
 {
     [HideInInspector]
     public BaseDice die;
+    [HideInInspector]
+    public RelicBase relic;
 
     public void OnPointerEnter(PointerEventData eventData)
     {
-        if (die == null) return;
-        Debug.Log($"[Shop/BackpackHover] Enter on {name}, die={die.diceName}");
-        if (DiceTooltipManager.Instance != null)
+        if (DiceTooltipManager.Instance == null) return;
+
+        if (die != null)
         {
+            Debug.Log($"[Shop/BackpackHover] Enter on {name}, die={die.diceName}");
             DiceTooltipManager.Instance.ShowTooltip(die);
+        }
+        else if (relic != null)
+        {
+            Debug.Log($"[Shop/BackpackHover] Enter on {name}, relic={relic.relicName}");
+            DiceTooltipManager.Instance.ShowTooltip(relic);
         }
     }
 
@@ -756,7 +1132,7 @@ public class ShopBackpackHover : MonoBehaviour, IPointerEnterHandler, IPointerEx
     {
         if (DiceTooltipManager.Instance != null)
         {
-            Debug.Log($"[Shop/BackpackHover] Exit on {name}, die={die?.diceName}");
+            Debug.Log($"[Shop/BackpackHover] Exit on {name}");
             DiceTooltipManager.Instance.HideTooltip();
         }
     }
