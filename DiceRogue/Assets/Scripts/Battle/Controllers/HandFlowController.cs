@@ -7,6 +7,7 @@ using DiceGame.Core;
 using DiceGame.Analytics;
 using DiceGame.Relics;
 using DiceGame.UI;
+using DiceGame.Audio;
 
 namespace DiceGame
 {
@@ -236,6 +237,12 @@ namespace DiceGame
         {
             Debug.Log("[HandFlowController] Performing auto-initial roll (free roll)");
             
+            // Play dice roll sound effect for auto-roll
+            if (SoundManager.Instance != null)
+            {
+                SoundManager.Instance.PlayDiceRoll();
+            }
+            
             // Roll all dice (they start unlocked)
             for (int i = 0; i < _dice.Count; i++)
             {
@@ -301,6 +308,12 @@ namespace DiceGame
                 OnFeedbackUpdate?.Invoke("No rolls remaining. Cast your combo!", true);
                 Debug.LogWarning("[HandFlowController] Roll budget exhausted.");
                 return;
+            }
+
+            // Play dice roll sound effect
+            if (SoundManager.Instance != null)
+            {
+                SoundManager.Instance.PlayDiceRoll();
             }
 
             // Increment roll counter
@@ -369,6 +382,12 @@ namespace DiceGame
             {
                 OnFeedbackUpdate?.Invoke("Select at least one dice!", true);
                 return;
+            }
+
+            // Play submit sound effect
+            if (SoundManager.Instance != null)
+            {
+                SoundManager.Instance.PlaySubmit();
             }
 
             // Set submission flag and disable button
