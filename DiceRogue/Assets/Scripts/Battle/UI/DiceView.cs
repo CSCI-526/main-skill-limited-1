@@ -3,6 +3,7 @@ using UnityEngine.UI;
 using TMPro;
 using UnityEngine.EventSystems; 
 using DiceGame.Core;
+using DiceGame.Audio;
 using System.Collections;
 
 namespace DiceGame
@@ -74,10 +75,26 @@ namespace DiceGame
         void OnToggleLock()
         {
             if (model == null) return;
+            
+            // Store previous lock state to determine which sound to play
+            bool wasLocked = model.isLocked;
             model.ToggleLock();
             
             string status = model.isLocked ? "LOCKED" : "UNLOCKED";
             Debug.Log($"[DiceView] {model.diceName} is now {status} (value: {model.lastRollValue})");
+            
+            // Play appropriate sound effect
+            if (SoundManager.Instance != null)
+            {
+                if (model.isLocked)
+                {
+                    SoundManager.Instance.PlayLock();
+                }
+                else
+                {
+                    SoundManager.Instance.PlayUnlock();
+                }
+            }
             
             Refresh();
             

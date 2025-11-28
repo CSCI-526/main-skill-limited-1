@@ -7,6 +7,7 @@ using DiceGame.Core;
 using DiceGame.Analytics;
 using DiceGame.Relics;
 using DiceGame.UI;
+using DiceGame.Audio;
 using UnityEngine.SceneManagement;
 
 namespace DiceGame
@@ -91,6 +92,12 @@ namespace DiceGame
         void Start()
         {
             _stateManager = GameStateManager.Instance;
+            
+            // Initialize SoundManager early to ensure it's ready for button clicks
+            if (SoundManager.Instance != null)
+            {
+                Debug.Log("[BattleController] SoundManager initialized");
+            }
             
             // Use BattleInitializer to handle all initialization logic
             var initializer = new BattleInitializer();

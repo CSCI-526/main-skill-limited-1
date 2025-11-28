@@ -7,6 +7,7 @@ using DiceGame.Core;
 using DiceGame.Analytics;
 using DiceGame.Relics;
 using DiceGame.UI;
+using DiceGame.Audio;
 
 namespace DiceGame
 {
@@ -170,6 +171,7 @@ namespace DiceGame
 
             // Check for filler dice and apply bonus rerolls from relics
             bool hasFiller = _dice.Any(d => d is NormalDice);
+            Debug.Log($"[HandFlowController] Checking for filler dice: hasFiller={hasFiller}, diceCount={_dice.Count}");
             if (hasFiller && _relicManager != null)
             {
                 // Create a temporary context to check for bonus rerolls
@@ -180,15 +182,33 @@ namespace DiceGame
                     submittedValues = new List<int>()
                 };
                 
+                Debug.Log($"[HandFlowController] Created temp context with hasFillerInHand={tempContext.hasFillerInHand}, relicCount={_relicManager.PlayerBackpack.Count}");
+                
                 // Apply all relics to get bonus rerolls
                 _relicManager.ApplyAll(tempContext);
+                
+                Debug.Log($"[HandFlowController] After applying relics, bonusRerolls={tempContext.bonusRerolls}");
                 
                 // Apply bonus rerolls to HandManager
                 if (tempContext.bonusRerolls > 0)
                 {
+                    int oldBudget = _handManager.TotalRollBudget;
                     _handManager.AddBonusRolls(tempContext.bonusRerolls);
-                    Debug.Log($"[HandFlowController] Applied {tempContext.bonusRerolls} bonus rerolls from relics (filler dice detected)");
+                    int newBudget = _handManager.TotalRollBudget;
+                    Debug.Log($"[HandFlowController] Applied {tempContext.bonusRerolls} bonus rerolls from relics (filler dice detected). Budget: {oldBudget} -> {newBudget}");
                 }
+                else
+                {
+                    Debug.LogWarning($"[HandFlowController] No bonus rerolls applied despite filler dice present. bonusRerolls={tempContext.bonusRerolls}");
+                }
+            }
+            else if (!hasFiller)
+            {
+                Debug.Log("[HandFlowController] No filler dice detected, skipping bonus reroll check");
+            }
+            else if (_relicManager == null)
+            {
+                Debug.LogWarning("[HandFlowController] RelicManager is null, cannot apply bonus rerolls");
             }
 
             // Start new hand in hand manager
@@ -216,6 +236,12 @@ namespace DiceGame
         private void PerformAutoRoll()
         {
             Debug.Log("[HandFlowController] Performing auto-initial roll (free roll)");
+            
+            // Play dice roll sound effect for auto-roll
+            if (SoundManager.Instance != null)
+            {
+                SoundManager.Instance.PlayDiceRoll();
+            }
             
             // Roll all dice (they start unlocked)
             for (int i = 0; i < _dice.Count; i++)
@@ -284,6 +310,12 @@ namespace DiceGame
                 return;
             }
 
+            // Play dice roll sound effect
+            if (SoundManager.Instance != null)
+            {
+                SoundManager.Instance.PlayDiceRoll();
+            }
+
             // Increment roll counter
             int rollNumber = _handManager.IncrementRoll();
             Debug.Log($"[HandFlowController] Rolling dice (hand roll {rollNumber}, total {_handManager.TotalRollsUsed}/{_maxRollsPerHand})");
@@ -350,6 +382,12 @@ namespace DiceGame
             {
                 OnFeedbackUpdate?.Invoke("Select at least one dice!", true);
                 return;
+            }
+
+            // Play submit sound effect
+            if (SoundManager.Instance != null)
+            {
+                SoundManager.Instance.PlaySubmit();
             }
 
             // Set submission flag and disable button

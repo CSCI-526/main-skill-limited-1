@@ -1,4 +1,5 @@
 using UnityEngine;
+using DiceGame.Audio;
 
 namespace DiceRogue.Main
 {
@@ -6,6 +7,15 @@ namespace DiceRogue.Main
     {
         [Header("Idle dice to freeze on start")]
         public DiceOrnamentAnimator[] animatedDice;
+
+        void Start()
+        {
+            // Initialize SoundManager and start background music when main menu loads
+            if (SoundManager.Instance != null)
+            {
+                SoundManager.Instance.PlayBackgroundMusic();
+            }
+        }
 
         public void OnClickStart()
         {
