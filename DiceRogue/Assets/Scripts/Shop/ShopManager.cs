@@ -7,6 +7,7 @@ using UnityEngine;
 using DiceGame;           // BaseDice, DiceTier, DiceManager
 using DiceGame.Core;      // GameStateManager
 using DiceGame.Relics;    // RelicBase, RelicManager, RelicRarity
+using DiceGame.Analytics; // UnityGameAnalytics
 using TMPro;
 using UnityEngine.UI;
 using UnityEngine.EventSystems;
@@ -923,6 +924,10 @@ public class ShopManager : MonoBehaviour
         // 更新背包顯示 & 金錢顯示
         RefreshBackpackUI();
         UpdateWalletUI();
+
+        // Track analytics event for relic purchase
+        UnityGameAnalytics.TrackRelicFrequency(relic.relicName);
+        // Debug.Log($"[Shop/Relic/Analytics] Tracked relic purchase: {relic.relicName}");
 
         Debug.Log($"[Shop/Relic] Bought relic: {relic.relicName} ({relic.rarity}), PricePaid: {price}");
         return BuyResult.Success;
