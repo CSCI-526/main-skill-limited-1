@@ -91,6 +91,10 @@ namespace DiceGame.Tutorial
         private readonly List<(Button button, UnityAction handler)> buttonHandlers = new();
         private readonly List<(Button button, UnityAction handler)> diceLockHandlers = new();
         private readonly List<(ShopItemUI shopItem, System.Func<bool> originalCallback)> shopItemHandlers = new();
+        private Button comboRulesButton;
+        private GameObject comboRulesButtonGO;
+        private UnityAction comboRulesButtonHandler;
+        private bool comboRulesButtonClicked;
 
         private int currentStepIndex = -1;
         private bool isTutorialActive = true;
@@ -306,6 +310,7 @@ namespace DiceGame.Tutorial
             CleanupDiceViewListeners();
             UnhookDiceLockEvent();
             UnhookShopPurchaseEvents();
+            UnhookComboRulesButton();
             ClearHighlights();
             RestoreAllButtons();
         }
@@ -515,10 +520,11 @@ namespace DiceGame.Tutorial
             {
                 title = "Check Combo Rules",
                 message = "Click the Combo rule button to see which combinations are valuable",
-                useNextButton = true,
-                waitForAction = false,
+                highlightElement = null, // Will be set dynamically to combo rules button
+                useNextButton = false, // Initially hidden, shown after combo rules button is clicked
+                waitForAction = true,
                 layout = StepLayout.ComboInfo,
-                requiredAction = TutorialAction.None
+                requiredAction = TutorialAction.ClickComboRulesButton
             });
 
             tutorialSteps.Add(new TutorialStep
@@ -932,6 +938,28 @@ namespace DiceGame.Tutorial
                         Debug.LogWarning("[TutorialController] RightInfoPanel not found for highlighting");
                     }
                 }
+                else if (step.title == "Check Combo Rules")
+                {
+                    ResolveReferences();
+                    // Find and highlight the combo rules button
+                    GameObject comboPrefBtn = GameObject.Find("ComboPreferenceButton");
+                    if (comboPrefBtn == null && battleController != null && battleController.comboPreferencePanel != null)
+                    {
+                        if (battleController.comboPreferencePanel.comboPreferenceButton != null)
+                        {
+                            comboPrefBtn = battleController.comboPreferencePanel.comboPreferenceButton.gameObject;
+                        }
+                    }
+                    if (comboPrefBtn != null)
+                    {
+                        elementToHighlight = comboPrefBtn;
+                        Debug.Log($"[TutorialController] Highlighting combo rules button: {comboPrefBtn.name}");
+                    }
+                    else
+                    {
+                        Debug.LogWarning("[TutorialController] ComboPreferenceButton not found for highlighting");
+                    }
+                }
                 HighlightElement(elementToHighlight);
             }
             
@@ -990,6 +1018,14 @@ namespace DiceGame.Tutorial
                 {
                     // Wait a bit for shop to fully initialize, then hook events and highlight
                     StartCoroutine(InitializeShopTutorialStep());
+                }
+                else if (step.requiredAction == TutorialAction.ClickComboRulesButton)
+                {
+                    // Hook into combo rules button click
+                    comboRulesButtonClicked = false;
+                    HookComboRulesButton();
+                    // Ensure Next button is hidden initially
+                    SetNextButtonVisible(false);
                 }
             }
             else
@@ -1698,6 +1734,24 @@ namespace DiceGame.Tutorial
                     // Also allow continue button (if present) and tutorial UI buttons
                     break;
                     
+                case TutorialAction.ClickComboRulesButton:
+                    // Allow combo rules button
+                    GameObject comboRulesBtnGO = GameObject.Find("ComboPreferenceButton");
+                    if (comboRulesBtnGO == null && battleController != null && battleController.comboPreferencePanel != null)
+                    {
+                        if (battleController.comboPreferencePanel.comboPreferenceButton != null)
+                        {
+                            comboRulesBtnGO = battleController.comboPreferencePanel.comboPreferenceButton.gameObject;
+                        }
+                    }
+                    if (comboRulesBtnGO != null)
+                    {
+                        Button comboBtn = comboRulesBtnGO.GetComponent<Button>();
+                        if (comboBtn != null) allowedButtons.Add(comboBtn);
+                    }
+                    // Don't allow Next button initially (will be shown after combo rules button is clicked)
+                    break;
+                    
                 case TutorialAction.None:
                     // For intro/outro steps, only allow Next button (plus combo rules which was already added)
                     break;
@@ -1812,6 +1866,19 @@ namespace DiceGame.Tutorial
                 if (currentStep.title == "Tutorial Complete!")
                 {
                     CompleteTutorialAndGoToReward();
+                    return;
+                }
+                
+                // Check if we're in "Check Combo Rules" step and combo rules button was clicked
+                // In this case, Next button click should advance to next step
+                if (currentStep.title == "Check Combo Rules" && comboRulesButtonClicked)
+                {
+                    comboRulesButtonClicked = false;
+                    UnhookComboRulesButton();
+                    HidePrompt();
+                    ClearHighlights();
+                    RestoreAllButtons();
+                    StartTutorialStep(currentStepIndex + 1);
                     return;
                 }
             }
@@ -2038,6 +2105,82 @@ namespace DiceGame.Tutorial
             {
                 DiceView.OnDiceLockChanged -= diceLockChangedHandler;
                 diceLockChangedHandler = null;
+            }
+        }
+
+        void HookComboRulesButton()
+        {
+            UnhookComboRulesButton();
+            
+            ResolveReferences();
+            
+            // Find combo rules button
+            GameObject comboPrefBtn = GameObject.Find("ComboPreferenceButton");
+            if (comboPrefBtn == null && battleController != null && battleController.comboPreferencePanel != null)
+            {
+                if (battleController.comboPreferencePanel.comboPreferenceButton != null)
+                {
+                    comboPrefBtn = battleController.comboPreferencePanel.comboPreferenceButton.gameObject;
+                }
+            }
+            
+            if (comboPrefBtn != null)
+            {
+                comboRulesButtonGO = comboPrefBtn;
+                comboRulesButton = comboPrefBtn.GetComponent<Button>();
+                if (comboRulesButton != null)
+                {
+                    comboRulesButtonClicked = false;
+                    comboRulesButtonHandler = OnComboRulesButtonClicked;
+                    comboRulesButton.onClick.AddListener(comboRulesButtonHandler);
+                    Debug.Log("[TutorialController] Hooked combo rules button");
+                }
+            }
+            else
+            {
+                Debug.LogWarning("[TutorialController] ComboPreferenceButton not found for hooking");
+            }
+        }
+
+        void UnhookComboRulesButton()
+        {
+            if (comboRulesButton != null && comboRulesButtonHandler != null)
+            {
+                comboRulesButton.onClick.RemoveListener(comboRulesButtonHandler);
+                comboRulesButton = null;
+                comboRulesButtonGO = null;
+                comboRulesButtonHandler = null;
+                Debug.Log("[TutorialController] Unhooked combo rules button");
+            }
+        }
+
+        void OnComboRulesButtonClicked()
+        {
+            if (currentRequiredAction == TutorialAction.ClickComboRulesButton && !comboRulesButtonClicked)
+            {
+                comboRulesButtonClicked = true;
+                
+                // Clear highlight on combo rules button
+                if (comboRulesButtonGO != null)
+                {
+                    ClearHighlights();
+                }
+                
+                // Show and enable the Next button
+                SetNextButtonVisible(true);
+                // Ensure the Next button is in allowedButtons and enabled
+                if (tutorialContinueButton != null)
+                {
+                    if (!originalButtonStates.ContainsKey(tutorialContinueButton))
+                    {
+                        originalButtonStates[tutorialContinueButton] = tutorialContinueButton.interactable;
+                    }
+                    tutorialContinueButton.interactable = true;
+                    
+                    // Highlight the Next button
+                    HighlightElement(tutorialContinueButton.gameObject);
+                }
+                Debug.Log("[TutorialController] Combo rules button clicked, showing Next button and highlighting it");
             }
         }
 
@@ -2401,9 +2544,9 @@ namespace DiceGame.Tutorial
             }
             
             // Step 3: Animation is complete (or was never running)
-            // Wait exactly 1.5 seconds so player can read the score breakdown message
+            // Wait exactly 1 seconds so player can read the score breakdown message
             // The prompt should still be visible at this point
-            yield return new WaitForSeconds(1.5f);
+            yield return new WaitForSeconds(1f);
             
             // Step 4: Now advance to next step (this will hide the prompt)
             RegisterActionCompletion(TutorialAction.ScoreAnimationComplete);
@@ -2493,10 +2636,12 @@ namespace DiceGame.Tutorial
             RestoreAllButtons();
             CleanupDiceViewListeners();
             UnhookDiceLockEvent();
+            UnhookComboRulesButton();
             
             currentRequiredAction = TutorialAction.None;
             lockStepCompleted = false;
             awaitingSecondRoll = false;
+            comboRulesButtonClicked = false;
         }
 
         /// <summary>
@@ -2583,7 +2728,8 @@ namespace DiceGame.Tutorial
         SecondRoll,
         SubmitHand,
         ScoreAnimationComplete,
-        BuyDiceInShop
+        BuyDiceInShop,
+        ClickComboRulesButton
     }
 
     public enum StepLayout
