@@ -37,6 +37,13 @@ namespace DiceGame.Tutorial
         public TMP_Text tutorialText;
         public Button tutorialContinueButton;
         public Button skipTutorialButton;
+        
+        [Header("Tutorial Text Settings")]
+        [Tooltip("Base font size for tutorial text at reference resolution (1920x1080). Will be scaled based on Canvas scale factor.")]
+        public float tutorialFontSize = 24f;
+        
+        [Tooltip("Reference resolution for font size calculation (should match BattleScene Canvas reference resolution)")]
+        public Vector2 referenceResolution = new Vector2(1920f, 1080f);
 
         [Header("Layout")]
         public bool configurePromptLayout = true;
@@ -55,9 +62,19 @@ namespace DiceGame.Tutorial
         public Vector2 introPromptOffset = Vector2.zero;
         public Vector2 introPromptAnchor = new Vector2(0.5f, 0.5f);
         public Vector2 introPromptPivot = new Vector2(0.5f, 0.5f);
+        
+        [Header("Outro Prompt Layout (Tutorial Complete)")]
+        public Vector2 outroPromptSize = new Vector2(1080f, 480f);
+        public Vector2 outroPromptOffset = Vector2.zero;
+        public Vector2 outroPromptAnchor = new Vector2(0.5f, 0.5f);
+        public Vector2 outroPromptPivot = new Vector2(0.5f, 0.5f);
+        [Tooltip("Size for the Next button in Tutorial Complete step")]
+        public Vector2 outroNextButtonSize = new Vector2(180f, 75f);
 
         public Vector2 textPadding = new Vector2(24f, 24f);
         public float textRightPaddingWithButton = 150f;
+        [Tooltip("Right padding for text when Next button is shown in Tutorial Complete step (larger button needs more padding)")]
+        public float textRightPaddingWithOutroButton = 220f;
 
         [Header("Combo Prompt Layout (under dice)")]
         public Vector2 comboPromptSize = new Vector2(700f, 240f);
@@ -502,7 +519,7 @@ namespace DiceGame.Tutorial
                 message = "Great job! You've learned the basics. Click Next to claim your reward and start Level 1.",
                 useNextButton = true,
                 waitForAction = false,
-                layout = StepLayout.IntroCenter,
+                layout = StepLayout.IntroCenter, // Uses same size as intro step (introPromptSize: 640x240)
                 requiredAction = TutorialAction.None
             });
         }
@@ -1023,7 +1040,55 @@ namespace DiceGame.Tutorial
                 tutorialText.text = $"<b>{title}</b>\n\n{message}";
                 tutorialText.enableWordWrapping = true;
                 tutorialText.overflowMode = TextOverflowModes.Overflow;
-                Debug.Log($"[TutorialController] TutorialText updated with: {title}");
+                
+                // Calculate font size based on Canvas scaling to ensure consistent visual size across scenes
+                // Only adjust font size in ShopScene; BattleScene should always use base font size
+                float calculatedFontSize = tutorialFontSize;
+                string currentScene = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name;
+                
+                // Only apply scaling adjustment in ShopScene
+                if (currentScene == "ShopScene")
+                {
+                    Canvas canvas = tutorialPromptPanel.GetComponentInParent<Canvas>();
+                    if (canvas != null)
+                    {
+                        RectTransform canvasRect = canvas.GetComponent<RectTransform>();
+                        if (canvasRect != null)
+                        {
+                            // Check the Canvas's local scale - if it's not 1.0, we need to compensate
+                            Vector3 localScale = canvasRect.localScale;
+                            float scaleX = localScale.x;
+                            
+                            // Adjust font size inversely to compensate for Canvas scaling
+                            // If Canvas is scaled to 0.5, font should be 2x larger to appear same size
+                            if (Mathf.Abs(scaleX - 1.0f) > 0.01f)
+                            {
+                                calculatedFontSize = tutorialFontSize / scaleX;
+                                Debug.Log($"[TutorialController] ShopScene - Canvas localScale: {scaleX}, adjusting fontSize from {tutorialFontSize} to {calculatedFontSize}");
+                            }
+                            else
+                            {
+                                Debug.Log($"[TutorialController] ShopScene - Canvas localScale is 1.0, using base fontSize: {tutorialFontSize}");
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    // BattleScene or other scenes - always use base font size unchanged
+                    Debug.Log($"[TutorialController] {currentScene} - Using base fontSize: {tutorialFontSize} (no scaling adjustment)");
+                }
+                
+                // Apply the calculated font size
+                if (calculatedFontSize > 0)
+                {
+                    tutorialText.fontSize = calculatedFontSize;
+                    tutorialText.fontSizeMin = calculatedFontSize;
+                    tutorialText.fontSizeMax = calculatedFontSize;
+                    tutorialText.enableAutoSizing = false; // Disable auto-sizing to use fixed size
+                }
+                tutorialText.ForceMeshUpdate(); // Force update to apply font size changes
+                Debug.Log($"[TutorialController] TutorialText updated with: {title}, fontSize: {tutorialText.fontSize}");
             }
             else
             {
@@ -1049,12 +1114,41 @@ namespace DiceGame.Tutorial
             {
                 nextButtonLabel.text = "Next";
             }
+            
+            // Set button size for Tutorial Complete step (larger button)
+            if (visible && nextButtonRect != null)
+            {
+                bool isTutorialComplete = currentStepIndex >= 0 && currentStepIndex < tutorialSteps.Count && 
+                                        tutorialSteps[currentStepIndex].title == "Tutorial Complete!";
+                
+                if (isTutorialComplete)
+                {
+                    // Use larger button size for outro
+                    nextButtonRect.sizeDelta = outroNextButtonSize;
+                    Debug.Log($"[TutorialController] Using larger Next button size: {outroNextButtonSize} for Tutorial Complete step");
+                }
+            }
         }
 
         void UpdateTextPadding(bool hasNextButton)
         {
             if (textRect == null) return;
-            float rightPadding = hasNextButton ? textRightPaddingWithButton : textPadding.x;
+            
+            // Check if this is the Tutorial Complete step (outro) which has a larger button
+            bool isTutorialComplete = currentStepIndex >= 0 && currentStepIndex < tutorialSteps.Count && 
+                                    tutorialSteps[currentStepIndex].title == "Tutorial Complete!";
+            
+            float rightPadding;
+            if (hasNextButton)
+            {
+                // Use larger padding for Tutorial Complete step with larger button
+                rightPadding = isTutorialComplete ? textRightPaddingWithOutroButton : textRightPaddingWithButton;
+            }
+            else
+            {
+                rightPadding = textPadding.x;
+            }
+            
             float leftPadding = textPadding.x;
             float topPadding = textPadding.y;
             float bottomPadding = textPadding.y;
@@ -1140,10 +1234,28 @@ namespace DiceGame.Tutorial
 
                 case StepLayout.IntroCenter:
                 default:
-                    promptRect.anchorMin = promptRect.anchorMax = introPromptAnchor;
-                    promptRect.pivot = introPromptPivot;
-                    promptRect.sizeDelta = introPromptSize;
-                    promptRect.anchoredPosition = introPromptOffset;
+                    // Use larger size for Tutorial Complete step (outro)
+                    bool isTutorialComplete = currentStepIndex >= 0 && currentStepIndex < tutorialSteps.Count && 
+                                            tutorialSteps[currentStepIndex].title == "Tutorial Complete!";
+                    
+                    if (isTutorialComplete)
+                    {
+                        // Use larger outro panel size
+                        promptRect.anchorMin = promptRect.anchorMax = outroPromptAnchor;
+                        promptRect.pivot = outroPromptPivot;
+                        promptRect.sizeDelta = outroPromptSize;
+                        promptRect.anchoredPosition = outroPromptOffset;
+                        Debug.Log($"[TutorialController] Using outro panel size: {outroPromptSize} for Tutorial Complete step");
+                    }
+                    else
+                    {
+                        // Use normal intro size
+                        promptRect.anchorMin = promptRect.anchorMax = introPromptAnchor;
+                        promptRect.pivot = introPromptPivot;
+                        promptRect.sizeDelta = introPromptSize;
+                        promptRect.anchoredPosition = introPromptOffset;
+                    }
+                    
                     if (tutorialText != null)
                     {
                         tutorialText.alignment = TextAlignmentOptions.Center;
