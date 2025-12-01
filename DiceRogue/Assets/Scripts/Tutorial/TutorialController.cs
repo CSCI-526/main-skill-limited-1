@@ -921,6 +921,10 @@ namespace DiceGame.Tutorial
                 
                 tutorialPromptPanel.SetActive(true);
                 
+                // Check if this is the shop tutorial step (declare before use)
+                bool isShopTutorialStep = currentStepIndex >= 0 && currentStepIndex < tutorialSteps.Count && 
+                                         tutorialSteps[currentStepIndex].requiredAction == TutorialAction.BuyDiceInShop;
+                
                 // Ensure it's visible (check Canvas and CanvasGroup)
                 Canvas canvas = tutorialPromptPanel.GetComponentInParent<Canvas>();
                 if (canvas != null)
@@ -932,6 +936,7 @@ namespace DiceGame.Tutorial
                         canvas.sortingOrder = 999;
                         Debug.Log($"[TutorialController] Set Canvas sorting order to 999");
                     }
+                    
                     Debug.Log($"[TutorialController] Canvas found: {canvas.name}, sortingOrder: {canvas.sortingOrder}, active: {canvas.gameObject.activeSelf}");
                 }
                 else
@@ -944,8 +949,63 @@ namespace DiceGame.Tutorial
                 {
                     canvasGroup.alpha = 1f;
                     canvasGroup.interactable = true;
-                    canvasGroup.blocksRaycasts = true;
-                    Debug.Log($"[TutorialController] CanvasGroup found and configured - alpha: {canvasGroup.alpha}");
+                    // For shop tutorial step, don't block raycasts so clicks can pass through to shop buttons
+                    canvasGroup.blocksRaycasts = !isShopTutorialStep;
+                    Debug.Log($"[TutorialController] CanvasGroup found and configured - alpha: {canvasGroup.alpha}, blocksRaycasts: {canvasGroup.blocksRaycasts} (shop step: {isShopTutorialStep})");
+                }
+                
+                // Also disable all raycast targets in the panel hierarchy for shop tutorial step
+                if (isShopTutorialStep)
+                {
+                    // Disable Image raycast target on panel
+                    UnityEngine.UI.Image panelImage = tutorialPromptPanel.GetComponent<UnityEngine.UI.Image>();
+                    if (panelImage != null)
+                    {
+                        panelImage.raycastTarget = false;
+                        Debug.Log("[TutorialController] Disabled Image raycast target on TutorialPromptPanel for shop tutorial step");
+                    }
+                    
+                    // Disable raycast on TextMeshPro component (it also has raycastTarget property)
+                    if (tutorialText != null)
+                    {
+                        tutorialText.raycastTarget = false;
+                        Debug.Log("[TutorialController] Disabled TextMeshPro raycast target for shop tutorial step");
+                    }
+                    
+                    // Disable raycast on all child UI elements recursively
+                    UnityEngine.UI.Graphic[] allGraphics = tutorialPromptPanel.GetComponentsInChildren<UnityEngine.UI.Graphic>(true);
+                    foreach (var graphic in allGraphics)
+                    {
+                        if (graphic != null)
+                        {
+                            graphic.raycastTarget = false;
+                        }
+                    }
+                    Debug.Log($"[TutorialController] Disabled raycast targets on {allGraphics.Length} graphics in TutorialPromptPanel for shop tutorial step");
+                }
+                else
+                {
+                    // Re-enable raycast targets for non-shop steps (including the Next button)
+                    UnityEngine.UI.Image panelImage = tutorialPromptPanel.GetComponent<UnityEngine.UI.Image>();
+                    if (panelImage != null)
+                    {
+                        panelImage.raycastTarget = true;
+                    }
+                    if (tutorialText != null)
+                    {
+                        tutorialText.raycastTarget = true;
+                    }
+                    
+                    // Re-enable raycast on all child UI elements recursively (including buttons)
+                    UnityEngine.UI.Graphic[] allGraphics = tutorialPromptPanel.GetComponentsInChildren<UnityEngine.UI.Graphic>(true);
+                    foreach (var graphic in allGraphics)
+                    {
+                        if (graphic != null)
+                        {
+                            graphic.raycastTarget = true;
+                        }
+                    }
+                    Debug.Log($"[TutorialController] Re-enabled raycast targets on {allGraphics.Length} graphics for non-shop step");
                 }
                 
                 // Force update the RectTransform to ensure it's visible
@@ -1352,14 +1412,17 @@ namespace DiceGame.Tutorial
                     break;
                     
                 case TutorialAction.BuyDiceInShop:
-                    // Allow shop purchase buttons
-                    if (shopManager != null && shopManager.choiceSlots != null)
+                    // Only allow the FREE dice button - find all ShopItemUI components and filter for free one
+                    ShopItemUI[] shopItems = FindObjectsOfType<ShopItemUI>(true);
+                    foreach (var shopItem in shopItems)
                     {
-                        foreach (var slot in shopManager.choiceSlots)
+                        if (shopItem != null && shopItem.buyBtn != null && shopItem.gameObject.activeSelf)
                         {
-                            if (slot != null && slot.buyBtn != null && slot.gameObject.activeSelf)
+                            // Only allow the button if it's the free dice (price text shows "FREE")
+                            if (shopItem.priceText != null && shopItem.priceText.text == "FREE")
                             {
-                                allowedButtons.Add(slot.buyBtn);
+                                allowedButtons.Add(shopItem.buyBtn);
+                                Debug.Log("[TutorialController] Allowed free dice button for shop tutorial step");
                             }
                         }
                     }
@@ -1860,7 +1923,7 @@ namespace DiceGame.Tutorial
             // Highlight shop items, especially the free one
             HighlightShopItems();
             
-            // Ensure prompt is visible after shop initialization
+            // Ensure prompt is visible after shop initialization and raycast settings are applied
             if (tutorialPromptPanel != null)
             {
                 if (!tutorialPromptPanel.activeSelf)
@@ -1875,6 +1938,34 @@ namespace DiceGame.Tutorial
                         tutorialPromptPanel.SetActive(true);
                     }
                 }
+                
+                // Re-apply raycast blocking settings for shop tutorial step (in case they were reset)
+                CanvasGroup canvasGroup = tutorialPromptPanel.GetComponent<CanvasGroup>();
+                if (canvasGroup != null)
+                {
+                    canvasGroup.blocksRaycasts = false; // Don't block raycasts for shop step
+                }
+                
+                // Disable all raycast targets in panel hierarchy
+                UnityEngine.UI.Image panelImage = tutorialPromptPanel.GetComponent<UnityEngine.UI.Image>();
+                if (panelImage != null)
+                {
+                    panelImage.raycastTarget = false;
+                }
+                if (tutorialText != null)
+                {
+                    tutorialText.raycastTarget = false;
+                }
+                UnityEngine.UI.Graphic[] allGraphics = tutorialPromptPanel.GetComponentsInChildren<UnityEngine.UI.Graphic>(true);
+                foreach (var graphic in allGraphics)
+                {
+                    if (graphic != null)
+                    {
+                        graphic.raycastTarget = false;
+                    }
+                }
+                Debug.Log($"[TutorialController] Re-applied raycast settings - disabled on {allGraphics.Length} graphics");
+                
                 Debug.Log($"[TutorialController] InitializeShopTutorialStep() completed - Panel active: {tutorialPromptPanel.activeSelf}, enabled: {tutorialPromptPanel.activeInHierarchy}");
             }
             
