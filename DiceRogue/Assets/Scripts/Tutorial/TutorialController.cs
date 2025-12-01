@@ -23,6 +23,11 @@ namespace DiceGame.Tutorial
         public DiceSelectionUI diceSelectionUI;
         public Transform diceRowParent;
         public ScoreAnimator scoreAnimator;
+        [Header("Relic Display Reference")]
+        public GameObject relicDisplayPanel; // Relic display panel in top right corner (RelicDisplayPanel GameObject)
+        
+        [Header("Right Panel Reference")]
+        public GameObject rightInfoPanel; // Right panel showing combos, cast, and roll counts (RightInfoPanel GameObject)
         
         [Header("Shop References (for Shop Tutorial Step)")]
         public ShopManager shopManager;
@@ -108,6 +113,9 @@ namespace DiceGame.Tutorial
         private readonly List<Coroutine> highlightCoroutines = new();
         private readonly Dictionary<Button, bool> originalButtonStates = new();
         private readonly List<Button> allButtons = new();
+        
+        // Track dice views modified during Relics step for restoration
+        private readonly List<(DiceView diceView, CanvasGroup canvasGroup, bool wasAdded)> modifiedDiceViews = new();
         
         private static TutorialController instance;
 
@@ -198,8 +206,8 @@ namespace DiceGame.Tutorial
                 
                 ConfigurePromptLayoutIfNeeded();
                 CollectAllButtons();
-                Debug.Log("[TutorialController] Starting shop tutorial step (index 8)");
-                StartTutorialStep(8); // Start at shop tutorial step (index 8)
+                Debug.Log("[TutorialController] Starting shop tutorial step (index 10)");
+                StartTutorialStep(10); // Start at shop tutorial step (index 10)
             }
         }
 
@@ -382,6 +390,26 @@ namespace DiceGame.Tutorial
                 if (openBackpackButton == null && backpackManager != null) openBackpackButton = backpackManager.openBackpackButton;
                 if (rollButton == null) rollButton = battleController.rollButton;
                 if (submitComboButton == null) submitComboButton = battleController.submitComboButton;
+                
+                // Find relic display panel if not set
+                if (relicDisplayPanel == null && battleController.relicDisplay != null)
+                {
+                    relicDisplayPanel = battleController.relicDisplay.gameObject;
+                }
+            }
+            
+            // Fallback: try to find RelicDisplayPanel by name
+            if (relicDisplayPanel == null)
+            {
+                GameObject foundPanel = GameObject.Find("RelicDisplayPanel");
+                if (foundPanel != null) relicDisplayPanel = foundPanel;
+            }
+            
+            // Find right info panel if not set
+            if (rightInfoPanel == null)
+            {
+                GameObject foundPanel = GameObject.Find("RightInfoPanel");
+                if (foundPanel != null) rightInfoPanel = foundPanel;
             }
 
             // Fallback: try to find DiceRow by name if not found through BattleController
@@ -442,12 +470,34 @@ namespace DiceGame.Tutorial
 
             tutorialSteps.Add(new TutorialStep
             {
+                title = "Relics",
+                message = "Relics are powerful items that provide permanent bonuses and some have side effects. Hover over them to see their effects!",
+                highlightElement = relicDisplayPanel, // Will be resolved dynamically
+                useNextButton = true,
+                waitForAction = false,
+                layout = StepLayout.ActionLeft,
+                requiredAction = TutorialAction.None
+            });
+
+            tutorialSteps.Add(new TutorialStep
+            {
                 title = "Lock Dice",
                 message = "Click the dice you want to keep. Locked dice won't change when you roll. Lock any three dice to continue.",
                 useNextButton = false,
                 waitForAction = true,
                 layout = StepLayout.ActionLeft,
                 requiredAction = TutorialAction.LockDice
+            });
+
+            tutorialSteps.Add(new TutorialStep
+            {
+                title = "Right Panel Info",
+                message = "The right panel shows important information. You can see your current combo preview, and how many rolls and casts you have left.",
+                highlightElement = rightInfoPanel, // Will be resolved dynamically
+                useNextButton = true,
+                waitForAction = false,
+                layout = StepLayout.ActionLeft,
+                requiredAction = TutorialAction.None
             });
 
             tutorialSteps.Add(new TutorialStep
@@ -852,7 +902,37 @@ namespace DiceGame.Tutorial
             }
             else
             {
-                HighlightElement(step.highlightElement);
+                // Resolve highlight elements dynamically
+                GameObject elementToHighlight = step.highlightElement;
+                if (step.title == "Relics")
+                {
+                    ResolveReferences();
+                    // Use the resolved relicDisplayPanel
+                    if (relicDisplayPanel != null)
+                    {
+                        elementToHighlight = relicDisplayPanel;
+                        Debug.Log($"[TutorialController] Highlighting relic display panel: {relicDisplayPanel.name}");
+                    }
+                    else
+                    {
+                        Debug.LogWarning("[TutorialController] RelicDisplayPanel not found for highlighting");
+                    }
+                }
+                else if (step.title == "Right Panel Info")
+                {
+                    ResolveReferences();
+                    // Use the resolved rightInfoPanel
+                    if (rightInfoPanel != null)
+                    {
+                        elementToHighlight = rightInfoPanel;
+                        Debug.Log($"[TutorialController] Highlighting right info panel: {rightInfoPanel.name}");
+                    }
+                    else
+                    {
+                        Debug.LogWarning("[TutorialController] RightInfoPanel not found for highlighting");
+                    }
+                }
+                HighlightElement(elementToHighlight);
             }
             
             // Force text update after all layout changes
@@ -1183,8 +1263,8 @@ namespace DiceGame.Tutorial
                 case StepLayout.ActionLeft:
                     promptRect.anchorMin = promptRect.anchorMax = actionPromptAnchor;
                     promptRect.pivot = actionPromptPivot;
-                    // Use larger size for shop tutorial step (index 8)
-                    if (currentStepIndex == 8 && step.requiredAction == TutorialAction.BuyDiceInShop)
+                    // Use larger size for shop tutorial step (index 10)
+                    if (currentStepIndex == 10 && step.requiredAction == TutorialAction.BuyDiceInShop)
                     {
                         promptRect.sizeDelta = new Vector2(900f, 450f); // Larger size for shop tutorial
                         Debug.Log("[TutorialController] Using larger size for shop tutorial step");
@@ -1406,20 +1486,97 @@ namespace DiceGame.Tutorial
             // Determine which buttons should be enabled for this step
             HashSet<Button> allowedButtons = new HashSet<Button>();
             
-            // Always allow tutorial UI buttons
-            if (tutorialContinueButton != null) allowedButtons.Add(tutorialContinueButton);
-            if (skipTutorialButton != null) allowedButtons.Add(skipTutorialButton);
-            
-            // Combo rules button should always remain usable
-            GameObject comboPrefBtn = GameObject.Find("ComboPreferenceButton");
-            if (comboPrefBtn != null)
+            // For "Relics" step, only allow Next button (skip adding combo rules button)
+            if (step.title == "Relics")
             {
-                Button comboBtn = comboPrefBtn.GetComponent<Button>();
-                if (comboBtn != null) allowedButtons.Add(comboBtn);
+                if (tutorialContinueButton != null) allowedButtons.Add(tutorialContinueButton);
+                
+                // Explicitly ensure all dice buttons and lock buttons are disabled
+                // Find all dice views and disable their buttons AND block all pointer interactions
+                // First, restore any previously modified dice views
+                RestoreDiceViews();
+                
+                DiceView[] diceViews = null;
+                if (diceRowParent != null)
+                {
+                    diceViews = diceRowParent.GetComponentsInChildren<DiceView>(true);
+                }
+                if (diceViews == null || diceViews.Length == 0)
+                {
+                    diceViews = FindObjectsOfType<DiceView>(true);
+                }
+                if (diceViews != null)
+                {
+                    foreach (var diceView in diceViews)
+                    {
+                        if (diceView == null) continue;
+                        
+                        // Disable the dice view's main button (if it has one)
+                        Button diceBtn = diceView.GetComponent<Button>();
+                        if (diceBtn != null)
+                        {
+                            if (!originalButtonStates.ContainsKey(diceBtn))
+                            {
+                                originalButtonStates[diceBtn] = diceBtn.interactable;
+                            }
+                            diceBtn.interactable = false;
+                        }
+                        
+                        // Disable the lock button
+                        if (diceView.lockButton != null)
+                        {
+                            if (!originalButtonStates.ContainsKey(diceView.lockButton))
+                            {
+                                originalButtonStates[diceView.lockButton] = diceView.lockButton.interactable;
+                            }
+                            diceView.lockButton.interactable = false;
+                        }
+                        
+                        // Block all pointer interactions on the dice view GameObject itself
+                        // This prevents any clicks from reaching the dice view
+                        CanvasGroup diceCanvasGroup = diceView.GetComponent<CanvasGroup>();
+                        bool wasAdded = false;
+                        if (diceCanvasGroup == null)
+                        {
+                            diceCanvasGroup = diceView.gameObject.AddComponent<CanvasGroup>();
+                            wasAdded = true;
+                        }
+                        diceCanvasGroup.blocksRaycasts = false;
+                        diceCanvasGroup.interactable = false;
+                        
+                        // Track this dice view for restoration
+                        modifiedDiceViews.Add((diceView, diceCanvasGroup, wasAdded));
+                        
+                        // Also disable all Graphic components' raycast targets to be extra sure
+                        UnityEngine.UI.Graphic[] diceGraphics = diceView.GetComponentsInChildren<UnityEngine.UI.Graphic>(true);
+                        foreach (var graphic in diceGraphics)
+                        {
+                            if (graphic != null)
+                            {
+                                graphic.raycastTarget = false;
+                            }
+                        }
+                    }
+                }
+                
+                // Fall through to common button disabling logic below
             }
-            
-            // Step-specific buttons
-            switch (step.requiredAction)
+            else
+            {
+                // Always allow tutorial UI buttons
+                if (tutorialContinueButton != null) allowedButtons.Add(tutorialContinueButton);
+                if (skipTutorialButton != null) allowedButtons.Add(skipTutorialButton);
+                
+                // Combo rules button should always remain usable
+                GameObject comboPrefBtn = GameObject.Find("ComboPreferenceButton");
+                if (comboPrefBtn != null)
+                {
+                    Button comboBtn = comboPrefBtn.GetComponent<Button>();
+                    if (comboBtn != null) allowedButtons.Add(comboBtn);
+                }
+                
+                // Step-specific buttons
+                switch (step.requiredAction)
             {
                 case TutorialAction.ConfirmHand:
                     // Allow open backpack button and confirm button in dice selection UI
@@ -1545,8 +1702,9 @@ namespace DiceGame.Tutorial
                     // For intro/outro steps, only allow Next button (plus combo rules which was already added)
                     break;
             }
+            }
             
-            // Disable all buttons except allowed ones
+            // Disable all buttons except allowed ones (common logic for all steps)
             foreach (var btn in allButtons)
             {
                 if (btn == null) continue;
@@ -1607,6 +1765,42 @@ namespace DiceGame.Tutorial
                 }
             }
             originalButtonStates.Clear();
+            
+            // Also restore dice views that were modified during Relics step
+            RestoreDiceViews();
+        }
+        
+        void RestoreDiceViews()
+        {
+            foreach (var (diceView, canvasGroup, wasAdded) in modifiedDiceViews)
+            {
+                if (diceView == null) continue;
+                
+                // Restore CanvasGroup settings
+                if (canvasGroup != null)
+                {
+                    canvasGroup.blocksRaycasts = true;
+                    canvasGroup.interactable = true;
+                    
+                    // If we added the CanvasGroup, remove it
+                    if (wasAdded)
+                    {
+                        Destroy(canvasGroup);
+                    }
+                }
+                
+                // Re-enable all Graphic components' raycast targets
+                UnityEngine.UI.Graphic[] diceGraphics = diceView.GetComponentsInChildren<UnityEngine.UI.Graphic>(true);
+                foreach (var graphic in diceGraphics)
+                {
+                    if (graphic != null)
+                    {
+                        graphic.raycastTarget = true;
+                    }
+                }
+            }
+            
+            modifiedDiceViews.Clear();
         }
 
         void OnTutorialContinue()
@@ -2207,9 +2401,9 @@ namespace DiceGame.Tutorial
             }
             
             // Step 3: Animation is complete (or was never running)
-            // Wait exactly 3 seconds so player can read the score breakdown message
+            // Wait exactly 1.5 seconds so player can read the score breakdown message
             // The prompt should still be visible at this point
-            yield return new WaitForSeconds(3f);
+            yield return new WaitForSeconds(1.5f);
             
             // Step 4: Now advance to next step (this will hide the prompt)
             RegisterActionCompletion(TutorialAction.ScoreAnimationComplete);
