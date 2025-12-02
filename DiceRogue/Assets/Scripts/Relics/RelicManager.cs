@@ -120,7 +120,7 @@ namespace DiceGame.Relics
         {
             var relic = ScriptableObject.CreateInstance<RelicFillerBattery>();
             relic.relicName = "Filler Battery";
-            relic.rarity = RelicRarity.Rare;
+            relic.rarity = RelicRarity.Legendary;
             relic.description = "With filler dice: +1 reroll charge.";
             relic.unique = true;
             relic.rerollCharge = 1;

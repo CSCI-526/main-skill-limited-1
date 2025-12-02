@@ -30,8 +30,8 @@ namespace DiceGame
         [Header("Scene Transition")]
         public SceneTransitionManager sceneTransitionManager; // Scene transition manager
         
-        [Header("UI - Combo Preference Panel")]
-        public ComboPreferencePanel comboPreferencePanel;  // Combo preference panel component
+        [Header("UI - Combo Rule Panel")]
+        public ComboRulePanel comboRulePanel;  // Combo rule panel component
         
         [Header("Hand Flow")]
         public HandFlowController handFlowController;  // Hand flow controller component
@@ -79,12 +79,12 @@ namespace DiceGame
         void Awake()
         {
             // Auto-wire optional combo panel so initialization does not crash on missing inspector references
-            if (comboPreferencePanel == null)
+            if (comboRulePanel == null)
             {
-                comboPreferencePanel = GetComponentInChildren<ComboPreferencePanel>(true);
-                if (comboPreferencePanel == null)
+                comboRulePanel = GetComponentInChildren<ComboRulePanel>(true);
+                if (comboRulePanel == null)
                 {
-                    comboPreferencePanel = Object.FindObjectOfType<ComboPreferencePanel>(true);
+                    comboRulePanel = Object.FindObjectOfType<ComboRulePanel>(true);
                 }
             }
         }

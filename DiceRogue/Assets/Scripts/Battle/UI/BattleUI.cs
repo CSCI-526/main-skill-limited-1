@@ -24,6 +24,149 @@ namespace DiceGame
         private BattleUIPresenter _uiPresenter;
         
         /// <summary>
+        /// Auto-initialize UI text components if they're null (fixes WebGL scene transition issues)
+        /// Similar to BattleController's ComboPreferencePanel auto-wiring
+        /// </summary>
+        void Awake()
+        {
+            // Auto-find RightInfoPanel and its child text components if references are null
+            // This is especially important for WebGL builds where scene transitions can lose Inspector references
+            if (levelInfoText == null || targetScoreText == null || comboNameText == null || 
+                comboBaseText == null || comboMultiplierText == null || rollCountText == null || 
+                castCountText == null || moneyText == null)
+            {
+                GameObject rightInfoPanel = GameObject.Find("RightInfoPanel");
+                if (rightInfoPanel != null)
+                {
+                    Debug.Log("[BattleUI] Auto-initializing text components from RightInfoPanel");
+                    
+                    // Find all TMP_Text components in RightInfoPanel and its children
+                    TMP_Text[] allTexts = rightInfoPanel.GetComponentsInChildren<TMP_Text>(true);
+                    
+                    // Try to match text components by exact names (found in BattleScene.unity)
+                    foreach (var text in allTexts)
+                    {
+                        if (text == null) continue;
+                        
+                        string textName = text.gameObject.name;
+                        string textNameLower = textName.ToLower();
+                        
+                        // Match by exact names first, then fallback to patterns
+                        if (levelInfoText == null && textName == "LevelInfoText")
+                        {
+                            levelInfoText = text;
+                            Debug.Log($"[BattleUI] Found levelInfoText: {textName}");
+                        }
+                        else if (targetScoreText == null && textName == "TargetScoreText")
+                        {
+                            targetScoreText = text;
+                            Debug.Log($"[BattleUI] Found targetScoreText: {textName}");
+                        }
+                        else if (comboNameText == null && textName == "ComboNameText")
+                        {
+                            comboNameText = text;
+                            Debug.Log($"[BattleUI] Found comboNameText: {textName}");
+                        }
+                        else if (comboBaseText == null && textName == "ComboBaseText")
+                        {
+                            comboBaseText = text;
+                            Debug.Log($"[BattleUI] Found comboBaseText: {textName}");
+                        }
+                        else if (comboMultiplierText == null && textName == "MultiplierText")
+                        {
+                            comboMultiplierText = text;
+                            Debug.Log($"[BattleUI] Found comboMultiplierText: {textName}");
+                        }
+                        else if (rollCountText == null && textName == "RollCntText")
+                        {
+                            rollCountText = text;
+                            Debug.Log($"[BattleUI] Found rollCountText: {textName}");
+                        }
+                        else if (castCountText == null && textName == "CastCntText")
+                        {
+                            castCountText = text;
+                            Debug.Log($"[BattleUI] Found castCountText: {textName}");
+                        }
+                        else if (moneyText == null && textName == "MoneyNumText")
+                        {
+                            moneyText = text;
+                            Debug.Log($"[BattleUI] Found moneyText: {textName}");
+                        }
+                    }
+                    
+                    // Fallback: try pattern matching if exact names didn't work
+                    if (levelInfoText == null || targetScoreText == null || comboNameText == null || 
+                        comboBaseText == null || comboMultiplierText == null || rollCountText == null || 
+                        castCountText == null || moneyText == null)
+                    {
+                        foreach (var text in allTexts)
+                        {
+                            if (text == null) continue;
+                            
+                            string textNameLower = text.gameObject.name.ToLower();
+                            
+                            // Pattern matching fallback
+                            if (levelInfoText == null && textNameLower.Contains("levelinfo"))
+                            {
+                                levelInfoText = text;
+                                Debug.Log($"[BattleUI] Found levelInfoText (pattern): {text.gameObject.name}");
+                            }
+                            else if (targetScoreText == null && textNameLower.Contains("targetscore"))
+                            {
+                                targetScoreText = text;
+                                Debug.Log($"[BattleUI] Found targetScoreText (pattern): {text.gameObject.name}");
+                            }
+                            else if (comboNameText == null && textNameLower.Contains("comboname"))
+                            {
+                                comboNameText = text;
+                                Debug.Log($"[BattleUI] Found comboNameText (pattern): {text.gameObject.name}");
+                            }
+                            else if (comboBaseText == null && textNameLower.Contains("combobase"))
+                            {
+                                comboBaseText = text;
+                                Debug.Log($"[BattleUI] Found comboBaseText (pattern): {text.gameObject.name}");
+                            }
+                            else if (comboMultiplierText == null && textNameLower.Contains("multiplier"))
+                            {
+                                comboMultiplierText = text;
+                                Debug.Log($"[BattleUI] Found comboMultiplierText (pattern): {text.gameObject.name}");
+                            }
+                            else if (rollCountText == null && (textNameLower.Contains("rollcnt") || textNameLower.Contains("rollcount")))
+                            {
+                                rollCountText = text;
+                                Debug.Log($"[BattleUI] Found rollCountText (pattern): {text.gameObject.name}");
+                            }
+                            else if (castCountText == null && (textNameLower.Contains("castcnt") || textNameLower.Contains("castcount")))
+                            {
+                                castCountText = text;
+                                Debug.Log($"[BattleUI] Found castCountText (pattern): {text.gameObject.name}");
+                            }
+                            else if (moneyText == null && (textNameLower.Contains("moneynum") || textNameLower.Contains("moneytext")))
+                            {
+                                moneyText = text;
+                                Debug.Log($"[BattleUI] Found moneyText (pattern): {text.gameObject.name}");
+                            }
+                        }
+                    }
+                    
+                    // Log any components that still couldn't be found
+                    if (levelInfoText == null) Debug.LogWarning("[BattleUI] levelInfoText not found in RightInfoPanel");
+                    if (targetScoreText == null) Debug.LogWarning("[BattleUI] targetScoreText not found in RightInfoPanel");
+                    if (comboNameText == null) Debug.LogWarning("[BattleUI] comboNameText not found in RightInfoPanel");
+                    if (comboBaseText == null) Debug.LogWarning("[BattleUI] comboBaseText not found in RightInfoPanel");
+                    if (comboMultiplierText == null) Debug.LogWarning("[BattleUI] comboMultiplierText not found in RightInfoPanel");
+                    if (rollCountText == null) Debug.LogWarning("[BattleUI] rollCountText not found in RightInfoPanel");
+                    if (castCountText == null) Debug.LogWarning("[BattleUI] castCountText not found in RightInfoPanel");
+                    if (moneyText == null) Debug.LogWarning("[BattleUI] moneyText not found in RightInfoPanel");
+                }
+                else
+                {
+                    Debug.LogWarning("[BattleUI] RightInfoPanel not found! UI text components may not be initialized.");
+                }
+            }
+        }
+        
+        /// <summary>
         /// Initialize UI presenter
         /// </summary>
         public void Initialize(BattleUIPresenter uiPresenter)

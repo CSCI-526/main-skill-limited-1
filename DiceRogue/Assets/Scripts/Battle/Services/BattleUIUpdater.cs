@@ -158,14 +158,29 @@ namespace DiceGame
         
         /// <summary>
         /// Refresh all UI elements
+        /// Wrapped in try-catch to prevent WebGL crashes from null references
         /// </summary>
         public void RefreshAllUI()
         {
-            UpdateTargetScoreDisplay();
-            UpdateLevelInfo();
-            UpdateComboPreview();
-            UpdateRollAndCastCount();
-            UpdateMoneyDisplay();
+            if (_battleUI == null)
+            {
+                Debug.LogWarning("[BattleUIUpdater] Cannot refresh UI - BattleUI is null");
+                return;
+            }
+            
+            try
+            {
+                UpdateTargetScoreDisplay();
+                UpdateLevelInfo();
+                UpdateComboPreview();
+                UpdateRollAndCastCount();
+                UpdateMoneyDisplay();
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError($"[BattleUIUpdater] Error refreshing UI: {e.Message}\n{e.StackTrace}");
+                // Don't rethrow - allow game to continue even if UI update fails
+            }
         }
     }
 }

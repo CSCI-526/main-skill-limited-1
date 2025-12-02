@@ -416,21 +416,21 @@ namespace DiceGame
                 controller.sceneTransitionManager = controller.gameObject.AddComponent<SceneTransitionManager>();
             }
 
-            // Initialize combo preference panel
-            if (controller.comboPreferencePanel != null)
+            // Initialize combo rule panel
+            if (controller.comboRulePanel != null)
             {
                 try
                 {
-                    controller.comboPreferencePanel.Initialize();
+                    controller.comboRulePanel.Initialize();
                 }
                 catch (System.Exception e)
                 {
-                    Debug.LogError($"[BattleInitializer] ComboPreferencePanel initialization failed: {e.Message}");
+                    Debug.LogError($"[BattleInitializer] ComboRulePanel initialization failed: {e.Message}");
                 }
             }
             else
             {
-                Debug.LogWarning("[BattleInitializer] ComboPreferencePanel component not assigned!");
+                Debug.LogWarning("[BattleInitializer] ComboRulePanel component not assigned!");
             }
 
             // Initialize hand flow controller (create if not assigned)

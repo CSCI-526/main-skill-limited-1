@@ -13,7 +13,7 @@ namespace DiceGame.Relics
         private void Reset()
         {
             relicName = "Filler Battery";
-            rarity = RelicRarity.Rare;
+            rarity = RelicRarity.Legendary;
             description = "With filler dice: +1 reroll charge.";
         }
 

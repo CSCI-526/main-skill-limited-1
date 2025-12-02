@@ -943,11 +943,11 @@ namespace DiceGame.Tutorial
                     ResolveReferences();
                     // Find and highlight the combo rules button
                     GameObject comboPrefBtn = GameObject.Find("ComboPreferenceButton");
-                    if (comboPrefBtn == null && battleController != null && battleController.comboPreferencePanel != null)
+                    if (comboPrefBtn == null && battleController != null && battleController.comboRulePanel != null)
                     {
-                        if (battleController.comboPreferencePanel.comboPreferenceButton != null)
+                        if (battleController.comboRulePanel.comboRuleButton != null)
                         {
-                            comboPrefBtn = battleController.comboPreferencePanel.comboPreferenceButton.gameObject;
+                            comboPrefBtn = battleController.comboRulePanel.comboRuleButton.gameObject;
                         }
                     }
                     if (comboPrefBtn != null)
@@ -1737,11 +1737,11 @@ namespace DiceGame.Tutorial
                 case TutorialAction.ClickComboRulesButton:
                     // Allow combo rules button
                     GameObject comboRulesBtnGO = GameObject.Find("ComboPreferenceButton");
-                    if (comboRulesBtnGO == null && battleController != null && battleController.comboPreferencePanel != null)
+                    if (comboRulesBtnGO == null && battleController != null && battleController.comboRulePanel != null)
                     {
-                        if (battleController.comboPreferencePanel.comboPreferenceButton != null)
+                        if (battleController.comboRulePanel.comboRuleButton != null)
                         {
-                            comboRulesBtnGO = battleController.comboPreferencePanel.comboPreferenceButton.gameObject;
+                            comboRulesBtnGO = battleController.comboRulePanel.comboRuleButton.gameObject;
                         }
                     }
                     if (comboRulesBtnGO != null)
@@ -1870,11 +1870,19 @@ namespace DiceGame.Tutorial
                 }
                 
                 // Check if we're in "Check Combo Rules" step and combo rules button was clicked
-                // In this case, Next button click should advance to next step
+                // In this case, Next button click should close the panel and advance to next step
                 if (currentStep.title == "Check Combo Rules" && comboRulesButtonClicked)
                 {
                     comboRulesButtonClicked = false;
                     UnhookComboRulesButton();
+                    
+                    // Close the combo rule panel
+                    if (battleController != null && battleController.comboRulePanel != null)
+                    {
+                        battleController.comboRulePanel.Close();
+                        Debug.Log("[TutorialController] Closed combo rule panel on Next button click");
+                    }
+                    
                     HidePrompt();
                     ClearHighlights();
                     RestoreAllButtons();
@@ -2116,11 +2124,11 @@ namespace DiceGame.Tutorial
             
             // Find combo rules button
             GameObject comboPrefBtn = GameObject.Find("ComboPreferenceButton");
-            if (comboPrefBtn == null && battleController != null && battleController.comboPreferencePanel != null)
+            if (comboPrefBtn == null && battleController != null && battleController.comboRulePanel != null)
             {
-                if (battleController.comboPreferencePanel.comboPreferenceButton != null)
+                if (battleController.comboRulePanel.comboRuleButton != null)
                 {
-                    comboPrefBtn = battleController.comboPreferencePanel.comboPreferenceButton.gameObject;
+                    comboPrefBtn = battleController.comboRulePanel.comboRuleButton.gameObject;
                 }
             }
             
@@ -2637,6 +2645,12 @@ namespace DiceGame.Tutorial
             CleanupDiceViewListeners();
             UnhookDiceLockEvent();
             UnhookComboRulesButton();
+            
+            // Close combo rule panel if it's open
+            if (battleController != null && battleController.comboRulePanel != null)
+            {
+                battleController.comboRulePanel.Close();
+            }
             
             currentRequiredAction = TutorialAction.None;
             lockStepCompleted = false;
