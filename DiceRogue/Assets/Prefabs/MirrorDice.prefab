@@ -36,7 +36,7 @@ RectTransform:
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
   m_AnchoredPosition: {x: 0, y: 0}
-  m_SizeDelta: {x: 100, y: 100}
+  m_SizeDelta: {x: 200, y: 180}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &1155304943124733197
 CanvasRenderer:
@@ -102,7 +102,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 3969819433340230743, guid: 6de3897ca5c9f4f7e8e42e4a47679271, type: 3}
       propertyPath: m_text
-      value: Mirror
+      value: 
       objectReference: {fileID: 0}
     - target: {fileID: 3969819433340230743, guid: 6de3897ca5c9f4f7e8e42e4a47679271, type: 3}
       propertyPath: m_fontColor.b
@@ -123,6 +123,10 @@ PrefabInstance:
     - target: {fileID: 5849587855182063788, guid: 6de3897ca5c9f4f7e8e42e4a47679271, type: 3}
       propertyPath: m_SizeDelta.x
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6689614851942206887, guid: 6de3897ca5c9f4f7e8e42e4a47679271, type: 3}
+      propertyPath: m_AspectMode
+      value: 2
       objectReference: {fileID: 0}
     - target: {fileID: 7976094542723383184, guid: 6de3897ca5c9f4f7e8e42e4a47679271, type: 3}
       propertyPath: m_Pivot.x
