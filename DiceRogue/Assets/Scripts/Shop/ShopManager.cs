@@ -823,6 +823,7 @@ public class ShopManager : MonoBehaviour
         }
 
         var removeGO = removeTf.gameObject;
+        removeTf.SetAsLastSibling();
 
         // 依照目前管理模式顯示 / 隱藏紅色 X
         removeGO.SetActive(_manageMode);
@@ -866,22 +867,56 @@ public class ShopManager : MonoBehaviour
 
             if (die != null && _resourceManager.DiceManager != null)
             {
-                var dm = _resourceManager.DiceManager;
-                var list = dm.PlayerDiceBackpack != null
-                    ? new List<BaseDice>(dm.PlayerDiceBackpack)
+                // 使用 PlayerResourceManager 取得目前背包中的骰子（這是 AddDiceToBackpack / Save 系統的主要入口）
+                var originalListReadonly = _resourceManager.GetPlayerDiceBackpack();
+                var originalList = originalListReadonly != null
+                    ? new List<BaseDice>(originalListReadonly)
                     : new List<BaseDice>();
 
-                removed = list.Remove(die);
+                Debug.Log("[Shop/Backpack] Before remove dice backpack list:" +
+                          string.Join(", ", originalList.ConvertAll(d => d != null ? d.diceName : "NULL")));
+
+                // 建立一個新列表，過濾掉目標 die（用 ReferenceEquals 確保是同一個實例）
+                var filtered = new List<BaseDice>();
+                bool found = false;
+                foreach (var d in originalList)
+                {
+                    if (!found && object.ReferenceEquals(d, die))
+                    {
+                        found = true;
+                        continue; // 跳過這顆要刪除的骰子
+                    }
+                    filtered.Add(d);
+                }
+
+                removed = found;
+
                 if (removed)
                 {
+                    // 先清空 DiceManager 內部背包
+                    var dm = _resourceManager.DiceManager;
                     dm.ClearBackpack();
-                    foreach (var d in list)
+
+                    // 再透過 PlayerResourceManager.AddDiceToBackpack 逐一加回來，
+                    // 確保 PlayerResourceManager / SaveData / DiceManager 三者狀態一致。
+                    foreach (var d in filtered)
                     {
                         if (d != null)
-                            dm.AddDiceToBackpack(d);
+                        {
+                            _resourceManager.AddDiceToBackpack(d);
+                        }
                     }
+
+                    // 將當前狀態存入存檔
                     _resourceManager.SaveAllToSaveData();
+
                     Debug.Log($"[Shop/Backpack] Removed dice from backpack: {SafeName(die.diceName)}");
+                    Debug.Log("[Shop/Backpack] After remove dice backpack list:" +
+                              string.Join(", ", filtered.ConvertAll(d => d != null ? d.diceName : "NULL")));
+                }
+                else
+                {
+                    Debug.LogWarning("[Shop/Backpack] Target die not found in PlayerDiceBackpack when attempting remove.");
                 }
             }
             else if (relic != null && _resourceManager.RelicManager != null)
