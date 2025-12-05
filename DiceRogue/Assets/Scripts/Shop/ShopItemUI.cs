@@ -130,20 +130,20 @@ public class ShopItemUI : MonoBehaviour
                 var rt = go.GetComponent<RectTransform>();
                 rt.SetParent(previewAnchor, false);
 
-                // 固定色塊大小 130x130，並避免被上層 Layout Group 改變尺寸
+                // 固定色塊大小 80x80，並避免被上層 Layout Group 改變尺寸
                 rt.anchorMin = new Vector2(0.5f, 0.5f);
                 rt.anchorMax = new Vector2(0.5f, 0.5f);
                 rt.pivot = new Vector2(0.5f, 0.5f);
-                rt.sizeDelta = new Vector2(130f, 130f);
+                rt.sizeDelta = new Vector2(80f, 80f);
                 rt.anchoredPosition = Vector2.zero;
 
                 // 告訴任何父物件上的 Layout Group：不要對這個色塊套用自動排版尺寸
                 var layout = go.AddComponent<UnityEngine.UI.LayoutElement>();
                 layout.ignoreLayout = true;
-                layout.preferredWidth = 130f;
-                layout.preferredHeight = 130f;
-                layout.minWidth = 130f;
-                layout.minHeight = 130f;
+                layout.preferredWidth = 80f;
+                layout.preferredHeight = 80f;
+                layout.minWidth = 80f;
+                layout.minHeight = 80f;
 
                 var img = go.GetComponent<UnityEngine.UI.Image>();
                 img.color = c;
