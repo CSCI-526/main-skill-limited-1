@@ -2153,6 +2153,8 @@ MonoBehaviour:
   backpackEntryPrefab: {fileID: 3429122295233454620, guid: 3e9026d09b7c94be7b1f0f5910a8863a, type: 3}
   backpackSwitchButton: {fileID: 231466329}
   backpackSwitchLabel: {fileID: 1309276221}
+  manageButton: {fileID: 0}
+  manageButtonLabel: {fileID: 0}
   continueButton: {fileID: 1864675801}
 --- !u!1 &641436410
 GameObject:
@@ -2452,6 +2454,7 @@ GameObject:
   - component: {fileID: 858710508}
   - component: {fileID: 858710506}
   - component: {fileID: 858710512}
+  - component: {fileID: 858710513}
   m_Layer: 5
   m_Name: Canvas
   m_TagString: Untagged
@@ -2545,7 +2548,7 @@ RectTransform:
   m_GameObject: {fileID: 858710505}
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_LocalScale: {x: 0.7689761, y: 0.7689761, z: 0.7689761}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 1049811166}
@@ -2557,8 +2560,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 0, y: 0}
-  m_AnchoredPosition: {x: 960, y: 540}
-  m_SizeDelta: {x: 1920, y: 0}
+  m_AnchoredPosition: {x: 863.5, y: 355}
+  m_SizeDelta: {x: 2245.8435, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &858710512
 CanvasRenderer:
@@ -2568,6 +2571,22 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 858710505}
   m_CullTransparentMesh: 1
+--- !u!114 &858710513
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 858710505}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 003347865d25c447a9f50eb64afedf6c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  tooltipPanel: {fileID: 1656018276}
+  nameText: {fileID: 1083346097}
+  descText: {fileID: 409504107}
+  extraText: {fileID: 242202789}
 --- !u!1 &906754303
 GameObject:
   m_ObjectHideFlags: 0
@@ -2577,7 +2596,6 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 906754304}
-  - component: {fileID: 906754306}
   - component: {fileID: 906754307}
   - component: {fileID: 906754308}
   m_Layer: 5
@@ -2607,22 +2625,6 @@ RectTransform:
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 119.700005, y: 87.04}
   m_Pivot: {x: -0.2, y: 1}
---- !u!114 &906754306
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 906754303}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 003347865d25c447a9f50eb64afedf6c, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  tooltipPanel: {fileID: 1656018276}
-  nameText: {fileID: 1083346097}
-  descText: {fileID: 409504107}
-  extraText: {fileID: 242202789}
 --- !u!225 &906754307
 CanvasGroup:
   m_ObjectHideFlags: 0
@@ -3812,7 +3814,7 @@ MonoBehaviour:
       m_Calls:
       - m_Target: {fileID: 609095273}
         m_TargetAssemblyTypeName: ShopManager, Assembly-CSharp
-        m_MethodName: OnClickToggleBackpack
+        m_MethodName: OnClickToggleManageMode
         m_Mode: 1
         m_Arguments:
           m_ObjectArgument: {fileID: 0}

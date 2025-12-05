@@ -106,8 +106,17 @@ public class ShopManager : MonoBehaviour
     [Tooltip("切換按鈕上顯示的文字（預設顯示 RELIC，代表點擊後切換到遺物模式）")]
     public TMP_Text backpackSwitchLabel;
 
+    [Header("Manage Backpack")]
+    [Tooltip("點擊以進入/離開背包管理模式（刪除骰子/遺物）")]
+    public Button manageButton;
+    [Tooltip("Manage 按鈕上顯示的文字（MANAGE / DONE）")]
+    public TMP_Text manageButtonLabel;
+
     // 當前背包顯示模式：false = Dice（預設），true = Relic
     private bool _showingRelics = false;
+
+    // 管理模式：true 時顯示紅色 X，可刪除背包項目
+    private bool _manageMode = false;
 
 
     [Header("Continue Button")]
@@ -312,6 +321,20 @@ public class ShopManager : MonoBehaviour
         // 初始化背包模式（預設顯示 Dice），並設定切換按鈕
         _showingRelics = false; // 預設顯示骰子
         SetupBackpackSwitchButton();
+
+        // 初始化管理背包按鈕（MANAGE / DONE）
+        if (manageButton != null)
+        {
+            manageButton.onClick.RemoveAllListeners();
+            manageButton.onClick.AddListener(OnClickToggleManageMode);
+        }
+        else
+        {
+            Debug.LogWarning("[Shop/Backpack] Manage button is not assigned in Inspector.");
+        }
+
+        // 初始化 Manage 按鈕文字
+        UpdateManageButtonLabel();
 
         RefreshBackpackUI();
         RenderShop();
@@ -760,6 +783,9 @@ public class ShopManager : MonoBehaviour
                     AttachBackpackTooltipTrigger(previewInstance, die);
                 }
             }
+
+            // 設定管理模式下的刪除按鈕（紅色 X）
+            SetupBackpackEntryRemoveButton(entry, die, null);
         }
     }
 
@@ -824,7 +850,147 @@ public class ShopManager : MonoBehaviour
             }
 
             bgImage.color = rarityColor;
+
+            // 設定管理模式下的刪除按鈕（紅色 X）
+            SetupBackpackEntryRemoveButton(entry, null, relic);
         }
+    }
+    /// <summary>
+    /// 設定背包項目的刪除按鈕（紅色 X）。根據目前是否在管理模式 _manageMode 顯示/隱藏，
+    /// 並綁定點擊事件來從背包中移除對應的骰子或遺物。
+    /// 預設會尋找子物件名稱 "RemoveIcon" 或 "RemoveButton" 作為刪除按鈕。
+    /// </summary>
+    private void SetupBackpackEntryRemoveButton(GameObject entry, BaseDice die, RelicBase relic)
+    {
+        if (entry == null) return;
+
+        // 尋找刪除按鈕物件（預期名稱：RemoveIcon 或 RemoveButton）
+        Transform removeTf = entry.transform.Find("RemoveIcon");
+        if (removeTf == null)
+            removeTf = entry.transform.Find("RemoveButton");
+
+        if (removeTf == null)
+        {
+            Debug.LogWarning($"[Shop/Backpack] No RemoveIcon/RemoveButton found under {entry.name}. " +
+                             "Make sure your BackpackEntry prefab has a child named 'RemoveIcon' or 'RemoveButton'.");
+            return;
+        }
+
+        var removeGO = removeTf.gameObject;
+        removeTf.SetAsLastSibling();
+
+        // 依照目前管理模式顯示 / 隱藏紅色 X
+        removeGO.SetActive(_manageMode);
+
+        // 讓刪除圖示可以被點擊：確保有 Button + Graphic
+        var btn = removeGO.GetComponent<Button>();
+        if (btn == null)
+        {
+            btn = removeGO.AddComponent<Button>();
+        }
+
+        var graphic = removeGO.GetComponent<Graphic>();
+        if (graphic == null)
+        {
+            // 如果 RemoveIcon 上沒有 Image / Graphic，就幫它補一個透明圖片，才能收 Raycast
+            var img = removeGO.AddComponent<Image>();
+            img.color = new Color(1f, 1f, 1f, 1f);
+            graphic = img;
+        }
+        graphic.raycastTarget = true;
+
+        btn.onClick.RemoveAllListeners();
+        btn.onClick.AddListener(() =>
+        {
+            Debug.Log($"[Shop/Backpack] Remove clicked on entry={entry.name}, manageMode={_manageMode}, " +
+                      $"die={(die != null ? die.diceName : "NULL")}, relic={(relic != null ? relic.relicName : "NULL")}");
+
+            // 若不是管理模式，點擊紅 X 不做事（避免誤觸）
+            if (!_manageMode)
+            {
+                return;
+            }
+
+            if (_resourceManager == null)
+            {
+                Debug.LogWarning("[Shop/Backpack] ResourceManager is null, cannot remove item.");
+                return;
+            }
+
+            bool removed = false;
+
+            if (die != null && _resourceManager.DiceManager != null)
+            {
+                // 使用 PlayerResourceManager 取得目前背包中的骰子（這是 AddDiceToBackpack / Save 系統的主要入口）
+                var originalListReadonly = _resourceManager.GetPlayerDiceBackpack();
+                var originalList = originalListReadonly != null
+                    ? new List<BaseDice>(originalListReadonly)
+                    : new List<BaseDice>();
+
+                Debug.Log("[Shop/Backpack] Before remove dice backpack list:" +
+                          string.Join(", ", originalList.ConvertAll(d => d != null ? d.diceName : "NULL")));
+
+                // 建立一個新列表，過濾掉目標 die（用 ReferenceEquals 確保是同一個實例）
+                var filtered = new List<BaseDice>();
+                bool found = false;
+                foreach (var d in originalList)
+                {
+                    if (!found && object.ReferenceEquals(d, die))
+                    {
+                        found = true;
+                        continue; // 跳過這顆要刪除的骰子
+                    }
+                    filtered.Add(d);
+                }
+
+                removed = found;
+
+                if (removed)
+                {
+                    // 先清空 DiceManager 內部背包
+                    var dm = _resourceManager.DiceManager;
+                    dm.ClearBackpack();
+
+                    // 再透過 PlayerResourceManager.AddDiceToBackpack 逐一加回來，
+                    // 確保 PlayerResourceManager / SaveData / DiceManager 三者狀態一致。
+                    foreach (var d in filtered)
+                    {
+                        if (d != null)
+                        {
+                            _resourceManager.AddDiceToBackpack(d);
+                        }
+                    }
+
+                    // 將當前狀態存入存檔
+                    _resourceManager.SaveAllToSaveData();
+
+                    Debug.Log($"[Shop/Backpack] Removed dice from backpack: {SafeName(die.diceName)}");
+                    Debug.Log("[Shop/Backpack] After remove dice backpack list:" +
+                              string.Join(", ", filtered.ConvertAll(d => d != null ? d.diceName : "NULL")));
+                }
+                else
+                {
+                    Debug.LogWarning("[Shop/Backpack] Target die not found in PlayerDiceBackpack when attempting remove.");
+                }
+            }
+            else if (relic != null && _resourceManager.RelicManager != null)
+            {
+                removed = _resourceManager.RelicManager.RemoveRelic(relic);
+                if (removed)
+                {
+                    _resourceManager.SaveAllToSaveData();
+                    Debug.Log($"[Shop/Backpack] Removed relic from backpack: {relic.relicName}");
+                }
+            }
+
+            if (!removed)
+            {
+                Debug.LogWarning("[Shop/Backpack] Remove button clicked but no item was removed (maybe already gone?).");
+            }
+
+            // 重新整理背包 UI
+            RefreshBackpackUI();
+        });
     }
 
     private void SetupBackpackSwitchButton()
@@ -846,6 +1012,26 @@ public class ShopManager : MonoBehaviour
         //  - 當前顯示 Dice 時，按鈕顯示 "RELIC"（代表點擊會切換到遺物）
         //  - 當前顯示 Relic 時，按鈕顯示 "DICE"
         backpackSwitchLabel.text = _showingRelics ? "DICE" : "RELIC";
+    }
+
+    /// <summary>
+    /// 更新 Manage 按鈕上的文字：管理模式顯示 "DONE"，一般模式顯示 "MANAGE"
+    /// </summary>
+    private void UpdateManageButtonLabel()
+    {
+        if (manageButtonLabel == null) return;
+        manageButtonLabel.text = _manageMode ? "DONE" : "MANAGE";
+    }
+
+    /// <summary>
+    /// 點擊右側 MANAGE 按鈕，切換是否進入背包管理模式（可刪除骰子/遺物）
+    /// </summary>
+    public void OnClickToggleManageMode()
+    {
+        _manageMode = !_manageMode;
+        Debug.Log($"[Shop/Backpack] Manage mode toggled: {(_manageMode ? "ON" : "OFF")}");
+        UpdateManageButtonLabel();
+        RefreshBackpackUI();
     }
 
     /// <summary>
