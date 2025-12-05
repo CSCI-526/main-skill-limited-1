@@ -201,6 +201,8 @@ namespace DiceGame
             }
 
             Debug.Log($"[DiceManager] Loaded {_playerDiceBackpack.Count} dice from save data");
+
+            
         }
 
         /// <summary>

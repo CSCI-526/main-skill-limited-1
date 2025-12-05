@@ -53,10 +53,12 @@ namespace DiceGame.UI
         private void Awake()
         {
             // Try to find background image if not assigned
+            /*
             if (backgroundImage == null)
             {
                 backgroundImage = GetComponent<Image>();
             }
+            */
             
             if (backgroundImage != null)
             {
