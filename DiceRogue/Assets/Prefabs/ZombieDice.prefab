@@ -35,8 +35,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 0, y: 0}
-  m_SizeDelta: {x: 200, y: 180}
+  m_AnchoredPosition: {x: 0, y: 3}
+  m_SizeDelta: {x: 200, y: 160}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &2742764724636766786
 CanvasRenderer:
@@ -96,6 +96,10 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 0}
     m_Modifications:
+    - target: {fileID: 1388388245935002690, guid: 42bd35f4ae4ca4ac892b3ca3c342a605, type: 3}
+      propertyPath: m_Color.a
+      value: 0
+      objectReference: {fileID: 0}
     - target: {fileID: 4157865716331749106, guid: 42bd35f4ae4ca4ac892b3ca3c342a605, type: 3}
       propertyPath: m_text
       value: 
@@ -212,6 +216,10 @@ PrefabInstance:
       propertyPath: m_Sprite
       value: 
       objectReference: {fileID: 0}
+    - target: {fileID: 8806189847747131109, guid: 42bd35f4ae4ca4ac892b3ca3c342a605, type: 3}
+      propertyPath: m_Color.a
+      value: 0
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects:
@@ -248,9 +256,9 @@ MonoBehaviour:
   selectionIndicator: {fileID: 0}
   cooldownOverlay: {fileID: 0}
   canvasGroup: {fileID: 838707031535227301}
-  backgroundImage: {fileID: 545923303605196440}
+  backgroundImage: {fileID: 0}
   borderImage: {fileID: 0}
-  hoverColor: {r: 1, g: 1, b: 1, a: 0.8}
+  hoverColor: {r: 1, g: 1, b: 1, a: 0}
   selectedScale: 1.1
   hoverScale: 1.05
   selectedAlpha: 0.55
