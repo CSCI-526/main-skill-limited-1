@@ -325,6 +325,28 @@ public class ShopManager : MonoBehaviour
 
         // 從非 Filler 的池子中，依權重（Legendary 權重最低）抽 5 顆，不重複
         var selectable = DicePool.GetNonFiller().ToList();
+        
+        // 過濾掉玩家已經擁有的骰子（根據類型名稱判斷）
+        if (_resourceManager != null && _resourceManager.DiceManager != null)
+        {
+            var playerBackpack = _resourceManager.DiceManager.PlayerDiceBackpack;
+            var ownedDiceTypes = new HashSet<string>(
+                playerBackpack.Where(d => d != null).Select(d => d.GetType().Name)
+            );
+            
+            int beforeCount = selectable.Count;
+            selectable = selectable.Where(d => d != null && !ownedDiceTypes.Contains(d.GetType().Name)).ToList();
+            
+            if (selectable.Count == 0)
+            {
+                Debug.LogWarning("[Shop] All available dice are already owned by player. Showing empty shop.");
+            }
+            else if (beforeCount > selectable.Count)
+            {
+                Debug.Log($"[Shop] Filtered out {beforeCount - selectable.Count} owned dice from shop pool.");
+            }
+        }
+        
         _choiceDice = DrawWeightedUnique(selectable, 5);
 
         // 確保本次商店中至少有一顆不是 Legendary 的骰子，才能保證一定有 FREE reward
@@ -458,6 +480,27 @@ public class ShopManager : MonoBehaviour
         {
             Debug.LogWarning("[Shop/Relic] All relics in pool are null. Cannot build relic shop.");
             return;
+        }
+
+        // 過濾掉玩家已經擁有的遺物（根據遺物名稱判斷）
+        var playerRelics = _resourceManager.GetPlayerRelics();
+        if (playerRelics != null && playerRelics.Count > 0)
+        {
+            var ownedRelicNames = new HashSet<string>(
+                playerRelics.Where(r => r != null).Select(r => r.relicName)
+            );
+            
+            int beforeCount = poolList.Count;
+            poolList = poolList.Where(r => !ownedRelicNames.Contains(r.relicName)).ToList();
+            
+            if (poolList.Count == 0)
+            {
+                Debug.LogWarning("[Shop/Relic] All available relics are already owned by player. Showing empty relic shop.");
+            }
+            else
+            {
+                Debug.Log($"[Shop/Relic] Filtered out {beforeCount - poolList.Count} owned relics from shop pool.");
+            }
         }
 
         int relicCount = (relicSlots != null && relicSlots.Length > 0) ? relicSlots.Length : 4;
@@ -683,6 +726,17 @@ public class ShopManager : MonoBehaviour
             {
                 previewInstance = Instantiate(previewPrefab, entry.transform);
                 previewInstance.transform.localScale = Vector3.one;
+                
+                // 設置 DiceUI_Base 的 Image 大小為 80x80
+                Transform diceUIBase = previewInstance.transform.Find("DiceUI_Base");
+                if (diceUIBase != null)
+                {
+                    var rectTransform = diceUIBase.GetComponent<RectTransform>();
+                    if (rectTransform != null)
+                    {
+                        rectTransform.sizeDelta = new Vector2(80f, 80f);
+                    }
+                }
             }
 
             // 2) 若背包 entry 內有 TMP_Text，顯示骰子名稱
