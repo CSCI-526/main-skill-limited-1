@@ -112,6 +112,20 @@ public class ShopManager : MonoBehaviour
     [Tooltip("Manage 按鈕上顯示的文字（MANAGE / DONE）")]
     public TMP_Text manageButtonLabel;
 
+    [Header("Delete Confirm Dialog")]
+    [Tooltip("Root panel of the delete confirmation dialog")]
+    public GameObject deleteDialogRoot;
+    [Tooltip("Text component to show delete confirmation message")]
+    public TMP_Text deleteDialogMessage;
+    [Tooltip("Confirm button on the delete dialog")]
+    public Button deleteDialogConfirmButton;
+    [Tooltip("Cancel button on the delete dialog")]
+    public Button deleteDialogCancelButton;
+
+    // Pending item to delete when user confirms in dialog
+    private BaseDice _pendingDeleteDie;
+    private RelicBase _pendingDeleteRelic;
+
     // 當前背包顯示模式：false = Dice（預設），true = Relic
     private bool _showingRelics = false;
 
@@ -335,6 +349,22 @@ public class ShopManager : MonoBehaviour
 
         // 初始化 Manage 按鈕文字
         UpdateManageButtonLabel();
+
+        // 初始化刪除確認對話框
+        if (deleteDialogRoot != null)
+        {
+            deleteDialogRoot.SetActive(false);
+        }
+        if (deleteDialogConfirmButton != null)
+        {
+            deleteDialogConfirmButton.onClick.RemoveAllListeners();
+            deleteDialogConfirmButton.onClick.AddListener(OnClickDeleteConfirm);
+        }
+        if (deleteDialogCancelButton != null)
+        {
+            deleteDialogCancelButton.onClick.RemoveAllListeners();
+            deleteDialogCancelButton.onClick.AddListener(OnClickDeleteCancel);
+        }
 
         RefreshBackpackUI();
         RenderShop();
@@ -917,80 +947,137 @@ public class ShopManager : MonoBehaviour
                 return;
             }
 
-            bool removed = false;
-
-            if (die != null && _resourceManager.DiceManager != null)
-            {
-                // 使用 PlayerResourceManager 取得目前背包中的骰子（這是 AddDiceToBackpack / Save 系統的主要入口）
-                var originalListReadonly = _resourceManager.GetPlayerDiceBackpack();
-                var originalList = originalListReadonly != null
-                    ? new List<BaseDice>(originalListReadonly)
-                    : new List<BaseDice>();
-
-                Debug.Log("[Shop/Backpack] Before remove dice backpack list:" +
-                          string.Join(", ", originalList.ConvertAll(d => d != null ? d.diceName : "NULL")));
-
-                // 建立一個新列表，過濾掉目標 die（用 ReferenceEquals 確保是同一個實例）
-                var filtered = new List<BaseDice>();
-                bool found = false;
-                foreach (var d in originalList)
-                {
-                    if (!found && object.ReferenceEquals(d, die))
-                    {
-                        found = true;
-                        continue; // 跳過這顆要刪除的骰子
-                    }
-                    filtered.Add(d);
-                }
-
-                removed = found;
-
-                if (removed)
-                {
-                    // 先清空 DiceManager 內部背包
-                    var dm = _resourceManager.DiceManager;
-                    dm.ClearBackpack();
-
-                    // 再透過 PlayerResourceManager.AddDiceToBackpack 逐一加回來，
-                    // 確保 PlayerResourceManager / SaveData / DiceManager 三者狀態一致。
-                    foreach (var d in filtered)
-                    {
-                        if (d != null)
-                        {
-                            _resourceManager.AddDiceToBackpack(d);
-                        }
-                    }
-
-                    // 將當前狀態存入存檔
-                    _resourceManager.SaveAllToSaveData();
-
-                    Debug.Log($"[Shop/Backpack] Removed dice from backpack: {SafeName(die.diceName)}");
-                    Debug.Log("[Shop/Backpack] After remove dice backpack list:" +
-                              string.Join(", ", filtered.ConvertAll(d => d != null ? d.diceName : "NULL")));
-                }
-                else
-                {
-                    Debug.LogWarning("[Shop/Backpack] Target die not found in PlayerDiceBackpack when attempting remove.");
-                }
-            }
-            else if (relic != null && _resourceManager.RelicManager != null)
-            {
-                removed = _resourceManager.RelicManager.RemoveRelic(relic);
-                if (removed)
-                {
-                    _resourceManager.SaveAllToSaveData();
-                    Debug.Log($"[Shop/Backpack] Removed relic from backpack: {relic.relicName}");
-                }
-            }
-
-            if (!removed)
-            {
-                Debug.LogWarning("[Shop/Backpack] Remove button clicked but no item was removed (maybe already gone?).");
-            }
-
-            // 重新整理背包 UI
-            RefreshBackpackUI();
+            ShowDeleteDialog(die, relic);
         });
+    }
+
+    /// <summary>
+    /// 顯示刪除確認對話框，暫存這次要刪除的骰子或遺物
+    /// </summary>
+    private void ShowDeleteDialog(BaseDice die, RelicBase relic)
+    {
+        _pendingDeleteDie = die;
+        _pendingDeleteRelic = relic;
+
+        if (deleteDialogMessage != null)
+        {
+            string itemName = "(item)";
+            if (die != null) itemName = SafeName(die.diceName);
+            else if (relic != null) itemName = relic.relicName;
+
+            deleteDialogMessage.text = $"Do you want to remove \"{itemName}\" from your bag?";
+        }
+
+        if (deleteDialogRoot != null)
+        {
+            deleteDialogRoot.SetActive(true);
+        }
+    }
+
+    /// <summary>
+    /// 刪除對話框按下 Confirm，真正從背包移除物品
+    /// </summary>
+    private void OnClickDeleteConfirm()
+    {
+        if (deleteDialogRoot != null)
+        {
+            deleteDialogRoot.SetActive(false);
+        }
+
+        if (_resourceManager == null)
+        {
+            Debug.LogWarning("[Shop/Backpack] ResourceManager is null in OnClickDeleteConfirm.");
+            _pendingDeleteDie = null;
+            _pendingDeleteRelic = null;
+            return;
+        }
+
+        bool removed = false;
+
+        // 刪除骰子
+        if (_pendingDeleteDie != null && _resourceManager.DiceManager != null)
+        {
+            var originalListReadonly = _resourceManager.GetPlayerDiceBackpack();
+            var originalList = originalListReadonly != null
+                ? new List<BaseDice>(originalListReadonly)
+                : new List<BaseDice>();
+
+            Debug.Log("[Shop/Backpack] Before remove dice backpack list:" +
+                      string.Join(", ", originalList.ConvertAll(d => d != null ? d.diceName : "NULL")));
+
+            var filtered = new List<BaseDice>();
+            bool found = false;
+            foreach (var d in originalList)
+            {
+                if (!found && object.ReferenceEquals(d, _pendingDeleteDie))
+                {
+                    found = true;
+                    continue;
+                }
+                filtered.Add(d);
+            }
+
+            removed = found;
+
+            if (removed)
+            {
+                var dm = _resourceManager.DiceManager;
+                dm.ClearBackpack();
+
+                foreach (var d in filtered)
+                {
+                    if (d != null)
+                    {
+                        _resourceManager.AddDiceToBackpack(d);
+                    }
+                }
+
+                _resourceManager.SaveAllToSaveData();
+
+                Debug.Log($"[Shop/Backpack] Removed dice from backpack: {SafeName(_pendingDeleteDie.diceName)}");
+                Debug.Log("[Shop/Backpack] After remove dice backpack list:" +
+                          string.Join(", ", filtered.ConvertAll(d => d != null ? d.diceName : "NULL")));
+            }
+            else
+            {
+                Debug.LogWarning("[Shop/Backpack] Target die not found in PlayerDiceBackpack when attempting remove.");
+            }
+        }
+        // 刪除遺物
+        else if (_pendingDeleteRelic != null && _resourceManager.RelicManager != null)
+        {
+            removed = _resourceManager.RelicManager.RemoveRelic(_pendingDeleteRelic);
+            if (removed)
+            {
+                _resourceManager.SaveAllToSaveData();
+                Debug.Log($"[Shop/Backpack] Removed relic from backpack: {_pendingDeleteRelic.relicName}");
+            }
+        }
+
+        if (!removed)
+        {
+            Debug.LogWarning("[Shop/Backpack] Confirm delete clicked but no item was removed (maybe already gone?).");
+        }
+
+        _pendingDeleteDie = null;
+        _pendingDeleteRelic = null;
+
+        // 刪除完成後刷新背包 UI
+        RefreshBackpackUI();
+    }
+
+    /// <summary>
+    /// 刪除對話框按下 Cancel，只是關閉視窗不做任何操作
+    /// </summary>
+    private void OnClickDeleteCancel()
+    {
+        if (deleteDialogRoot != null)
+        {
+            deleteDialogRoot.SetActive(false);
+        }
+
+        _pendingDeleteDie = null;
+        _pendingDeleteRelic = null;
     }
 
     private void SetupBackpackSwitchButton()
